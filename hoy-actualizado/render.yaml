@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: restaurant-erp
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: oracle
+      - key: SERVER_SERVLET_SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: ORACLE_JDBC_URL
+        sync: false
+      - key: ORACLE_DB_USER
+        sync: false
+      - key: ORACLE_DB_PASSWORD
+        sync: false

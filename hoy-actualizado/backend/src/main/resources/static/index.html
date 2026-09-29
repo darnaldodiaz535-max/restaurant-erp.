@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+    <!-- =================================
+         CONFIGURACIÓN DEL DOCUMENTO
+         ================================= -->
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sistema de Gestión - Restaurante</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+
+<body>
+
+    <section id="auth-screen" class="auth-screen" aria-labelledby="auth-title">
+        <div class="auth-card">
+            <h1 id="auth-title">Restaurant ERP</h1>
+            <p id="auth-description">Inicia sesión para continuar.</p>
+            <form id="login-form" class="auth-form">
+                <label>Usuario<input id="login-username" autocomplete="username" required></label>
+                <label>Contraseña<input id="login-password" type="password" autocomplete="current-password" required></label>
+                <button class="primary-button" type="submit">Iniciar sesión</button>
+            </form>
+            <form id="setup-form" class="auth-form" hidden>
+                <label>Tu trabajador<select id="setup-employee" required></select></label>
+                <label>Usuario nuevo<input id="setup-username" autocomplete="username" minlength="3" required></label>
+                <label>Contraseña nueva<input id="setup-password" type="password" autocomplete="new-password" minlength="10" required></label>
+                <small>La primera cuenta será administradora. Usa una contraseña de al menos 10 caracteres.</small>
+                <button class="primary-button" type="submit">Crear administrador</button>
+            </form>
+            <p id="auth-error" class="auth-error" role="alert" hidden></p>
+        </div>
+    </section>
+
+
+
+    <!-- =================================
+         BARRA SUPERIOR
+         ================================= -->
+
+    <header class="topbar">
+
+        <div class="logo">
+            <span>RESTAURANT ERP</span>
+        </div>
+
+
+        <!-- BUSCADOR -->
+
+        <div class="search">
+
+            <input
+                type="text"
+                placeholder="Buscar..."
+            >
+
+        </div>
+
+
+
+
+
+        <!-- CAMPANITA DE NOTIFICACIONES -->
+<div class="notification-container">
+
+    <button class="notification" id="notificationBtn" title="Notificaciones">
+        <span class="bell-icon">🔔</span>
+        <span class="notification-badge" hidden></span>
+    </button>
+
+    <div class="notification-menu" id="notificationMenu">
+
+        <div class="notification-header">
+            <strong>Notificaciones</strong>
+            <span>Sin avisos</span>
+        </div>
+
+
+
+
+        <button class="notification-footer" id="markNotificationsRead" type="button" hidden>
+            Ver alertas del Dashboard
+        </button>
+
+    </div>
+
+</div>
+
+<!-- USUARIO ADMINISTRADOR -->
+<!-- USUARIO ADMINISTRADOR -->
+<div class="user-area">
+
+    <button class="user" id="adminUser">
+        <strong id="currentUserName">Administrador</strong>
+        <small id="currentUserRole">Panel de gestión</small>
+    </button>
+
+    <!-- MENÚ DEL ADMINISTRADOR -->
+    <div class="user-menu" id="adminMenu">
+        <button type="button" id="changePasswordButton">Cambiar contraseña</button>
+
+        <button>
+            <i class="fa-regular fa-user"></i>
+            Mi perfil
+        </button>
+
+        <button>
+            <i class="fa-solid fa-gear"></i>
+            Configuración
+        </button>
+
+        <button>
+            <i class="fa-solid fa-right-from-bracket"></i>
+            Cerrar sesión
+        </button>
+
+    </div>
+
+</div>
+
+    </header>
+
+
+
+    <!-- =================================
+         ESTRUCTURA PRINCIPAL
+         ================================= -->
+
+    <div class="layout">
+
+
+        <!-- =================================
+             MENÚ LATERAL
+             ================================= -->
+
+        <aside>
+
+            <nav>
+
+                <a href="#">🏠 Dashboard</a>
+
+                <a href="#">👥 Personal</a>
+
+                <a href="#">🕐 Asistencia</a>
+
+                <a href="#">📅 Horarios</a>
+
+                <a href="#">✅ Tareas diarias</a>
+
+                <a href="#">📦 Inventario</a>
+
+                <a href="#">👨‍🍳 Cocina</a>
+                <a href="#">🍽️ Salón</a>
+                <a href="#">🍹 Barra</a>
+                <a href="#">🧼 Copería</a>
+
+                <a href="#">🍳 Producción</a>
+
+                <a href="#">🔪 Mise en place</a>
+
+                <a href="#">🗓️ Reservas</a>
+
+                <a href="#">🧹 Limpieza</a>
+
+                <a href="#">⚠️ Incidencias</a>
+
+                <a href="#">🛒 Compras</a>
+
+                <a href="#">🗑️ Mermas</a>
+
+                <a href="#">🌡️ Control sanitario</a>
+
+                <a href="#">📊 Reportes</a>
+
+                <a href="#">⚙️ Configuración</a>
+
+            </nav>
+
+        </aside>
+
+
+
+        <!-- =================================
+             CONTENIDO PRINCIPAL
+             ================================= -->
+
+        <main>
+        <section id="dashboard-screen" class="app-screen">
+
+
+            <h2>Dashboard</h2>
+
+            <p>
+                Resumen general del restaurante.
+            </p>
+
+
+
+            <!-- =================================
+                 TARJETAS DEL DASHBOARD
+                 ================================= -->
+
+            <section class="dashboard-cards">
+
+
+                <!-- PERSONAL -->
+
+                <div class="card">
+
+                    <div class="card-icon">👥</div>
+
+                    <div class="card-content">
+
+                        <h3>Personal</h3>
+
+                        <strong>18</strong>
+
+                        <p>Trabajadores registrados</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- ASISTENCIA -->
+
+                <div class="card">
+
+                    <div class="card-icon">🕐</div>
+
+                    <div class="card-content">
+
+                        <h3>Asistencia</h3>
+
+                        <strong>15</strong>
+
+                        <p>Personal presente hoy</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- TURNOS -->
+
+                <div class="card">
+
+                    <div class="card-icon">📅</div>
+
+                    <div class="card-content">
+
+                        <h3>Horarios</h3>
+
+                        <strong>6</strong>
+
+                        <p>Horarios programados hoy</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- TAREAS DIARIAS -->
+
+                <div class="card">
+
+                    <div class="card-icon">✅</div>
+
+                    <div class="card-content">
+
+                        <h3>Tareas diarias</h3>
+
+                        <strong>8</strong>
+
+                        <p>Tareas pendientes</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- INVENTARIO -->
+
+                <div class="card">
+
+                    <div class="card-icon">📦</div>
+
+                    <div class="card-content">
+
+                        <h3>Inventario</h3>
+
+                        <strong>24</strong>
+
+                        <p>Insumos con stock bajo</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- COCINA -->
+
+                <div class="card">
+
+                    <div class="card-icon">👨‍🍳</div>
+
+                    <div class="card-content">
+
+                        <h3>Cocina</h3>
+
+                        <strong>12</strong>
+
+                        <p>Preparaciones activas</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- PRODUCCIÓN -->
+
+                <div class="card">
+
+                    <div class="card-icon">🍳</div>
+
+                    <div class="card-content">
+
+                        <h3>Producción</h3>
+
+                        <strong>9</strong>
+
+                        <p>Producciones del día</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- MISE EN PLACE -->
+
+                <div class="card">
+
+                    <div class="card-icon">🔪</div>
+
+                    <div class="card-content">
+
+                        <h3>Mise en place</h3>
+
+                        <strong>7</strong>
+
+                        <p>Preparaciones pendientes</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- RESERVAS -->
+
+                <div class="card">
+
+                    <div class="card-icon">🗓️</div>
+
+                    <div class="card-content">
+
+                        <h3>Reservas</h3>
+
+                        <strong>14</strong>
+
+                        <p>Reservas para hoy</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- LIMPIEZA -->
+
+                <div class="card">
+
+                    <div class="card-icon">🧹</div>
+
+                    <div class="card-content">
+
+                        <h3>Limpieza</h3>
+
+                        <strong>5</strong>
+
+                        <p>Tareas pendientes</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- INCIDENCIAS -->
+
+                <div class="card">
+
+                    <div class="card-icon">⚠️</div>
+
+                    <div class="card-content">
+
+                        <h3>Incidencias</h3>
+
+                        <strong>3</strong>
+
+                        <p>Incidencias pendientes</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- COMPRAS -->
+
+                <div class="card">
+
+                    <div class="card-icon">🛒</div>
+
+                    <div class="card-content">
+
+                        <h3>Compras</h3>
+
+                        <strong>4</strong>
+
+                        <p>Pedidos pendientes</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- MERMAS -->
+
+                <div class="card">
+
+                    <div class="card-icon">🗑️</div>
+
+                    <div class="card-content">
+
+                        <h3>Mermas</h3>
+
+                        <strong>6</strong>
+
+                        <p>Registros esta semana</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- CONTROL SANITARIO -->
+
+                <div class="card">
+
+                    <div class="card-icon">🌡️</div>
+
+                    <div class="card-content">
+
+                        <h3>Control sanitario</h3>
+
+                        <strong>2</strong>
+
+                        <p>Controles pendientes</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- REPORTES -->
+
+                <div class="card">
+
+                    <div class="card-icon">📊</div>
+
+                    <div class="card-content">
+
+                        <h3>Reportes</h3>
+
+                        <strong>10</strong>
+
+                        <p>Reportes disponibles</p>
+
+                    </div>
+
+                </div>
+
+
+                <!-- CONFIGURACIÓN -->
+
+                <div class="card">
+
+                    <div class="card-icon">⚙️</div>
+
+                    <div class="card-content">
+
+                        <h3>Configuración</h3>
+
+                        <strong>⚙</strong>
+
+                        <p>Configuración del sistema</p>
+
+                    </div>
+
+                </div>
+
+
+            </section>
+
+
+
+            <!-- =================================
+                 ACTIVIDAD RECIENTE
+                 ================================= -->
+
+            <section class="recent-activity">
+
+                <h2>Actividad reciente</h2>
+
+                <div class="activity-list">
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================
+                 ALERTAS
+                 ================================= -->
+
+            <section class="alerts" hidden>
+
+                <h2>Alertas</h2>
+
+                <div class="alert-list">
+                </div>
+
+            </section>
+
+
+        </section>
+        </main>
+
+    </div>
+<!-- =================================
+     MÓDULO PERSONAL
+     Pantalla de gestión de trabajadores
+     ================================= -->
+
+<section id="personal-module" class="module-screen" hidden>
+
+
+    <!-- =================================
+         ENCABEZADO DEL MÓDULO PERSONAL
+         ================================= -->
+
+    <div class="module-header">
+
+        <div>
+
+            <h2>Personal</h2>
+
+            <p>
+                Gestión de los trabajadores del restaurante.
+            </p>
+
+        </div>
+
+
+        <!-- BOTÓN AGREGAR TRABAJADOR -->
+
+        <button class="primary-button" id="addEmployeeButton">
+
+            + Agregar trabajador
+
+        </button>
+
+    </div>
+
+
+
+    <!-- =================================
+         RESUMEN DEL PERSONAL
+         ================================= -->
+
+    <div class="personal-summary">
+
+
+        <!-- TOTAL DE TRABAJADORES -->
+
+        <div class="summary-card">
+
+            <span>👥</span>
+
+            <div>
+
+                <small>Total trabajadores</small>
+
+                <strong>18</strong>
+
+            </div>
+
+        </div>
+
+
+        <!-- PERSONAL ACTIVO -->
+
+        <div class="summary-card">
+
+            <span>🟢</span>
+
+            <div>
+
+                <small>Personal activo</small>
+
+                <strong>16</strong>
+
+            </div>
+
+        </div>
+
+
+        <!-- PERSONAL INACTIVO -->
+
+        <div class="summary-card">
+
+            <span>🔴</span>
+
+            <div>
+
+                <small>Personal inactivo</small>
+
+                <strong>2</strong>
+
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+
+    <!-- =================================
+         TABLA DE TRABAJADORES
+         ================================= -->
+
+    <div class="data-section">
+
+        <div class="data-section-header">
+
+            <h3>Trabajadores registrados</h3>
+
+
+            <!-- BUSCAR TRABAJADOR -->
+
+            <input
+                type="text"
+                id="employeeSearch"
+                placeholder="Buscar trabajador..."
+            >
+
+        </div>
+
+
+
+        <!-- TABLA -->
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>Nombre</th>
+
+                        <th>Cargo</th>
+
+                        <th>Área</th>
+
+                        <th>Estado</th>
+
+                        <th>Acciones</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+
+                    <!-- TRABAJADOR 1 -->
+
+                    <tr>
+
+                        <td>Juan Pérez</td>
+
+                        <td>Cocinero</td>
+
+                        <td>Cocina</td>
+
+                        <td>
+                            <span class="status active">
+                                Activo
+                            </span>
+                        </td>
+
+                        <td>
+
+                            <button class="table-button">
+                                Ver
+                            </button>
+
+                            <button class="table-button">
+                                Editar
+                            </button>
+
+                        </td>
+
+                    </tr>
+
+
+                    <!-- TRABAJADOR 2 -->
+
+                    <tr>
+
+                        <td>María González</td>
+
+                        <td>Garzona</td>
+
+                        <td>Salón</td>
+
+                        <td>
+                            <span class="status active">
+                                Activo
+                            </span>
+                        </td>
+
+                        <td>
+
+                            <button class="table-button">
+                                Ver
+                            </button>
+
+                            <button class="table-button">
+                                Editar
+                            </button>
+
+                        </td>
+
+                    </tr>
+
+
+                    <!-- TRABAJADOR 3 -->
+
+                    <tr>
+
+                        <td>Carlos Rodríguez</td>
+
+                        <td>Bodeguero</td>
+
+                        <td>Bodega</td>
+
+                        <td>
+                            <span class="status inactive">
+                                Inactivo
+                            </span>
+                        </td>
+
+                        <td>
+
+                            <button class="table-button">
+                                Ver
+                            </button>
+
+                            <button class="table-button">
+                                Editar
+                            </button>
+
+                        </td>
+
+                    </tr>
+
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+</section>
+
+<section id="other-module" class="module-screen" hidden></section>
+
+
+    <!-- =================================
+         JAVASCRIPT
+         ================================= -->
+
+    <dialog id="profileDialog" class="profile-dialog">
+        <h2>Mi perfil</h2>
+        <dl>
+            <dt>Nombre</dt><dd id="profile-name"></dd>
+            <dt>Cargo</dt><dd id="profile-position"></dd>
+            <dt>Área</dt><dd id="profile-area"></dd>
+            <dt>Usuario</dt><dd id="profile-username"></dd>
+            <dt>Tipo de acceso</dt><dd id="profile-role"></dd>
+        </dl>
+        <button id="closeProfile" class="secondary-button" type="button">Cerrar</button>
+    </dialog>
+    <dialog id="employeeAccountDialog" class="profile-dialog" aria-labelledby="employeeAccountTitle">
+        <h2 id="employeeAccountTitle">Crear acceso</h2>
+        <form id="employeeAccountForm" class="auth-form">
+            <label for="employeeAccountUsername">Usuario
+                <input id="employeeAccountUsername" name="username" autocomplete="off" minlength="3" maxlength="60" required>
+            </label>
+            <label for="employeeAccountPassword">Contraseña
+                <input id="employeeAccountPassword" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="200" required>
+            </label>
+            <small>Mínimo 10 caracteres. Cada persona tendrá su propia cuenta.</small>
+            <label for="employeeAccountRole">Rol
+                <select id="employeeAccountRole" name="role" required>
+                    <option value="TRABAJADOR">Trabajador</option>
+                    <option value="ADMIN">Administrador</option>
+                    <option value="JEFE_SALON">Jefe de salón</option>
+                    <option value="JEFE_COCINA">Jefe de cocina</option>
+                    <option value="JEFE_LOCAL">Jefe de local</option>
+                </select>
+            </label>
+            <small>Administrador y las tres jefaturas tienen acceso administrativo completo.</small>
+            <p id="employeeAccountError" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="saveEmployeeAccount" class="primary-button" type="submit">Crear cuenta</button>
+            <button id="cancelEmployeeAccount" class="secondary-button" type="button">Cancelar</button>
+        </form>
+    </dialog>
+    <dialog id="changePasswordDialog" class="profile-dialog" aria-labelledby="changePasswordTitle">
+        <h2 id="changePasswordTitle">Cambiar contraseña</h2>
+        <form id="changePasswordForm" class="auth-form">
+            <label>Contraseña actual
+                <input id="currentPassword" type="password" autocomplete="current-password" maxlength="200" required>
+            </label>
+            <label>Nueva contraseña
+                <input id="newPassword" type="password" autocomplete="new-password" minlength="10" maxlength="200" required>
+            </label>
+            <label>Confirmar nueva contraseña
+                <input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="200" required>
+            </label>
+            <small>La nueva contraseña debe tener entre 10 y 200 caracteres y ser diferente de la actual.</small>
+            <p id="changePasswordError" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="savePassword" class="primary-button" type="submit">Guardar contraseña</button>
+            <button id="cancelPassword" class="secondary-button" type="button">Cancelar</button>
+        </form>
+    </dialog>
+    <script src="scrip.js"></script><script src="notificaciones-horarios.js"></script>
+    <script src="gestion.js"></script>
+
+
+</body>
+
+</html>
+
+
+
