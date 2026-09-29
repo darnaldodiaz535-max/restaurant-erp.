@@ -1,0 +1,8 @@
+.idea/
+.vscode/
+**/target/
+*.log
+.env
+.env.*
+!.env.example
+RESTAURANTE.sql
