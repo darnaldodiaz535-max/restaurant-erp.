@@ -1284,3 +1284,23 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .ai-schedule-section textarea { width:100%; resize:vertical; }
 .ai-warning { padding:10px; background:#fff7ed; color:#7c2d12; }
 .ai-schedule-section td { min-width:130px; }
+
+/* TELÉFONO EN HORIZONTAL */
+@media (max-height: 500px) and (orientation: landscape) {
+    aside {
+        width: 100%;
+        overflow: hidden;
+    }
+
+    nav {
+        display: flex;
+        flex-direction: row;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    nav a {
+        flex: 0 0 auto;
+    }
+}
