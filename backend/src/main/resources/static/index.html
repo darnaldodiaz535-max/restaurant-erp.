@@ -870,6 +870,13 @@
     </dialog>
     <script src="scrip.js"></script><script src="notificaciones-horarios.js"></script>
     <script src="gestion.js"></script>
+    <script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/service-worker.js");
+    });
+  }
+</script>
 
 
 </body>
