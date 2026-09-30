@@ -3,8 +3,6 @@ package cl.restaurante.api.health;
 import java.util.List;
 import java.util.Map;
 
-import jakarta.servlet.http.HttpSession;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,6 +15,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.servlet.http.HttpSession;
 
 @RestController
 @RequestMapping("/api/empleados")
@@ -101,6 +101,7 @@ public class OracleConnectionController {
             }
         }
         jdbcTemplate.update("DELETE FROM APP_EVIDENCIA_TAREA WHERE ID_EMPLEADO=?", id);
+        jdbcTemplate.execute("COMMIT");
         int changed = jdbcTemplate.update("DELETE FROM APP_EMPLEADO WHERE ID_EMPLEADO = ?", id);
         if (changed > 0) activity.record(session, "ELIMINAR", "Personal", "Se eliminó un trabajador");
         return changed == 0 ? ResponseEntity.notFound().build() : ResponseEntity.noContent().build();
