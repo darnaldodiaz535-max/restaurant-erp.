@@ -1,0 +1,8 @@
+-- Solo lectura. Ejecutar conectado como RESTAPI_HOY2609 tras la migración.
+SELECT USER AS ESQUEMA FROM DUAL;
+SELECT column_name, data_type FROM user_tab_columns
+WHERE table_name='APP_TAREA_DIARIA' AND column_name='AREA';
+SELECT object_name, status FROM user_objects
+WHERE object_name IN ('APP_PLAZA','APP_HORARIO_IMAGEN','IX_APP_TAREA_AREA','UQ_APP_PLAZA_CARGO_AREA');
+SELECT ROL, COUNT(*) AS USUARIOS FROM APP_USUARIO GROUP BY ROL;
+SELECT ID_TAREA, TAREA, RESPONSABLE_ID FROM APP_TAREA_DIARIA WHERE AREA IS NULL;

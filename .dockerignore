@@ -1,0 +1,9 @@
+.git
+.idea
+.vscode
+backend/target
+**/target
+*.log
+.env
+.env.*
+RESTAURANTE.sql
