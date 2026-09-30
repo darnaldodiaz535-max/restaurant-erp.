@@ -1284,3 +1284,37 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .ai-schedule-section textarea { width:100%; resize:vertical; }
 .ai-warning { padding:10px; background:#fff7ed; color:#7c2d12; }
 .ai-schedule-section td { min-width:130px; }
+
+/* TELÉFONO EN HORIZONTAL */
+@media (max-height: 500px) and (orientation: landscape) {
+
+    .layout {
+        display: grid;
+        grid-template-columns: 205px minmax(0, 1fr);
+        align-items: stretch;
+    }
+
+    aside {
+        width: 205px;
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
+    }
+
+    nav {
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+        white-space: normal;
+    }
+
+    nav a {
+        width: 100%;
+        flex: none;
+    }
+
+    main {
+        min-width: 0;
+        width: 100%;
+    }
+}
