@@ -1287,20 +1287,34 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 
 /* TELÉFONO EN HORIZONTAL */
 @media (max-height: 500px) and (orientation: landscape) {
+
+    .app {
+        display: flex;
+        flex-direction: row;
+    }
+
     aside {
-        width: 100%;
-        overflow: hidden;
+        width: 220px;
+        min-width: 220px;
+        height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
 
     nav {
         display: flex;
-        flex-direction: row;
-        overflow-x: auto;
-        white-space: nowrap;
-        -webkit-overflow-scrolling: touch;
+        flex-direction: column;
+        overflow: visible;
+        white-space: normal;
     }
 
     nav a {
-        flex: 0 0 auto;
+        width: 100%;
+        flex: none;
+    }
+
+    main {
+        flex: 1;
+        min-width: 0;
     }
 }
