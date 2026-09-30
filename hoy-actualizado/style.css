@@ -1233,7 +1233,7 @@ body.compact-view main, body.compact-view #personal-module, body.compact-view #o
     .logo { width: auto; font-size: 16px; }
     .search { order: 3; flex-basis: 100%; }
     .search input { max-width: none; }
-    .layout { display: block; }
+   .layout { display: flex; }
     aside { width: 100%; padding: 8px; }
     nav { flex-direction: row; overflow-x: auto; }
     nav a { flex: 0 0 auto; }
