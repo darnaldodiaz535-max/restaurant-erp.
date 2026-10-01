@@ -1290,15 +1290,16 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 
     .layout {
         display: grid;
-        grid-template-columns: 205px minmax(0, 1fr);
+        grid-template-columns: 170px minmax(0, 1fr);
         align-items: stretch;
     }
 
     aside {
-        width: 205px;
+        width: 170px;
         height: auto;
         min-height: 100vh;
-        overflow: visible;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
 
     nav {
@@ -1311,10 +1312,12 @@ button:disabled { opacity: .48; cursor: not-allowed; }
     nav a {
         width: 100%;
         flex: none;
+        box-sizing: border-box;
     }
 
     main {
         min-width: 0;
         width: 100%;
+        overflow-x: hidden;
     }
 }
