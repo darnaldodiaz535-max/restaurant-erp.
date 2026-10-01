@@ -1288,7 +1288,7 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 /* TELÉFONO EN HORIZONTAL */
 @media (max-height: 500px) and (orientation: landscape) {
 
-    .app {
+    .layout {
         display: grid;
         grid-template-columns: 170px minmax(0, 1fr);
         align-items: stretch;
@@ -1319,5 +1319,59 @@ button:disabled { opacity: .48; cursor: not-allowed; }
         min-width: 0;
         width: 100%;
         overflow-x: hidden;
+    }
+    .dashboard-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+}
+
+/* CORREGIR NOTIFICACIONES EN TELÉFONO */
+@media (max-width: 620px) {
+    .notification-menu {
+        position: fixed;
+        top: 120px;
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-width: none;
+        max-height: calc(100vh - 140px);
+        overflow-y: auto;
+        z-index: 999999;
+    }
+}
+/* FORZAR MENÚ LATERAL SOLO EN TELÉFONO HORIZONTAL */
+@media (max-height: 500px) and (orientation: landscape) {
+    .layout {
+        display: grid !important;
+        grid-template-columns: 170px minmax(0, 1fr) !important;
+        align-items: stretch;
+    }
+
+    .layout > aside {
+        width: 170px !important;
+        padding: 8px !important;
+        min-height: 100vh;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+
+    .layout > aside > nav {
+        display: flex !important;
+        flex-direction: column !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+        white-space: normal !important;
+    }
+
+    .layout > aside > nav > a {
+        width: 100% !important;
+        flex: none !important;
+        box-sizing: border-box;
+    }
+
+    .layout > main {
+        min-width: 0;
+        width: 100%;
     }
 }
