@@ -1341,7 +1341,7 @@ button:disabled { opacity: .48; cursor: not-allowed; }
     }
 }
 /* FORZAR MENÚ LATERAL SOLO EN TELÉFONO HORIZONTAL */
-@media (max-height: 500px) and (orientation: landscape) {
+@media (orientation: landscape) and (max-width: 950px) {
     .layout {
         display: grid !important;
         grid-template-columns: 170px minmax(0, 1fr) !important;
