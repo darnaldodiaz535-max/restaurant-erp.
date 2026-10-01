@@ -1288,7 +1288,7 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 /* TELÉFONO EN HORIZONTAL */
 @media (max-height: 500px) and (orientation: landscape) {
 
-    .layout {
+    .app {
         display: grid;
         grid-template-columns: 170px minmax(0, 1fr);
         align-items: stretch;
