@@ -1228,7 +1228,7 @@ body.compact-view main, body.compact-view #personal-module, body.compact-view #o
     .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     aside { width: 205px; }
 }
-@media (max-width: 620px) {
+@media (max-width: 620px) and (orientation: portrait) {
     .topbar { height: auto; min-height: 70px; padding: 12px; gap: 10px; flex-wrap: wrap; }
     .logo { width: auto; font-size: 16px; }
     .search { order: 3; flex-basis: 100%; }
