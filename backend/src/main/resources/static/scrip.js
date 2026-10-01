@@ -354,7 +354,7 @@ async function renderModule(name, selectedArea = null) {
             const row = document.createElement("tr");
             record.values.forEach((value) => { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); });
             const actions = document.createElement("td");
-            if (canManageModule(slug) && slug === "tareas-diarias" && Number(record.references[1]) === Number(currentProfile.employeeId)) {
+           if (slug === "tareas-diarias" && Number(record.references?.[1]) === Number(currentProfile?.employeeId)) {
                 const statusIndex = (moduleSchemas[name] || []).indexOf("Estado");
                 const state = String(record.values[statusIndex] || "").toUpperCase();
                 const photo = document.createElement("input"); photo.type = "file"; photo.accept = "image/jpeg,image/png,image/webp"; photo.hidden = true;
