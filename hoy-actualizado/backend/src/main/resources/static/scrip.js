@@ -354,22 +354,75 @@ async function renderModule(name, selectedArea = null) {
             const row = document.createElement("tr");
             record.values.forEach((value) => { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); });
             const actions = document.createElement("td");
-             if (slug === "tareas-diarias" && Number(record.references[1]) === Number(currentProfile.employeeId)) {
-                const statusIndex = (moduleSchemas[name] || []).indexOf("Estado");
-                const state = String(record.values[statusIndex] || "").toUpperCase();
-                const photo = document.createElement("input"); photo.type = "file"; photo.accept = "image/jpeg,image/png,image/webp"; photo.hidden = true;
-                const send = document.createElement("button"); send.type = "button"; send.className = "table-button"; send.textContent = state === "EN_REVISION" ? "Foto enviada" : "Completar con foto";
-                send.disabled = ["EN_REVISION", "COMPLETADA", "COMPLETADO", "FINALIZADA", "FINALIZADO"].includes(state);
-                send.addEventListener("click", () => photo.click());
-                photo.addEventListener("change", async () => {
-                    if (!photo.files?.[0]) return;
-                    const data = new FormData(); data.append("taskId", String(record.id)); data.append("photo", photo.files[0]);
-                    try { await uploadRequest("/api/evidencias", data); alert("La tarea y la foto quedaron guardadas para revisión."); await loadRecords(); }
-                    catch (error) { alert(`No se pudo enviar la foto: ${error.message}`); }
-                    finally { photo.value = ""; }
-                });
-                actions.append(send, photo);
-            }
+             if (
+    slug === "tareas-diarias" &&
+    currentProfile &&
+    Number(record.references?.[1]) === Number(currentProfile.employeeId)
+) {
+    const statusIndex = (moduleSchemas[name] || []).indexOf("Estado");
+    const state = String(record.values[statusIndex] || "")
+        .trim()
+        .toUpperCase();
+
+    const finishedStates = [
+        "EN_REVISION",
+        "COMPLETADA",
+        "COMPLETADO",
+        "FINALIZADA",
+        "FINALIZADO"
+    ];
+
+    const photo = document.createElement("input");
+    photo.type = "file";
+    photo.accept = "image/*";
+    photo.setAttribute("capture", "environment");
+    photo.hidden = true;
+
+    const send = document.createElement("button");
+    send.type = "button";
+    send.className = "table-button";
+
+    if (state === "EN_REVISION") {
+        send.textContent = "Pendiente de revisión";
+    } else if (finishedStates.includes(state)) {
+        send.textContent = "Tarea completada";
+    } else {
+        send.textContent = "Realizar tarea";
+    }
+
+    send.disabled = finishedStates.includes(state);
+
+    send.addEventListener("click", () => {
+        photo.click();
+    });
+
+    photo.addEventListener("change", async () => {
+        const selectedPhoto = photo.files?.[0];
+        if (!selectedPhoto) return;
+
+        const data = new FormData();
+        data.append("taskId", String(record.id));
+        data.append("photo", selectedPhoto);
+
+        send.disabled = true;
+        send.textContent = "Enviando...";
+
+        try {
+            await uploadRequest("/api/evidencias", data);
+            alert("Tarea realizada. La foto fue enviada para revisión.");
+            await loadRecords();
+            await loadDashboardMetrics();
+        } catch (error) {
+            alert(`No se pudo realizar la tarea: ${error.message}`);
+            send.disabled = false;
+            send.textContent = "Realizar tarea";
+        } finally {
+            photo.value = "";
+        }
+    });
+
+    actions.append(send, photo);
+}
             if (canManageModule(slug)) {
             const edit = document.createElement("button"); edit.type = "button"; edit.className = "table-button"; edit.textContent = "Editar";
             const remove = document.createElement("button"); remove.type = "button"; remove.className = "table-button"; remove.textContent = "Eliminar";
