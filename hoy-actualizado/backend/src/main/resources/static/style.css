@@ -1235,7 +1235,7 @@ body.compact-view main, body.compact-view #personal-module, body.compact-view #o
     .search input { max-width: none; }
     .layout { display: block; }
     aside { width: 100%; padding: 8px; }
-    nav { flex-direction: row; overflow-x: auto; }
+    nav { flex-direction: column; overflow-x: hidden; }
     nav a { flex: 0 0 auto; }
     main { padding: 18px; }
     .dashboard-cards { grid-template-columns: 1fr; gap: 12px; }
