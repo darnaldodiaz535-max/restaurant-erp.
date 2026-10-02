@@ -226,7 +226,7 @@ const moduleSchemas = {
     Asistencia: ["Trabajador", "Fecha", "Hora de entrada", "Hora de salida", "Estado"],
     Horarios: ["Trabajador", "Fecha", "Hora de inicio", "Hora de término", "Área"],
     "Tareas diarias": ["Tarea", "Responsable", "Fecha", "Estado", "Área"],
-    Inventario: ["Insumo", "Categoría", "Stock actual", "Unidad", "Stock mínimo"],
+    Inventario: ["Insumo", "Categoría", "Stock actual", "Unidad", "Stock mínimo", "Stock máximo"],
     Cocina: ["Preparación", "Responsable", "Hora", "Estado"],
     "Producción": ["Preparación", "Cantidad", "Unidad", "Responsable", "Fecha"],
     "Mise en place": ["Preparación", "Cantidad", "Responsable", "Hora límite", "Estado"],
@@ -305,7 +305,7 @@ async function renderModule(name, selectedArea = null) {
         }
         if (input.tagName !== "SELECT") input.type = /fecha y hora/i.test(label) ? "datetime-local" : /fecha/i.test(label) ? "date" : /hora/i.test(label) ? "time" : /cantidad|stock|personas|temperatura/i.test(label) ? "number" : "text";
         if (input.type === "number") { input.step = "any"; input.min = "0"; }
-        input.required = true; input.setAttribute("aria-label", label); wrap.appendChild(input); formFields.appendChild(wrap); return input;
+        input.required = label !== "Stock máximo"; if (label === "Stock máximo") input.placeholder = "Opcional"; input.setAttribute("aria-label", label); wrap.appendChild(input); formFields.appendChild(wrap); return input;
     });
     const employeeSelects = inputs.filter((input) => input.dataset.employeeReference);
     if (employeeSelects.length) {
@@ -354,21 +354,13 @@ async function renderModule(name, selectedArea = null) {
             const row = document.createElement("tr");
             record.values.forEach((value) => { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); });
             const actions = document.createElement("td");
-           if (slug === "tareas-diarias" && Number(record.references?.[1]) === Number(currentProfile?.employeeId)) {
-                const statusIndex = (moduleSchemas[name] || []).indexOf("Estado");
-                const state = String(record.values[statusIndex] || "").toUpperCase();
-                const photo = document.createElement("input"); photo.type = "file"; photo.accept = "image/jpeg,image/png,image/webp"; photo.hidden = true;
-                const send = document.createElement("button"); send.type = "button"; send.className = "table-button"; send.textContent = state === "EN_REVISION" ? "Foto enviada" : "Completar con foto";
-                send.disabled = ["EN_REVISION", "COMPLETADA", "COMPLETADO", "FINALIZADA", "FINALIZADO"].includes(state);
-                send.addEventListener("click", () => photo.click());
-                photo.addEventListener("change", async () => {
-                    if (!photo.files?.[0]) return;
-                    const data = new FormData(); data.append("taskId", String(record.id)); data.append("photo", photo.files[0]);
-                    try { await uploadRequest("/api/evidencias", data); alert("La tarea y la foto quedaron guardadas para revisión."); await loadRecords(); }
-                    catch (error) { alert(`No se pudo enviar la foto: ${error.message}`); }
-                    finally { photo.value = ""; }
-                });
-                actions.append(send, photo);
+            if (slug === "tareas-diarias" && Number(record.references?.[1]) === Number(currentProfile?.employeeId)
+                && normalizeArea(record.values[4]) === normalizeArea(currentProfile?.area)) {
+                const state=String(record.values[3]||'').toUpperCase();
+                const done=['COMPLETADA','COMPLETADO','FINALIZADA','FINALIZADO'].includes(state);
+                const send=actionButton(state==='EN_REVISION'?'Pendiente de revisión':done?'Tarea completada':'Realizar tarea',
+                    ()=>void openTaskCamera(record.id,record.values[0],loadRecords));
+                send.disabled=done||state==='EN_REVISION';actions.append(send);
             }
             if (canManageModule(slug)) {
             const edit = document.createElement("button"); edit.type = "button"; edit.className = "table-button"; edit.textContent = "Editar";
@@ -397,7 +389,7 @@ async function renderModule(name, selectedArea = null) {
     cancel.addEventListener("click", () => { form.reset(); delete form.dataset.editing; form.hidden = true; });
     form.addEventListener("submit", async (event) => {
         event.preventDefault(); if (!canManageModule(slug)) return; const values = inputs.map((input) => input.value.trim());
-        if (values.some((value) => !value)) return;
+        if (values.some((value, i) => inputs[i].required && !value)) return;
         const references = inputs.map((input) => input.dataset.employeeReference ? Number(input.value) : null);
         const payload = { values, references };
         try {
@@ -412,6 +404,7 @@ async function renderModule(name, selectedArea = null) {
     if (revision !== screenRevision) return;
     if (name === "Tareas diarias") await renderEvidenceReview(section, selectedArea);
     if (name === "Horarios") await renderSchedules(section);
+    if (name === "Configuración") await renderNotificationPreferences(section);
 }
 
 async function renderEvidenceReview(section, selectedArea) {
@@ -428,8 +421,13 @@ async function renderEvidenceReview(section, selectedArea) {
             [item.task, item.employee, item.createdAt].forEach((value) => { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); });
             const imageCell = document.createElement("td"); const link = document.createElement("a"); link.href = `/api/evidencias/${item.id}/foto`; link.target = "_blank"; link.rel = "noopener"; link.textContent = "Ver foto"; imageCell.appendChild(link); row.appendChild(imageCell);
             const actionCell = document.createElement("td");
-            const approve = actionButton(item.status === "REVISADA" ? "Revisada" : "Aprobar tarea", async () => { try { await apiRequest(`/api/evidencias/${item.id}/revisar`, {method:"POST"}); await renderModule("Tareas diarias", selectedArea); await loadDashboardMetrics(); } catch (error) { alert(error.message); } });
+            const approve = actionButton(item.result === "RECHAZADA" ? "Rechazada" : item.status === "REVISADA" ? "Revisada" : "Aprobar tarea", async () => { try { await apiRequest(`/api/evidencias/${item.id}/revisar`, {method:"POST"}); await renderModule("Tareas diarias", selectedArea); await loadDashboardMetrics(); } catch (error) { alert(error.message); } });
             approve.disabled = !isOwnerRole() || item.status === "REVISADA"; actionCell.append(approve);
+            if (isOwnerRole() && item.status !== 'REVISADA') actionCell.append(actionButton('Rechazar evidencia',async()=>{
+                if(!confirm('¿Rechazar esta evidencia y pedir una nueva foto?'))return;
+                try{await apiRequest('/api/evidencias/'+item.id+'/revisar?approved=false',{method:'POST'});await renderModule('Tareas diarias',selectedArea);}
+                catch(error){alert(error.message);}
+            }));
             if (isOwnerRole() || isSalonRole()) {
                 const remove = document.createElement("button"); remove.type = "button"; remove.className = "table-button"; remove.textContent = "Borrar";
                 remove.addEventListener("click", async () => { if (!confirm("¿Ya revisaste esta evidencia y quieres borrar la foto? Al borrar la última foto, la tarea quedará marcada como completada.")) return; try { await apiRequest(`/api/evidencias/${item.id}`, { method: "DELETE" }); await renderModule("Tareas diarias", selectedArea); } catch (error) { alert(`No se pudo borrar: ${error.message}`); } }); actionCell.appendChild(remove);
@@ -588,6 +586,8 @@ function fillProfile(profile) {
 }
 async function enterApplication(profile) {
     fillProfile(profile);
+    document.body.classList.remove("logged-out");
+    void bindPushAccount();
     document.getElementById("addEmployeeButton").disabled = !isOwnerRole();
     document.getElementById("managePlazasButton").hidden = false;
     document.getElementById("managePlazasButton").textContent = isOwnerRole() ? "Agregar plaza / Gestionar plazas" : "Ver plazas";
@@ -604,11 +604,12 @@ async function enterApplication(profile) {
 }
 function showLogin(error = "") {
     currentProfile = null;
+    document.body.classList.add("logged-out");
     resetNotifications();
     authScreen.hidden = false;
     loginForm.hidden = false;
     setupForm.hidden = true;
-    document.getElementById("auth-title").textContent = "Restaurant ERP";
+    document.getElementById("auth-title").textContent = "MariGex";
     document.getElementById("auth-description").textContent = "Inicia sesión para continuar.";
     setAuthError(error);
 }
@@ -669,7 +670,8 @@ async function openProfile() {
 document.getElementById("closeProfile").addEventListener("click", () => profileDialog.close());
 async function closeSession() {
     if (!confirm("¿Quieres cerrar tu sesión?")) return;
-    try { await apiRequest(`${authApi}/logout`, { method: "POST" }); }
+    try { await disconnectPush(); } catch(error) { console.info('No se pudo desvincular Push:',error.message); }
+    try { await apiRequest(authApi + '/logout', { method: 'POST' }); }
     catch (error) { console.error("No se pudo cerrar la sesión en el servidor:", error); }
     adminMenu?.classList.remove("show");
     showLogin("Sesión cerrada.");
@@ -758,3 +760,35 @@ changePasswordForm.addEventListener("submit", async event => {
     } catch (error) { errorBox.textContent = error.message; }
     finally { passwordSubmitting = false; save.disabled = cancel.disabled = false; }
 });
+
+// Permite al trabajador abrir la cámara y enviar la foto de la tarea
+async function openTaskCamera(taskId, taskName, reloadRecords) {
+    const photo = document.createElement("input");
+
+    photo.type = "file";
+    photo.accept = "image/*";
+    photo.setAttribute("capture", "environment");
+    photo.hidden = true;
+
+    photo.addEventListener("change", async () => {
+        const file = photo.files?.[0];
+        if (!file) return;
+
+        const data = new FormData();
+        data.append("taskId", String(taskId));
+        data.append("photo", file);
+
+        try {
+            await uploadRequest("/api/evidencias", data);
+            alert(`Tarea "${taskName}" realizada. Foto enviada para revisión.`);
+            await reloadRecords();
+        } catch (error) {
+            alert(`No se pudo realizar la tarea: ${error.message}`);
+        } finally {
+            photo.remove();
+        }
+    });
+
+    document.body.appendChild(photo);
+    photo.click();
+}
