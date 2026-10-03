@@ -1,3 +1,29 @@
+// Resolve the optional experience script from the SAME release as this entry point.
+// A missing Push dependency must never turn successful authentication into a login error.
+const experienceScriptUrl = new URL('experiencia.js', document.currentScript.src);
+experienceScriptUrl.search = new URL(document.currentScript.src).search;
+let experienceLoading = null;
+function ensureExperienceLoaded() {
+    if (typeof bindPushAccount === 'function' && typeof openTaskCamera === 'function' && typeof startMarigex === 'function') return Promise.resolve();
+    if (experienceLoading) return experienceLoading;
+    experienceLoading = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = experienceScriptUrl.href;
+        const timer = setTimeout(() => finish(new Error('No se pudo cargar experiencia.js. Recarga la página con conexión a internet.')), 10000);
+        let settled = false;
+        function finish(error) {
+            if (settled) return;
+            settled = true; clearTimeout(timer); script.onload = script.onerror = null;
+            if (error) { script.remove(); reject(error); } else resolve();
+        }
+        script.onload = () => finish(typeof bindPushAccount === 'function' && typeof openTaskCamera === 'function' && typeof startMarigex === 'function'
+            ? null : new Error('experiencia.js no corresponde a esta versión o contiene un error de JavaScript.'));
+        script.onerror = () => finish(new Error('No se pudo descargar experiencia.js. Comprueba que esté publicado junto con scrip.js.'));
+        document.head.append(script);
+    }).catch(error => { experienceLoading = null; throw error; });
+    return experienceLoading;
+}
+
 const dashboard = document.getElementById("dashboard-screen");
 const personal = document.getElementById("personal-module");
 const otherModule = document.getElementById("other-module");
@@ -359,7 +385,12 @@ async function renderModule(name, selectedArea = null) {
                 const state=String(record.values[3]||'').toUpperCase();
                 const done=['COMPLETADA','COMPLETADO','FINALIZADA','FINALIZADO'].includes(state);
                 const send=actionButton(state==='EN_REVISION'?'Pendiente de revisión':done?'Tarea completada':'Realizar tarea',
-                    ()=>void openTaskCamera(record.id,record.values[0],loadRecords));
+                    async () => {
+                        send.disabled = true;
+                        try { await ensureExperienceLoaded(); await openTaskCamera(record.id, record.values[0], loadRecords); }
+                        catch (error) { alert(error.message); }
+                        finally { send.disabled = done || state === 'EN_REVISION'; }
+                    });
                 send.disabled=done||state==='EN_REVISION';actions.append(send);
             }
             if (canManageModule(slug)) {
@@ -587,7 +618,9 @@ function fillProfile(profile) {
 async function enterApplication(profile) {
     fillProfile(profile);
     document.body.classList.remove("logged-out");
-    void bindPushAccount();
+    void ensureExperienceLoaded().then(() => {
+        if (currentProfile === profile) return bindPushAccount();
+    }).catch(error => console.warn('El acceso continúa sin Push:', error.message));
     document.getElementById("addEmployeeButton").disabled = !isOwnerRole();
     document.getElementById("managePlazasButton").hidden = false;
     document.getElementById("managePlazasButton").textContent = isOwnerRole() ? "Agregar plaza / Gestionar plazas" : "Ver plazas";
@@ -760,35 +793,3 @@ changePasswordForm.addEventListener("submit", async event => {
     } catch (error) { errorBox.textContent = error.message; }
     finally { passwordSubmitting = false; save.disabled = cancel.disabled = false; }
 });
-
-// Permite al trabajador abrir la cámara y enviar la foto de la tarea
-async function openTaskCamera(taskId, taskName, reloadRecords) {
-    const photo = document.createElement("input");
-
-    photo.type = "file";
-    photo.accept = "image/*";
-    photo.setAttribute("capture", "environment");
-    photo.hidden = true;
-
-    photo.addEventListener("change", async () => {
-        const file = photo.files?.[0];
-        if (!file) return;
-
-        const data = new FormData();
-        data.append("taskId", String(taskId));
-        data.append("photo", file);
-
-        try {
-            await uploadRequest("/api/evidencias", data);
-            alert(`Tarea "${taskName}" realizada. Foto enviada para revisión.`);
-            await reloadRecords();
-        } catch (error) {
-            alert(`No se pudo realizar la tarea: ${error.message}`);
-        } finally {
-            photo.remove();
-        }
-    });
-
-    document.body.appendChild(photo);
-    photo.click();
-}

@@ -173,4 +173,14 @@ const managePlazasButton = actionButton("Agregar plaza / Gestionar plazas", () =
 managePlazasButton.id = "managePlazasButton"; managePlazasButton.hidden = true;
 document.getElementById("addEmployeeButton").after(managePlazasButton);
 setInterval(() => { if (!document.hidden && currentProfile) void loadDashboardOverview(); }, 60000);
-void initializeAuthentication();
+void (async () => {
+    try { await ensureExperienceLoaded(); }
+    catch (error) {
+        console.warn('Arranque sin funciones de experiencia:', error.message);
+        // Keep login and existing ERP modules available even if an asset download fails.
+        try { await initializeAuthentication(); }
+        finally { document.body.classList.remove('booting'); document.getElementById('marigexSplash')?.remove(); }
+        return;
+    }
+    await startMarigex();
+})();
