@@ -1344,34 +1344,7 @@ body.compact-view main, body.compact-view #personal-module, body.compact-view #o
     }
 }
 
-    body > .layout > aside {
-        flex: 0 0 auto;
-        width: 100%;
-        min-width: 0;
-        max-width: 100%;
-        padding: 8px;
-    }
-
-    body > .layout > main,
-    body > .layout > .module-screen {
-        flex: 0 0 auto;
-        width: 100%;
-        min-width: 0;
-        max-width: 100%;
-    }
-
-    body > .layout > aside > nav {
-        flex-direction: row;
-        min-width: 0;
-        max-width: 100%;
-        overflow-x: auto;
-    }
-
-    body > .layout > aside > nav > a {
-        flex: 0 0 auto;
-    }
-}
-
+   
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) and (pointer: coarse) {
     .layout { display: flex; align-items: flex-start; }
     aside { width: 170px; max-height: 100dvh; overflow-y: auto; }
