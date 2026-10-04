@@ -738,20 +738,7 @@ function positionNotifications() {
         viewport?.width ?? window.innerWidth,
         document.documentElement.clientWidth
     );
- const enable=actionButton('Activar push en este dispositivo',async()=>{
-            enable.disabled=true;
-            try{
-                if(!('PushManager' in window)||!('Notification' in window))throw new Error('Push no está disponible. En iPhone/iPad instala MariGex en la pantalla de inicio y ábrela desde allí (iOS 16.4 o posterior).');
-                // Permission request occurs directly from this click, before awaiting network.
-                const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Permiso no concedido. Puedes cambiarlo en los ajustes del navegador.');
-                const reg=await pushRegistration();let s=await reg.pushManager.getSubscription();
-                const raw=config.publicKey.replace(/-/g,'+').replace(/_/g,'/');const bytes=Uint8Array.from(atob(raw+'='.repeat((4-raw.length%4)%4)),c=>c.charCodeAt(0));
-                if(s && s.options.applicationServerKey && !bytes.every((v,i)=>v===new Uint8Array(s.options.applicationServerKey)[i])){await s.unsubscribe();s=null;}
-                s=s||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
-                await apiRequest('/api/notificaciones/push/suscripciones',{method:'POST',body:JSON.stringify(s)});
-                push.checked=true;await apiRequest('/api/notificaciones/preferencias',{method:'PUT',body:JSON.stringify({internal:internal.checked,push:true,mail:mail.checked,email:email.value.trim()})});
-                await pushOwner(reg,String(currentProfile.id));localStorage.setItem('marigex-push-user',String(currentProfile.id));feedback.textContent='Push activado en este dispositivo.';
-            }catch(error){feedback.textContent=error.message;}
+ 
     const viewportHeight = viewport?.height ?? window.innerHeight;
 
     const availableWidth = Math.max(0, viewportWidth - margin * 2);
