@@ -18,17 +18,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // H2 aislado: nunca usa las credenciales ni la base de Oracle Cloud.
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:permissions;MODE=Oracle;DB_CLOSE_DELAY=-1",
     "spring.datasource.driver-class-name=org.h2.Driver","spring.datasource.username=sa","spring.datasource.password=",
-    "spring.profiles.active=test"})
+    "spring.profiles.active=test","marigex.jobs.enabled=false"})
 class PermissionsIntegrationTest {
     @Autowired WebApplicationContext context;
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean JdbcTemplate jdbc;
     @org.springframework.test.context.bean.override.mockito.MockitoBean AiScheduleClient ai;
     @Autowired NotificationService notifications;
+    @Autowired NotificationPreferences preferences;
+    @Autowired NotificationDelivery delivery;
+    @Autowired InventoryAlertService inventory;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean NotificationTransport transport;
     MockMvc mvc;
     MockHttpSession owner, worker, otherWorker, kitchen, salon;
     static final byte[] PNG=Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1sAAAAASUVORK5CYII=");
     MockHttpSession session(long id) { var s=new MockHttpSession(); s.setAttribute("userId",id); return s; }
-    @BeforeEach void init() {
+    @BeforeEach void init() throws Exception {
         mvc=MockMvcBuilders.webAppContextSetup(context).build();
         // Destructivo únicamente dentro de la base H2 efímera de ESTA prueba.
         jdbc.execute("DROP ALL OBJECTS");
@@ -135,6 +139,9 @@ class PermissionsIntegrationTest {
         jdbc.execute("ALTER TABLE APP_TURNO ADD COLUMN IF NOT EXISTS HORA_INICIO VARCHAR2(500)");
         jdbc.execute("ALTER TABLE APP_TURNO ADD COLUMN IF NOT EXISTS HORA_TERMINO VARCHAR2(500)");
         jdbc.execute("ALTER TABLE APP_TURNO ADD COLUMN IF NOT EXISTS AREA VARCHAR2(500)");
+        try(var connection=jdbc.getDataSource().getConnection()) {
+            org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,new org.springframework.core.io.ClassPathResource("marigex-test-schema.sql"));
+        }
         String[] roles={"EMPRESA","TRABAJADOR","EMPLEADO","JEFE_COCINA","JEFE_SALON"};
         for(int i=1;i<=5;i++) {
             jdbc.update("INSERT INTO APP_EMPLEADO VALUES(?,?,?,?,?)",i,"Persona "+i,"Cocinero",i==3?"Salón":"Cocina","ACTIVO");
@@ -343,7 +350,7 @@ class PermissionsIntegrationTest {
         mvc.perform(get("/api/evidencias/"+id+"/foto").session(worker)).andExpect(status().isOk()).andExpect(content().bytes(PNG));
         mvc.perform(delete("/api/evidencias/"+id).session(worker)).andExpect(status().isForbidden());
         mvc.perform(post("/api/evidencias/"+id+"/revisar").session(worker)).andExpect(status().isForbidden());
-        mvc.perform(multipart("/api/evidencias").file(new MockMultipartFile("photo","f.png","image/png",PNG)).param("taskId","10").session(worker)).andExpect(status().isForbidden());
+        mvc.perform(multipart("/api/evidencias").file(new MockMultipartFile("photo","f.png","image/png",PNG)).param("taskId","11").session(worker)).andExpect(status().isForbidden());
         mvc.perform(put("/api/empleados/2").session(worker).contentType("application/json").content("{}")).andExpect(status().isForbidden());
         mvc.perform(delete("/api/empleados/2").session(worker)).andExpect(status().isForbidden());
         mvc.perform(put("/api/plazas/1").session(worker).contentType("application/json").content("{\"position\":\"Cocinero\",\"area\":\"COCINA\",\"slots\":1,\"active\":true}")).andExpect(status().isForbidden());
@@ -418,4 +425,85 @@ class PermissionsIntegrationTest {
         var ex=assertThrows(org.springframework.web.server.ResponseStatusException.class,()->client.generate("{}"));
         assertEquals(503,ex.getStatusCode().value());
     }
+
+    @Test void workerTaskPhotoReviewAndRejectionFlow() throws Exception {
+        // Login uses real PBKDF2 accounts created by the existing administrator endpoint.
+        var account=passwordAccount("TRABAJADOR");
+        var logged=mvc.perform(post("/api/auth/login").contentType("application/json").content("{\"username\":\"claveusuario\",\"password\":\"AnteriorSegura123\"}"))
+            .andExpect(status().isOk()).andReturn();
+        var employeeSession=(MockHttpSession)logged.getRequest().getSession();
+        mvc.perform(post("/api/modulos/tareas-diarias").session(owner).contentType("application/json").content("{\"values\":[\"Revisar mesas\",\"\",\"2026-10-01\",\"PENDIENTE\",\"SALON\"],\"references\":[null,50,null,null,null]}"))
+            .andExpect(status().isCreated());
+        long task=jdbc.queryForObject("SELECT ID_TAREA FROM APP_TAREA_DIARIA WHERE RESPONSABLE_ID=50",Long.class);
+        mvc.perform(get("/api/notificaciones").session(employeeSession)).andExpect(jsonPath("$.unread").value(1));
+        mvc.perform(get("/api/modulos/tareas-diarias?area=SALON").session(employeeSession)).andExpect(status().isOk());
+        var file=new MockMultipartFile("photo","foto.png","image/png",PNG);
+        mvc.perform(multipart("/api/evidencias").file(file).param("taskId",String.valueOf(task)).session(otherWorker)).andExpect(status().isForbidden());
+        mvc.perform(multipart("/api/evidencias").file(new MockMultipartFile("photo","fake.png","image/png","not an image".getBytes())).param("taskId",String.valueOf(task)).session(employeeSession)).andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/evidencias").file(file).param("taskId",String.valueOf(task)).session(employeeSession)).andExpect(status().isCreated());
+        assertEquals("EN_REVISION",jdbc.queryForObject("SELECT ESTADO FROM APP_TAREA_DIARIA WHERE ID_TAREA=?",String.class,task));
+        long evidence=jdbc.queryForObject("SELECT ID_EVIDENCIA FROM APP_EVIDENCIA_TAREA WHERE ID_TAREA=?",Long.class,task);
+        mvc.perform(multipart("/api/evidencias").file(file).param("taskId",String.valueOf(task)).session(employeeSession)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/evidencias/"+evidence+"/revisar").session(employeeSession)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/notificaciones").session(owner)).andExpect(jsonPath("$.unread").value(1));
+        mvc.perform(get("/api/evidencias/"+evidence+"/foto").session(owner)).andExpect(content().bytes(PNG));
+        mvc.perform(post("/api/evidencias/"+evidence+"/revisar?approved=false").session(owner)).andExpect(status().isOk());
+        assertEquals("PENDIENTE",jdbc.queryForObject("SELECT ESTADO FROM APP_TAREA_DIARIA WHERE ID_TAREA=?",String.class,task));
+        assertEquals("RECHAZADA",jdbc.queryForObject("SELECT RESULTADO FROM APP_EVIDENCIA_TAREA WHERE ID_EVIDENCIA=?",String.class,evidence));
+        mvc.perform(multipart("/api/evidencias").file(file).param("taskId",String.valueOf(task)).session(employeeSession)).andExpect(status().isCreated());
+        long next=jdbc.queryForObject("SELECT MAX(ID_EVIDENCIA) FROM APP_EVIDENCIA_TAREA WHERE ID_TAREA=?",Long.class,task);
+        mvc.perform(post("/api/evidencias/"+next+"/revisar").session(owner)).andExpect(status().isOk());
+        assertEquals("COMPLETADA",jdbc.queryForObject("SELECT ESTADO FROM APP_TAREA_DIARIA WHERE ID_TAREA=?",String.class,task));
+        assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM APP_EVIDENCIA_TAREA WHERE ID_TAREA=?",Integer.class,task));
+        mvc.perform(post("/api/auth/logout").session(employeeSession)).andExpect(status().isOk());
+    }
+    @Test void stockBoundariesDeduplicateAndRearm() throws Exception {
+        mvc.perform(post("/api/modulos/inventario").session(owner).contentType("application/json").content("{\"values\":[\"Arroz\",\"Secos\",\"10\",\"kg\",\"5\",\"50\"]}"))
+            .andExpect(status().isCreated());
+        long id=jdbc.queryForObject("SELECT ID_INSUMO FROM APP_INSUMO",Long.class);
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION",Integer.class));
+        jdbc.update("UPDATE APP_INSUMO SET STOCK_ACTUAL=5 WHERE ID_INSUMO=?",id);inventory.scan();inventory.scan();
+        assertEquals(3,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION",Integer.class));
+        jdbc.update("UPDATE APP_INSUMO SET STOCK_ACTUAL=80 WHERE ID_INSUMO=?",id);inventory.scan();inventory.scan();
+        assertEquals(6,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION",Integer.class));
+        jdbc.update("UPDATE APP_INSUMO SET STOCK_ACTUAL=50 WHERE ID_INSUMO=?",id);inventory.scan();
+        assertEquals("NORMAL",jdbc.queryForObject("SELECT ALERTA_ESTADO FROM APP_INSUMO WHERE ID_INSUMO=?",String.class,id));
+        jdbc.update("UPDATE APP_INSUMO SET STOCK_ACTUAL=2 WHERE ID_INSUMO=?",id);inventory.scan();
+        assertEquals(9,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION",Integer.class));
+        mvc.perform(get("/api/notificaciones").session(worker)).andExpect(jsonPath("$.unread").value(0));
+        mvc.perform(put("/api/modulos/inventario/"+id).session(owner).contentType("application/json").content("{\"values\":[\"Arroz\",\"Secos\",\"2\",\"kg\",\"5\",\"1\"]}"))
+            .andExpect(status().isBadRequest());
+    }
+    @Test void notificationPreferencesAndDeliveryArePersonalAndDurable() throws Exception {
+        org.mockito.Mockito.when(transport.mailReady()).thenReturn(true);
+        preferences.save(2,new NotificationPreferences.Preferences(false,false,true,"worker@example.test"));
+        notifications.employee(2,"Tareas diarias","Tarea: Preparar. Fecha: 2026-10-01. Área: COCINA");
+        mvc.perform(get("/api/notificaciones").session(worker)).andExpect(jsonPath("$.unread").value(0));
+        mvc.perform(get("/api/notificaciones/preferencias").session(otherWorker)).andExpect(jsonPath("$.internal").value(true)).andExpect(jsonPath("$.mail").value(false));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO WHERE ESTADO='PENDIENTE'",Integer.class));
+        delivery.deliver();delivery.deliver();
+        org.mockito.Mockito.verify(transport,org.mockito.Mockito.times(1)).mail(org.mockito.ArgumentMatchers.eq("worker@example.test"),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.eq("Tareas diarias"),org.mockito.ArgumentMatchers.contains("Fecha:"));
+        mvc.perform(put("/api/notificaciones/preferencias").session(worker).contentType("application/json").content("{\"internal\":true,\"push\":false,\"mail\":false,\"email\":\"\",\"userId\":1}"))
+            .andExpect(status().isOk());
+        assertTrue(preferences.get(1).internal());assertFalse(preferences.get(1).mail());
+        mvc.perform(put("/api/notificaciones/preferencias").session(worker).contentType("application/json").content("{\"mail\":true,\"email\":\"bad\"}"))
+            .andExpect(status().isBadRequest());
+    }
+    @Test void pushExpiredSubscriptionsAreRemovedAndTransientErrorsRetry() throws Exception {
+        org.mockito.Mockito.when(transport.pushReady()).thenReturn(true);
+        preferences.save(2,new NotificationPreferences.Preferences(true,true,false,""));
+        jdbc.update("INSERT INTO APP_PUSH_SUSCRIPCION(ID_USUARIO,ENDPOINT,ENDPOINT_HASH,P256DH,AUTH) VALUES(2,'https://fcm.googleapis.com/wp/test','test','key','auth')");
+        notifications.employee(2,"Horarios","Nuevo horario");
+        org.mockito.Mockito.when(transport.push(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString())).thenReturn(503);
+        delivery.deliver();
+        assertEquals(1,jdbc.queryForObject("SELECT INTENTOS FROM APP_NOTIF_ENVIO",Integer.class));
+        jdbc.update("UPDATE APP_NOTIF_ENVIO SET PROXIMO_INTENTO=SYSTIMESTAMP");
+        org.mockito.Mockito.when(transport.push(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString())).thenReturn(410);
+        delivery.deliver();
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_PUSH_SUSCRIPCION",Integer.class));
+        assertEquals("OMITIDO",jdbc.queryForObject("SELECT ESTADO FROM APP_NOTIF_ENVIO",String.class));
+        for(String endpoint:new String[]{"http://127.0.0.1/","https://evil.test/","https://fcm.googleapis.com.evil.test/","https://user@fcm.googleapis.com/","https://fcm.googleapis.com:123/"})
+            assertThrows(IllegalArgumentException.class,()->PushSubscriptions.validateEndpoint(endpoint));
+    }
+
 }

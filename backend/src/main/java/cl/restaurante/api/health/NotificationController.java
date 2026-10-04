@@ -17,9 +17,9 @@ public class NotificationController {
     @GetMapping
     public Page list(HttpSession session,@RequestParam(defaultValue="0") long before) {
         long user=access.current(session).id();
-        var rows=jdbc.query("SELECT ID_NOTIFICACION,MODULO,MENSAJE,LEIDA,CREADO_EN FROM APP_NOTIFICACION WHERE ID_USUARIO=? AND (?=0 OR ID_NOTIFICACION<?) ORDER BY ID_NOTIFICACION DESC FETCH FIRST 51 ROWS ONLY",
+        var rows=jdbc.query("SELECT ID_NOTIFICACION,MODULO,MENSAJE,LEIDA,CREADO_EN FROM APP_NOTIFICACION WHERE ID_USUARIO=? AND VISIBLE='S' AND (?=0 OR ID_NOTIFICACION<?) ORDER BY ID_NOTIFICACION DESC FETCH FIRST 51 ROWS ONLY",
             (rs,n)->new Notice(rs.getLong(1),rs.getString(2),rs.getString(3),"S".equals(rs.getString(4)),rs.getTimestamp(5).toString()),user,before,before);
-        long unread=jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION WHERE ID_USUARIO=? AND LEIDA='N'",Long.class,user);
+        long unread=jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION WHERE ID_USUARIO=? AND VISIBLE='S' AND LEIDA='N'",Long.class,user);
         return new Page(unread,rows.stream().limit(50).toList(),rows.size()>50);
     }
     @PostMapping("/{id}/leida")

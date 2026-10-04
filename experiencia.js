@@ -143,81 +143,20 @@ async function renderNotificationPreferences(section) {
     }catch(error){feedback.textContent=error.message;}
 }
 
-/* PARA QUÉ SIRVE:
-   Mantiene el panel de notificaciones dentro de la pantalla del teléfono.
-   ARCHIVO: src/main/resources/static/experiencia.js
-   SECCIÓN: positionNotifications()
-*/
-
+// Portal outside the topbar: a parent's overflow/stacking context cannot clip the inbox.
+document.body.append(notificationMenu);
 function positionNotifications() {
-    if (!notificationMenu.classList.contains('show')) return;
-
-    const viewport = window.visualViewport;
-    const margin = 8;
-
-    const viewportLeft = viewport?.offsetLeft ?? 0;
-    const viewportTop = viewport?.offsetTop ?? 0;
-
-    const viewportWidth = Math.min(
-        viewport?.width ?? window.innerWidth,
-        document.documentElement.clientWidth
-    );
-
-    const viewportHeight = viewport?.height ?? window.innerHeight;
-
-    const availableWidth = Math.max(0, viewportWidth - margin * 2);
-    const availableHeight = Math.max(0, viewportHeight - margin * 2);
-
-    const panelWidth = Math.min(360, availableWidth);
-    const anchor = notificationBtn.getBoundingClientRect();
-
-    const minLeft = viewportLeft + margin;
-    const maxLeft = minLeft + availableWidth - panelWidth;
-
-    const left = Math.max(
-        minLeft,
-        Math.min(anchor.right - panelWidth, maxLeft)
-    );
-
-    const minTop = viewportTop + margin;
-    const viewportBottom = viewportTop + viewportHeight - margin;
-
-    const preferredHeight = Math.min(220, availableHeight);
-    const maxTop = Math.max(minTop, viewportBottom - preferredHeight);
-
-    const top = Math.max(
-        minTop,
-        Math.min(anchor.bottom + margin, maxTop)
-    );
-
-    Object.assign(notificationMenu.style, {
-        left: `${left}px`,
-        top: `${top}px`,
-        right: 'auto',
-        bottom: 'auto',
-        width: `${panelWidth}px`,
-        maxWidth: `${availableWidth}px`,
-        maxHeight: `${Math.max(0, viewportBottom - top)}px`
-    });
+    if(!notificationMenu.classList.contains('show'))return;
+    const view=window.visualViewport, width=view?.width||innerWidth,height=view?.height||innerHeight,offsetX=view?.offsetLeft||0,offsetY=view?.offsetTop||0;
+    const anchor=notificationBtn.getBoundingClientRect(),panelWidth=Math.min(360,width-16);
+    notificationMenu.style.width=panelWidth+'px';
+    notificationMenu.style.left=(offsetX+Math.max(8,Math.min(anchor.right-panelWidth,width-panelWidth-8)))+'px';
+    const top=Math.max(8,Math.min(anchor.bottom+8,Math.max(8,height-220)));
+    notificationMenu.style.top=(offsetY+top)+'px';notificationMenu.style.maxHeight=Math.max(80,height-top-8)+'px';
 }
-
-notificationBtn.addEventListener('click', positionNotifications);
-
-window.addEventListener('resize', positionNotifications);
-window.addEventListener('scroll', positionNotifications, {
-    passive: true
-});
-
-window.visualViewport?.addEventListener(
-    'resize',
-    positionNotifications
-);
-
-window.visualViewport?.addEventListener(
-    'scroll',
-    positionNotifications,
-    { passive: true }
-);
+notificationBtn.addEventListener('click',positionNotifications);
+window.addEventListener('resize',positionNotifications);window.addEventListener('scroll',positionNotifications,{passive:true});
+window.visualViewport?.addEventListener('resize',positionNotifications);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){notificationMenu.classList.remove('show');notificationBtn.setAttribute('aria-expanded','false');}});
 function openPushInbox() {
     if(!currentProfile)return;

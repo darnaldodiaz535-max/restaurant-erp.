@@ -9,12 +9,26 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class NotificationService {
     private final JdbcTemplate jdbc;
-    public NotificationService(JdbcTemplate jdbc) { this.jdbc=jdbc; }
+    private final NotificationPreferences preferences;
+    private final NotificationDelivery delivery;
+    public NotificationService(JdbcTemplate jdbc,NotificationPreferences preferences,NotificationDelivery delivery) { this.jdbc=jdbc;this.preferences=preferences;this.delivery=delivery; }
+    @org.springframework.transaction.annotation.Transactional
     public void employee(long employeeId,String module,String message) {
-        jdbc.update("INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE) SELECT ID_USUARIO,?,? FROM APP_USUARIO WHERE ID_EMPLEADO=? AND ACTIVO='S'",module,message,employeeId);
+        for(long user:jdbc.query("SELECT ID_USUARIO FROM APP_USUARIO WHERE ID_EMPLEADO=? AND ACTIVO='S'",(rs,n)->rs.getLong(1),employeeId)) notify(user,module,message);
     }
+    @org.springframework.transaction.annotation.Transactional
     public void administrators(String module,String message) {
-        jdbc.update("INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE) SELECT ID_USUARIO,?,? FROM APP_USUARIO WHERE ACTIVO='S' AND ROL IN ('ADMIN','EMPRESA','JEFE_SALON','JEFE_COCINA','JEFE_LOCAL')",module,message);
+        for(long user:jdbc.query("SELECT ID_USUARIO FROM APP_USUARIO WHERE ACTIVO='S' AND ROL IN ('ADMIN','EMPRESA','JEFE_SALON','JEFE_COCINA','JEFE_LOCAL')",(rs,n)->rs.getLong(1))) notify(user,module,message);
+    }
+    private void notify(long user,String module,String message) {
+        var p=preferences.get(user);
+        String safe=message.substring(0,Math.min(message.length(),900));
+        var keys=new org.springframework.jdbc.support.GeneratedKeyHolder();
+        jdbc.update(connection->{
+            var st=connection.prepareStatement("INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE,VISIBLE) VALUES(?,?,?,?)",new String[]{"ID_NOTIFICACION"});
+            st.setLong(1,user);st.setString(2,module);st.setString(3,safe);st.setString(4,p.internal()?"S":"N");return st;
+        },keys);
+        delivery.enqueue(keys.getKey().longValue(),user,p);
     }
     public List<Long> validateRecipients(List<Long> ids) {
         if(ids==null) return List.of();

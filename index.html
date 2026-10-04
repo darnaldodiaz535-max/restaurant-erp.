@@ -11,21 +11,18 @@
     <meta charset="UTF-8">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MariGex - Sistema de Gestión</title>
 
-   <title>MariGex - Sistema de Gestión</title>
-
-    <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#111827">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="MariGex">
-<link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
+    <link rel="stylesheet" href="style.css?v=marigex-20261001">
+    <meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
 
 </head>
 
 
-<body>
+<body class="booting logged-out">
+<section id="marigexSplash" role="status" aria-label="Cargando MariGex"><div class="splash-content"><img src="/icons/icon-192.png" alt="" width="96" height="96"><h1>MARI GEX</h1><p>Sistema de Gestión</p><p>Todo tu negocio, en un solo lugar.</p><span class="splash-spinner" aria-hidden="true"></span></div></section>
 
     <section id="auth-screen" class="auth-screen" aria-labelledby="auth-title">
         <div class="auth-card">
@@ -874,13 +871,17 @@
             <button id="cancelPassword" class="secondary-button" type="button">Cancelar</button>
         </form>
     </dialog>
-    <script src="scrip.js"></script><script src="notificaciones-horarios.js"></script>
-    <script src="gestion.js"></script>
-    <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#111827">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Restaurant ERP">
+    <script src="scrip.js?v=login-tareas-20261002"></script><script src="notificaciones-horarios.js?v=login-tareas-20261002"></script>
+    <script src="experiencia.js?v=login-tareas-20261002"></script>
+    <script src="gestion.js?v=login-tareas-20261002"></script>
+    <script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/service-worker.js", {updateViaCache:"none"}).then(r=>r.update()).catch(()=>{});
+    });
+  }
+</script>
+
 
 </body>
 

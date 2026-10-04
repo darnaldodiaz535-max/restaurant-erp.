@@ -101,7 +101,6 @@ public class OracleConnectionController {
             }
         }
         jdbcTemplate.update("DELETE FROM APP_EVIDENCIA_TAREA WHERE ID_EMPLEADO=?", id);
-        jdbcTemplate.execute("COMMIT");
         int changed = jdbcTemplate.update("DELETE FROM APP_EMPLEADO WHERE ID_EMPLEADO = ?", id);
         if (changed > 0) activity.record(session, "ELIMINAR", "Personal", "Se eliminó un trabajador");
         return changed == 0 ? ResponseEntity.notFound().build() : ResponseEntity.noContent().build();

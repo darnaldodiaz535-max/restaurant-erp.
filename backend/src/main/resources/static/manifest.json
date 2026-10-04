@@ -7,7 +7,7 @@
   "display": "standalone",
   "background_color": "#111827",
   "theme_color": "#111827",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "lang": "es",
   "icons": [
     {
@@ -20,5 +20,6 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "id": "/"
 }

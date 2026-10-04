@@ -26,8 +26,9 @@ public class ModuleController {
     private final RoleAccessService access;
     private final AreaService areas;
     private final NotificationService notifications;
+    private final InventoryAlertService inventory;
     private static final Map<String, Def> MODULES = definitions();
-    public ModuleController(JdbcTemplate jdbc, ActivityService activity, RoleAccessService access, AreaService areas, NotificationService notifications) { this.notifications=notifications; this.areas=areas; this.jdbc = jdbc; this.activity = activity; this.access = access; }
+    public ModuleController(JdbcTemplate jdbc, ActivityService activity, RoleAccessService access, AreaService areas, NotificationService notifications, InventoryAlertService inventory) { this.inventory=inventory; this.notifications=notifications; this.areas=areas; this.jdbc = jdbc; this.activity = activity; this.access = access; }
 
     @GetMapping("/{module}")
     public List<Row> list(@PathVariable String module, HttpSession session, @RequestParam(required=false) String area) {
@@ -75,7 +76,12 @@ public class ModuleController {
         Def d = definition(module); access.requireModuleEdit(session, module, false); Object[] values = values(d, request, session); validateArea(module, values, session);
         String columns = d.fields.stream().map(Field::column).collect(Collectors.joining(", "));
         String marks = d.fields.stream().map(f -> "?").collect(Collectors.joining(", "));
-        jdbc.update("INSERT INTO " + d.table + " (" + columns + ") VALUES (" + marks + ")", values);
+        String insert="INSERT INTO " + d.table + " (" + columns + ") VALUES (" + marks + ")";
+        if("inventario".equals(module)) {
+            var keys=new org.springframework.jdbc.support.GeneratedKeyHolder();
+            jdbc.update(connection->{var st=connection.prepareStatement(insert,new String[]{d.id});for(int i=0;i<values.length;i++)st.setObject(i+1,values[i]);return st;},keys);
+            inventory.check(keys.getKey().longValue());
+        } else jdbc.update(insert,values);
         notifyChange(module,d,values,"Se te asignó un registro");
         activity.record(session, "CREAR", module, "Se guardó un registro");
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("status", "guardado"));
@@ -86,12 +92,18 @@ public class ModuleController {
     public ResponseEntity<Map<String, String>> update(@PathVariable String module, @PathVariable long id, @RequestBody Request request, HttpSession session) {
         Def d = definition(module); access.requireModuleEdit(session, module, false); Object[] values = values(d, request, session);
         requireRecord(module, d, id, session);
+        if("inventario".equals(module) && request.values().size()==5) {
+            values[5]=jdbc.queryForObject("SELECT STOCK_MAXIMO FROM APP_INSUMO WHERE ID_INSUMO=?",BigDecimal.class,id);
+            if(values[5]!=null && ((BigDecimal)values[5]).compareTo((BigDecimal)values[4])<0)
+                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST,"El stock máximo debe ser mayor o igual al mínimo.");
+        }
         Long previous=recipient(d,id);
         validateArea(module, values, session);
         String sets = d.fields.stream().map(f -> f.column + " = ?").collect(Collectors.joining(", "));
         Object[] params = java.util.Arrays.copyOf(values, values.length + 1); params[values.length] = id;
         int changed = jdbc.update("UPDATE " + d.table + " SET " + sets + " WHERE " + d.id + " = ?", params);
         if (changed == 0) return ResponseEntity.notFound().build();
+        if("inventario".equals(module)) inventory.check(id);
         if ("tareas-diarias".equals(module)) {
             RoleAccessService.User user = access.current(session);
             if (access.isManager(user)) jdbc.update("UPDATE APP_TAREA_DIARIA SET ESTADO='PENDIENTE' WHERE ID_TAREA=? AND UPPER(ESTADO)='EN_REVISION'", id);
@@ -125,7 +137,8 @@ public class ModuleController {
     }
     private void notifyChange(String module,Def d,Object[] values,String message) {
         if(!Set.of("tareas-diarias","turnos","incidencias").contains(module)) return;
-        for(int i=0;i<d.fields.size();i++) if(d.fields.get(i).kind==Kind.EMPLOYEE) notifications.employee(((Number)values[i]).longValue(),label(module),message+" en "+label(module)+". Consulta el módulo para ver los detalles.");
+        String detail="tareas-diarias".equals(module)?"Tarea: "+values[0]+". Fecha: "+values[2]+". Área: "+values[4]:"Consulta el módulo para ver los detalles.";
+        for(int i=0;i<d.fields.size();i++) if(d.fields.get(i).kind==Kind.EMPLOYEE) notifications.employee(((Number)values[i]).longValue(),label(module),message+" en "+label(module)+". "+detail);
         if("incidencias".equals(module)) notifications.administrators("Incidencias","Se registró o actualizó una incidencia.");
         if("tareas-diarias".equals(module) && "COMPLETADA".equalsIgnoreCase(String.valueOf(values[3]))) notifications.administrators("Tareas diarias","Se completó una tarea.");
     }
@@ -166,6 +179,9 @@ public class ModuleController {
     }
 
     private Object[] values(Def d, Request request, HttpSession session) {
+        if("APP_INSUMO".equals(d.table) && request!=null && request.values()!=null && request.values().size()==5) {
+            var legacy=new ArrayList<>(request.values());legacy.add("");request=new Request(legacy,request.references());
+        }
         if (request == null || request.values == null || request.values.size() != d.fields.size())
             throw new IllegalArgumentException("Completa todos los campos.");
         Object[] result = new Object[d.fields.size()];
@@ -182,6 +198,7 @@ public class ModuleController {
                         yield id;
                     }
                     case NUMBER -> {
+                        if("STOCK_MAXIMO".equals(f.column) && (value==null || value.isBlank())) yield null;
                         if (value == null || value.isBlank()) throw new IllegalArgumentException("Completa " + f.label + ".");
                         yield new BigDecimal(value);
                     }
@@ -201,6 +218,11 @@ public class ModuleController {
             } catch (NumberFormatException | java.time.DateTimeException ex) {
                 throw new IllegalArgumentException("Revisa el valor de " + f.label + ".");
             }
+        }
+        if("APP_INSUMO".equals(d.table)) {
+            BigDecimal current=(BigDecimal)result[2],min=(BigDecimal)result[4],max=(BigDecimal)result[5];
+            if(current.signum()<0 || min.signum()<0 || (max!=null && (max.signum()<0 || max.compareTo(min)<0)))
+                throw new IllegalArgumentException("El stock no puede ser negativo y el máximo debe ser mayor o igual al mínimo.");
         }
         return result;
     }
@@ -227,7 +249,7 @@ public class ModuleController {
         m.put("configuracion", def("APP_CONFIGURACION","ID_CONFIGURACION",t("Opción","OPCION"),t("Valor","VALOR"),t("Descripción","DESCRIPCION")));
         m.put("control-sanitario", def("APP_CONTROL_SANITARIO","ID_CONTROL",t("Punto de control","PUNTO_CONTROL"),n("Temperatura (°C)","TEMPERATURA_C"),ts("Fecha y hora","FECHA_HORA"),e("Responsable","RESPONSABLE_ID"),t("Estado","ESTADO")));
         m.put("incidencias", def("APP_INCIDENCIA","ID_INCIDENCIA",t("Tipo","TIPO"),t("Área","AREA"),t("Descripción","DESCRIPCION"),e("Responsable","RESPONSABLE_ID"),t("Estado","ESTADO")));
-        m.put("inventario", def("APP_INSUMO","ID_INSUMO",t("Insumo","NOMBRE"),t("Categoría","CATEGORIA"),n("Stock actual","STOCK_ACTUAL"),t("Unidad","UNIDAD"),n("Stock mínimo","STOCK_MINIMO")));
+        m.put("inventario", def("APP_INSUMO","ID_INSUMO",t("Insumo","NOMBRE"),t("Categoría","CATEGORIA"),n("Stock actual","STOCK_ACTUAL"),t("Unidad","UNIDAD"),n("Stock mínimo","STOCK_MINIMO"),n("Stock máximo","STOCK_MAXIMO")));
         m.put("limpieza", def("APP_LIMPIEZA","ID_LIMPIEZA",t("Área","AREA"),t("Tarea","TAREA"),e("Responsable","RESPONSABLE_ID"),t("Frecuencia","FRECUENCIA"),t("Estado","ESTADO")));
         m.put("mermas", def("APP_MERMA","ID_MERMA",t("Producto","PRODUCTO"),n("Cantidad","CANTIDAD"),t("Unidad","UNIDAD"),t("Motivo","MOTIVO"),d("Fecha","FECHA")));
         m.put("mise-en-place", def("APP_MISE_EN_PLACE","ID_MISE",t("Preparación","PREPARACION"),n("Cantidad","CANTIDAD"),e("Responsable","RESPONSABLE_ID"),t("Hora límite","HORA_LIMITE"),t("Estado","ESTADO")));

@@ -633,62 +633,32 @@ main > p {
 }
 
 
-/* PARA QUÉ SIRVE:
-   Evita que el panel de notificaciones se corte en teléfonos.
-   ARCHIVO: src/main/resources/static/style.css
-   SECCIÓN: .notification-menu
-*/
+/* PANEL */
 
 .notification-menu {
     display: none;
-    position: fixed;
 
-    top: 8px;
-    left: 8px;
-    right: auto;
-    bottom: auto;
+    position: absolute;
+
+    top: calc(100% + 12px);
+
+    right: 0;
 
     width: 360px;
-    max-width: calc(100vw - 16px);
-    max-height: calc(100vh - 16px);
-    max-height: calc(100dvh - 16px);
-    min-width: 0;
-    box-sizing: border-box;
+
+    max-width: 90vw;
 
     background: #ffffff;
+
     color: #222222;
+
     border-radius: 14px;
+
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.20);
 
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
 
-    z-index: 4000;
-}
-
-#notificationMenu .notification-header {
-    flex-wrap: wrap;
-    gap: 6px 12px;
-}
-
-#notificationMenu .notification-item > div {
-    flex: 1 1 0;
-    min-width: 0;
-}
-
-#notificationMenu .notification-header,
-#notificationMenu .notification-item,
-#notificationMenu .notification-footer {
-    overflow-wrap: anywhere;
-}
-
-#notificationMenu button,
-#notificationMenu a {
-    max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    z-index: 99999;
 }
 
 
@@ -1258,88 +1228,13 @@ body.compact-view main, body.compact-view #personal-module, body.compact-view #o
     .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     aside { width: 205px; }
 }
-/* PARA QUÉ SIRVE:
-   Corrige el contenido desplazado hacia la derecha en teléfonos verticales.
-   ARCHIVO: src/main/resources/static/style.css
-   SECCIÓN: Responsive móvil vertical
-*/
-/* PARA QUÉ SIRVE:
-   Corrige el contenido desplazado a la derecha en teléfonos verticales.
-   ARCHIVO: src/main/resources/static/style.css
-   SECCIÓN: Responsive móvil vertical
-*/
+/* Navigation layout is separate from card/form sizing. */
 @media (max-width: 620px) and (orientation: portrait) {
-
-   .layout {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 100%;
+    .layout { display: block; }
+    aside { width: 100%; padding: 8px; }
+    nav { flex-direction: row; overflow-x: auto; }
+    nav a { flex: 0 0 auto; }
 }
-
-    .layout aside {
-        width: 100%;
-        max-width: 100%;
-        padding: 8px;
-    }
-
-    .layout aside nav {
-        display: flex;
-        flex-direction: row;
-        width: 100%;
-        max-width: 100%;
-        overflow-x: auto;
-    }
-
-    .layout aside nav a {
-        flex: 0 0 auto;
-    }
-
-    .layout main {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        margin: 0;
-    }
-
-    #personal-module,
-    #other-module {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        margin-left: 0;
-        box-sizing: border-box;
-    }
-}
-
-    body > .layout > aside {
-        flex: 0 0 auto;
-        width: 100%;
-        min-width: 0;
-        max-width: 100%;
-        padding: 8px;
-    }
-
-    body > .layout > main,
-    body > .layout > .module-screen {
-        flex: 0 0 auto;
-        width: 100%;
-        min-width: 0;
-        max-width: 100%;
-    }
-
-    body > .layout > aside > nav {
-        flex-direction: row;
-        min-width: 0;
-        max-width: 100%;
-        overflow-x: auto;
-    }
-
-    body > .layout > aside > nav > a {
-        flex: 0 0 auto;
-    }
-}
-
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) and (pointer: coarse) {
     .layout { display: flex; align-items: flex-start; }
     aside { width: 170px; max-height: 100dvh; overflow-y: auto; }
@@ -1391,7 +1286,7 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 }
 
 /* Personal inbox and editable schedule proposals, using existing controls. */
-
+#notificationMenu { position: fixed; right: auto; max-width: calc(100vw - 16px); overflow-y: auto; overscroll-behavior: contain; z-index: 4000; }
 .notification-item p { margin: 5px 0; overflow-wrap: anywhere; }
 .notification-item button { margin: 6px 6px 0 0; }
 .notice-read { opacity: .7; }
