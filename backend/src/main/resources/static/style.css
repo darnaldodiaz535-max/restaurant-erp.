@@ -1257,6 +1257,35 @@ body.compact-view main, body.compact-view #personal-module, body.compact-view #o
 .profile-dialog dt { color: #64748b; }
 .profile-dialog dd { margin: 0; font-weight: 600; }
 
+/* PARA QUÉ SIRVE:
+   Corrige el ancho del Dashboard únicamente en computadoras.
+   ARCHIVO: backend/src/main/resources/static/style.css
+   SECCIÓN: Dashboard escritorio
+*/
+@media (min-width: 901px) {
+    .layout > main {
+        min-width: 0;
+    }
+
+    #dashboard-screen {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+
+    #dashboard-screen .dashboard-cards {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    #dashboard-screen .dashboard-cards > .card {
+        min-width: 0;
+    }
+
+    #dashboard-screen .activity-content,
+    #dashboard-screen .alert-content {
+        min-width: 0;
+    }
+}
 @media (max-width: 900px) {
     .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     aside { width: 205px; }
