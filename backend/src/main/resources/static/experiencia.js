@@ -66,12 +66,62 @@ async function pushRegistration() {
     await navigator.serviceWorker.register('/service-worker.js',{updateViaCache:'none'});
     return Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(new Error('La PWA todavía no está lista. Recarga la página.')),10000))]);
 }
-function pushOwner(registration,userId) {
-    return new Promise(resolve=>{
-        const channel=new MessageChannel();channel.port1.onmessage=()=>resolve();
-        registration.active?.postMessage({type:'PUSH_OWNER',userId},[channel.port2]);setTimeout(resolve,1500);
+function pushOwner(registration, userId) {
+    return new Promise((resolve, reject) => {
+        const worker = registration.active;
+
+        if (!worker) {
+            reject(new Error(
+                'El dispositivo todavía no está listo. Recarga MariGex.'
+            ));
+            return;
+        }
+
+        const channel = new MessageChannel();
+        let settled = false;
+        let timer;
+
+        const finish = error => {
+            if (settled) return;
+            settled = true;
+
+            clearTimeout(timer);
+            channel.port1.close();
+            channel.port2.close();
+
+            if (error) reject(error);
+            else resolve();
+        };
+
+        timer = setTimeout(() => {
+            finish(new Error(
+                'No se pudo confirmar la configuración del dispositivo. Vuelve a intentarlo.'
+            ));
+        }, 5000);
+
+        channel.port1.onmessage = event => {
+            if (event.data === 'ok') finish();
+        };
+
+        channel.port1.onmessageerror = () => {
+            finish(new Error(
+                'No se pudo confirmar la configuración del dispositivo.'
+            ));
+        };
+
+        try {
+            worker.postMessage(
+                { type: 'PUSH_OWNER', userId },
+                [channel.port2]
+            );
+        } catch {
+            finish(new Error(
+                'No se pudo comunicar con el dispositivo. Recarga MariGex.'
+            ));
+        }
     });
 }
+
 let pushBindingVersion=0;
 async function bindPushAccount() {
     const version=++pushBindingVersion;
@@ -88,59 +138,585 @@ async function bindPushAccount() {
         if(subscription && currentProfile && String(currentProfile.id)===user)await apiRequest('/api/notificaciones/push/suscripciones',{method:'POST',body:JSON.stringify(subscription)});
     }catch(error){console.info('Push pendiente:',error.message);}
 }
+
 async function disconnectPush() {
     ++pushBindingVersion;
-    if(!('serviceWorker' in navigator))return;
-    const registration=await navigator.serviceWorker.getRegistration('/');
-    if(registration){
-        await pushOwner(registration,null);
-        const subscription=await registration.pushManager?.getSubscription();
-        if(subscription){
-            try{await apiRequest('/api/notificaciones/push/suscripciones',{method:'DELETE',body:JSON.stringify({endpoint:subscription.endpoint})});}
-            finally{await subscription.unsubscribe();}
+
+    const problems = [];
+    let registration = null;
+    let subscription = null;
+
+    try {
+        if ('serviceWorker' in navigator) {
+            try {
+                registration =
+                    await navigator.serviceWorker.getRegistration('/');
+            } catch {
+                problems.push(
+                    'No se pudo consultar la configuración del dispositivo.'
+                );
+            }
         }
-        for(const notice of await registration.getNotifications())notice.close();
+
+        if (registration) {
+            try {
+                await pushOwner(registration, null);
+            } catch {
+                problems.push(
+                    'No se pudo confirmar la desvinculación de la cuenta.'
+                );
+            }
+
+            try {
+                subscription =
+                    await registration.pushManager?.getSubscription();
+            } catch {
+                problems.push(
+                    'No se pudo consultar la suscripción del navegador.'
+                );
+            }
+
+            if (subscription) {
+                try {
+                    await apiRequest(
+                        '/api/notificaciones/push/suscripciones',
+                        {
+                            method: 'DELETE',
+                            body: JSON.stringify({
+                                endpoint: subscription.endpoint
+                            })
+                        }
+                    );
+                } catch {
+                    problems.push(
+                        'No se pudo confirmar la eliminación del registro en el servidor.'
+                    );
+                }
+
+                try {
+                    const removed = await subscription.unsubscribe();
+
+                    if (!removed) {
+                        const remaining =
+                            await registration.pushManager.getSubscription();
+
+                        if (remaining) {
+                            problems.push(
+                                'El navegador no confirmó la cancelación de Push.'
+                            );
+                        }
+                    }
+                } catch {
+                    problems.push(
+                        'No se pudo cancelar la suscripción en el navegador.'
+                    );
+                }
+            }
+
+            try {
+                const notices = await registration.getNotifications();
+                for (const notice of notices) notice.close();
+            } catch {
+                problems.push(
+                    'No se pudieron cerrar los avisos que estaban visibles.'
+                );
+            }
+        }
+    } finally {
+        try {
+            localStorage.removeItem('marigex-push-user');
+        } catch {
+            problems.push(
+                'No se pudo limpiar la vinculación local del dispositivo.'
+            );
+        }
     }
-    localStorage.removeItem('marigex-push-user');
+
+    if (problems.length) {
+        throw new Error(
+            'La desactivación no se pudo confirmar por completo. ' +
+            problems.join(' ') +
+            ' Comprueba la conexión y vuelve a intentarlo.'
+        );
+    }
 }
 async function renderNotificationPreferences(section) {
-    const box=element('section',undefined,'data-section notification-preferences');section.before(box);
-    box.append(element('h3','Mis notificaciones'),element('p','Estas preferencias solo se aplican a tu cuenta. Los avisos anteriores se conservan.'));
-    const feedback=element('p');feedback.setAttribute('role','status');box.append(feedback);
-    try{
-        const [p,config]=await Promise.all([apiRequest('/api/notificaciones/preferencias'),apiRequest('/api/notificaciones/push/config')]);
-        const form=element('form',undefined,'auth-form'),internal=element('input'),push=element('input'),mail=element('input'),email=element('input');
-        for(const [text,input,checked] of [['Dentro de MariGex',internal,p.internal],['Notificaciones push',push,p.push],['Por correo electrónico',mail,p.mail]]){
-            input.type='checkbox';input.checked=checked;const label=element('label',text,'preference-toggle');label.prepend(input);form.append(label);
+    const box = element(
+        'section',
+        undefined,
+        'data-section notification-preferences'
+    );
+
+    section.before(box);
+
+    box.append(
+        element('h3', 'Mis notificaciones'),
+        element(
+            'p',
+            'Estas preferencias solo se aplican a tu cuenta. Los avisos anteriores se conservan.'
+        )
+    );
+
+    const feedback = element('p', 'Cargando preferencias…');
+    feedback.setAttribute('role', 'status');
+    feedback.setAttribute('aria-live', 'polite');
+    feedback.setAttribute('aria-atomic', 'true');
+    feedback.tabIndex = -1;
+    box.append(feedback);
+
+    const showMessage = (message, error = false, focus = false) => {
+        feedback.textContent = message;
+        feedback.classList.toggle('auth-error', error);
+        feedback.style.fontWeight = '600';
+
+        if (focus && box.isConnected) {
+            feedback.focus({ preventScroll: true });
+            feedback.scrollIntoView({
+                block: 'nearest',
+                behavior: 'smooth'
+            });
         }
-        email.type='email';email.maxLength=254;email.value=p.email||'';const emailLabel=element('label','Mi correo para avisos');emailLabel.append(email);form.append(emailLabel);
-        const save=element('button','Guardar preferencias','primary-button');save.type='submit';form.append(save);
-        form.addEventListener('submit',async e=>{
-            e.preventDefault();if(mail.checked&&!email.value.trim()){feedback.textContent='Escribe tu correo.';return;}
-            save.disabled=true;
-            try{await apiRequest('/api/notificaciones/preferencias',{method:'PUT',body:JSON.stringify({internal:internal.checked,push:push.checked,mail:mail.checked,email:email.value.trim()})});feedback.textContent='Preferencias guardadas.';}
-            catch(error){feedback.textContent=error.message;}finally{save.disabled=false;}
+    };
+
+    try {
+        const initial = await apiRequest(
+            '/api/notificaciones/preferencias'
+        );
+
+        let config = {
+            configured: false,
+            publicKey: '',
+            mailConfigured: false
+        };
+
+        let configurationUnavailable = false;
+
+        try {
+            config = await apiRequest(
+                '/api/notificaciones/push/config'
+            );
+        } catch {
+            configurationUnavailable = true;
+        }
+
+        const form = element('form', undefined, 'auth-form');
+        form.noValidate = true;
+
+        const internal = element('input');
+        const push = element('input');
+        const mail = element('input');
+        const email = element('input');
+
+        for (const [text, input] of [
+            ['Dentro de MariGex', internal],
+            ['Notificaciones push', push],
+            ['Por correo electrónico', mail]
+        ]) {
+            input.type = 'checkbox';
+
+            const label = element(
+                'label',
+                text,
+                'preference-toggle'
+            );
+
+            label.prepend(input);
+            form.append(label);
+        }
+
+        email.type = 'email';
+        email.inputMode = 'email';
+        email.autocomplete = 'email';
+        email.maxLength = 254;
+
+        const emailLabel = element('label', 'Mi correo para avisos');
+        emailLabel.append(email);
+        form.append(emailLabel);
+
+        form.append(element(
+            'small',
+            'El correo es obligatorio si activas los avisos por correo. Si escribes una dirección, debe ser válida.'
+        ));
+
+        const save = element(
+            'button',
+            'Guardar preferencias',
+            'primary-button'
+        );
+
+        save.type = 'submit';
+        form.append(save);
+
+        box.append(form, feedback);
+
+        const applyPreferences = preferences => {
+            internal.checked = Boolean(preferences.internal);
+            push.checked = Boolean(preferences.push);
+            mail.checked = Boolean(preferences.mail);
+            email.value = preferences.email || '';
+        };
+
+        applyPreferences(initial);
+
+        const userId = String(currentProfile?.id ?? '');
+        let busy = false;
+        let enable;
+        let disable;
+
+        const assertAccount = () => {
+            if (!currentProfile ||
+                String(currentProfile.id) !== userId) {
+                throw new Error(
+                    'La sesión ha cambiado. Abre de nuevo Mis notificaciones.'
+                );
+            }
+        };
+
+        const setBusy = (value, saving = false) => {
+            busy = value;
+            form.setAttribute('aria-busy', String(value));
+
+            for (const control of [
+                internal, push, mail, email, save
+            ]) {
+                control.disabled = value;
+            }
+
+            save.textContent =
+                value && saving ? 'Guardando…' : 'Guardar preferencias';
+
+            if (enable) {
+                enable.disabled = value || !config.configured;
+            }
+
+            if (disable) {
+                disable.disabled = value;
+            }
+        };
+
+        const readPreferences = () => {
+            const address = email.value.trim();
+
+            const emailPattern =
+                /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+
+            if (mail.checked && !address) {
+                throw new Error(
+                    'Escribe tu correo para activar los avisos por correo.'
+                );
+            }
+
+            if (address.length > 254 ||
+                (address && !emailPattern.test(address))) {
+                throw new Error(
+                    'Revisa la dirección de correo. Si no deseas guardarla, deja el campo vacío y desmarca los avisos por correo.'
+                );
+            }
+
+            return {
+                internal: internal.checked,
+                push: push.checked,
+                mail: mail.checked,
+                email: address
+            };
+        };
+
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (busy) return;
+
+            try {
+                assertAccount();
+                const values = readPreferences();
+
+                setBusy(true, true);
+                showMessage('Guardando…');
+
+                const saved = await apiRequest(
+                    '/api/notificaciones/preferencias',
+                    {
+                        method: 'PUT',
+                        body: JSON.stringify(values)
+                    }
+                );
+
+                assertAccount();
+                applyPreferences(saved);
+
+                showMessage(
+                    'Preferencias guardadas',
+                    false,
+                    true
+                );
+            } catch (error) {
+                showMessage(
+                    error.message || 'No se pudieron guardar las preferencias.',
+                    true,
+                    true
+                );
+            } finally {
+                setBusy(false);
+            }
         });
-        const enable=actionButton('Activar push en este dispositivo',async()=>{
-            enable.disabled=true;
-            try{
-                if(!('PushManager' in window)||!('Notification' in window))throw new Error('Push no está disponible. En iPhone/iPad instala MariGex en la pantalla de inicio y ábrela desde allí (iOS 16.4 o posterior).');
-                // Permission request occurs directly from this click, before awaiting network.
-                const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Permiso no concedido. Puedes cambiarlo en los ajustes del navegador.');
-                const reg=await pushRegistration();let s=await reg.pushManager.getSubscription();
-                const raw=config.publicKey.replace(/-/g,'+').replace(/_/g,'/');const bytes=Uint8Array.from(atob(raw+'='.repeat((4-raw.length%4)%4)),c=>c.charCodeAt(0));
-                if(s && s.options.applicationServerKey && !bytes.every((v,i)=>v===new Uint8Array(s.options.applicationServerKey)[i])){await s.unsubscribe();s=null;}
-                s=s||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
-                await apiRequest('/api/notificaciones/push/suscripciones',{method:'POST',body:JSON.stringify(s)});
-                push.checked=true;await apiRequest('/api/notificaciones/preferencias',{method:'PUT',body:JSON.stringify({internal:internal.checked,push:true,mail:mail.checked,email:email.value.trim()})});
-                await pushOwner(reg,String(currentProfile.id));localStorage.setItem('marigex-push-user',String(currentProfile.id));feedback.textContent='Push activado en este dispositivo.';
-            }catch(error){feedback.textContent=error.message;}finally{enable.disabled=!config.configured;}
-        });enable.disabled=!config.configured;
-        const disable=actionButton('Desactivar push en este dispositivo',async()=>{try{await disconnectPush();feedback.textContent='Dispositivo desconectado. Los demás dispositivos conservan su configuración.';}catch(error){feedback.textContent=error.message;}});
-        box.append(form,enable,disable,element('p','En iPhone/iPad, añade MariGex a la pantalla de inicio y ábrela desde su icono. Push y cámara requieren HTTPS.'));
-        if(!config.configured)box.append(element('small','El administrador debe configurar las claves VAPID en el servidor para activar Push.'));
-        if(!config.mailConfigured)box.append(element('small','El envío por correo está pendiente de configurar SMTP.'));
-    }catch(error){feedback.textContent=error.message;}
+
+        enable = actionButton(
+            'Activar push en este dispositivo',
+            async () => {
+                if (busy) return;
+
+                let subscription = null;
+                let createdSubscription = false;
+                let activated = false;
+                let operationVersion = null;
+
+                try {
+                    assertAccount();
+
+                    if (!config.configured) {
+                        throw new Error(
+                            'Las notificaciones del dispositivo no están disponibles todavía.'
+                        );
+                    }
+
+                    if (!window.isSecureContext ||
+                        !('serviceWorker' in navigator) ||
+                        !('PushManager' in window) ||
+                        !('Notification' in window)) {
+                        throw new Error(
+                            'Este navegador no permite activar las notificaciones aquí. En iPhone o iPad, añade MariGex a la pantalla de inicio y ábrela desde su icono.'
+                        );
+                    }
+
+                    const raw = String(config.publicKey || '')
+                        .replace(/-/g, '+')
+                        .replace(/_/g, '/');
+
+                    let key;
+
+                    try {
+                        key = Uint8Array.from(
+                            atob(raw + '='.repeat((4 - raw.length % 4) % 4)),
+                            character => character.charCodeAt(0)
+                        );
+                    } catch {
+                        throw new Error(
+                            'Las notificaciones del dispositivo no están disponibles. Contacta con la administración.'
+                        );
+                    }
+
+                    if (key.length !== 65 || key[0] !== 4) {
+                        throw new Error(
+                            'Las notificaciones del dispositivo no están disponibles. Contacta con la administración.'
+                        );
+                    }
+
+                    operationVersion = ++pushBindingVersion;
+
+                    const assertOperation = () => {
+                        assertAccount();
+
+                        if (operationVersion !== pushBindingVersion) {
+                            throw new Error(
+                                'La operación fue cancelada porque cambió la vinculación del dispositivo.'
+                            );
+                        }
+                    };
+
+                    setBusy(true);
+                    showMessage(
+                        'Activando notificaciones del dispositivo…'
+                    );
+
+                    const permission =
+                        await Notification.requestPermission();
+
+                    assertOperation();
+
+                    if (permission !== 'granted') {
+                        throw new Error(
+                            'No se concedió permiso. Puedes permitir las notificaciones desde los ajustes del navegador.'
+                        );
+                    }
+
+                    const registration = await pushRegistration();
+                    assertOperation();
+
+                    subscription =
+                        await registration.pushManager.getSubscription();
+
+                    assertOperation();
+
+                    if (subscription) {
+                        const existingKey =
+                            subscription.options.applicationServerKey;
+
+                        if (!existingKey) {
+                            throw new Error(
+                                'Desactiva Push en este dispositivo y vuelve a activarlo para actualizar su configuración.'
+                            );
+                        }
+
+                        const existing = new Uint8Array(existingKey);
+
+                        if (existing.length !== key.length ||
+                            !key.every(
+                                (value, index) => value === existing[index]
+                            )) {
+                            throw new Error(
+                                'Desactiva Push en este dispositivo y vuelve a activarlo para actualizar su configuración.'
+                            );
+                        }
+                    } else {
+                        subscription =
+                            await registration.pushManager.subscribe({
+                                userVisibleOnly: true,
+                                applicationServerKey: key
+                            });
+
+                        createdSubscription = true;
+                    }
+
+                    assertOperation();
+
+                    await pushOwner(registration, userId);
+                    assertOperation();
+
+                    localStorage.setItem(
+                        'marigex-push-user',
+                        userId
+                    );
+
+                    await apiRequest(
+                        '/api/notificaciones/push/activar',
+                        {
+                            method: 'POST',
+                            body: JSON.stringify(subscription)
+                        }
+                    );
+
+                    assertOperation();
+                    activated = true;
+
+                    push.checked = true;
+
+                    showMessage(
+                        'Push activado en este dispositivo. Los demás cambios del formulario se guardan con “Guardar preferencias”.',
+                        false,
+                        true
+                    );
+                } catch (error) {
+                    let message = error.message ||
+                        'No se pudo activar Push en este dispositivo.';
+
+                    const sameAccount =
+                        currentProfile &&
+                        String(currentProfile.id) === userId;
+
+                    if (createdSubscription &&
+                        !activated &&
+                        sameAccount &&
+                        operationVersion === pushBindingVersion) {
+                        try {
+                            await disconnectPush();
+                        } catch (cleanupError) {
+                            message += ' ' + cleanupError.message;
+                        }
+                    }
+
+                    showMessage(message, true, true);
+                } finally {
+                    setBusy(false);
+                }
+            }
+        );
+
+        disable = actionButton(
+            'Desactivar push en este dispositivo',
+            async () => {
+                if (busy) return;
+
+                try {
+                    assertAccount();
+                    setBusy(true);
+
+                    showMessage(
+                        'Desactivando notificaciones del dispositivo…'
+                    );
+
+                    await disconnectPush();
+
+                    showMessage(
+                        'Push desactivado en este dispositivo. La preferencia de tu cuenta y los demás dispositivos no cambian.',
+                        false,
+                        true
+                    );
+                } catch (error) {
+                    showMessage(
+                        error.message ||
+                            'No se pudo confirmar la desactivación.',
+                        true,
+                        true
+                    );
+                } finally {
+                    setBusy(false);
+                }
+            }
+        );
+
+        box.append(
+            element(
+                'p',
+                'La casilla Push controla los avisos de tu cuenta. Para recibirlos en este equipo, activa también este dispositivo.'
+            ),
+            enable,
+            disable
+        );
+
+        if (configurationUnavailable) {
+            box.append(element(
+                'p',
+                'No se pudo comprobar la disponibilidad de los avisos externos. Puedes guardar tus preferencias y volver a abrir esta pantalla para intentarlo de nuevo.'
+            ));
+        } else {
+            if (!config.configured) {
+                box.append(element(
+                    'p',
+                    'Las notificaciones del dispositivo no están disponibles todavía.'
+                ));
+            }
+
+            if (!config.mailConfigured) {
+                box.append(element(
+                    'p',
+                    'Los avisos por correo no están disponibles todavía. Puedes guardar tu preferencia para cuando se habiliten.'
+                ));
+            }
+        }
+
+        const isAppleMobile =
+            /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' &&
+                navigator.maxTouchPoints > 1);
+
+        const standalone =
+            window.matchMedia('(display-mode: standalone)').matches ||
+            navigator.standalone === true;
+
+        if (isAppleMobile && !standalone) {
+            box.append(element(
+                'p',
+                'Para recibir notificaciones en este iPhone o iPad, añade MariGex a la pantalla de inicio y ábrela desde su icono.'
+            ));
+        }
+
+        setBusy(false);
+        showMessage('Preferencias cargadas.');
+    } catch (error) {
+        showMessage(
+            error.message || 'No se pudieron cargar las preferencias.',
+            true
+        );
+    }
 }
 
 /* PARA QUÉ SIRVE:
@@ -162,7 +738,20 @@ function positionNotifications() {
         viewport?.width ?? window.innerWidth,
         document.documentElement.clientWidth
     );
-
+ const enable=actionButton('Activar push en este dispositivo',async()=>{
+            enable.disabled=true;
+            try{
+                if(!('PushManager' in window)||!('Notification' in window))throw new Error('Push no está disponible. En iPhone/iPad instala MariGex en la pantalla de inicio y ábrela desde allí (iOS 16.4 o posterior).');
+                // Permission request occurs directly from this click, before awaiting network.
+                const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Permiso no concedido. Puedes cambiarlo en los ajustes del navegador.');
+                const reg=await pushRegistration();let s=await reg.pushManager.getSubscription();
+                const raw=config.publicKey.replace(/-/g,'+').replace(/_/g,'/');const bytes=Uint8Array.from(atob(raw+'='.repeat((4-raw.length%4)%4)),c=>c.charCodeAt(0));
+                if(s && s.options.applicationServerKey && !bytes.every((v,i)=>v===new Uint8Array(s.options.applicationServerKey)[i])){await s.unsubscribe();s=null;}
+                s=s||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
+                await apiRequest('/api/notificaciones/push/suscripciones',{method:'POST',body:JSON.stringify(s)});
+                push.checked=true;await apiRequest('/api/notificaciones/preferencias',{method:'PUT',body:JSON.stringify({internal:internal.checked,push:true,mail:mail.checked,email:email.value.trim()})});
+                await pushOwner(reg,String(currentProfile.id));localStorage.setItem('marigex-push-user',String(currentProfile.id));feedback.textContent='Push activado en este dispositivo.';
+            }catch(error){feedback.textContent=error.message;}
     const viewportHeight = viewport?.height ?? window.innerHeight;
 
     const availableWidth = Math.max(0, viewportWidth - margin * 2);

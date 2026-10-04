@@ -23,24 +23,100 @@ public class NotificationDelivery {
             jdbc.update("INSERT INTO APP_NOTIF_ENVIO(ID_NOTIFICACION,CANAL,DESTINO) VALUES(?,'PUSH',?)",notice,String.valueOf(id));
         if(p.mail() && p.email()!=null && !p.email().isBlank()) jdbc.update("INSERT INTO APP_NOTIF_ENVIO(ID_NOTIFICACION,CANAL,DESTINO) VALUES(?,'EMAIL',?)",notice,p.email());
     }
-    @Scheduled(fixedDelayString="${marigex.delivery.delay:30000}",initialDelayString="${marigex.delivery.initial-delay:60000}")
-    public void deliver() {
-        // A process restart can recover an abandoned lease; at-least-once delivery is intentional.
-        jdbc.update("UPDATE APP_NOTIF_ENVIO SET ESTADO='PENDIENTE' WHERE ESTADO='ENVIANDO' AND PROXIMO_INTENTO<?",Timestamp.from(Instant.now().minusSeconds(600)));
-        var rows=jdbc.query("SELECT D.ID_ENVIO,D.ID_NOTIFICACION,D.CANAL,D.DESTINO,D.INTENTOS,N.ID_USUARIO,N.MODULO,N.MENSAJE FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE D.ESTADO='PENDIENTE' AND D.PROXIMO_INTENTO<=SYSTIMESTAMP ORDER BY D.ID_ENVIO FETCH FIRST 30 ROWS ONLY",
-            (rs,n)->new Delivery(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getInt(5),rs.getLong(6),rs.getString(7),rs.getString(8)));
-        for(var d:rows) {
-            if((d.channel().equals("PUSH")&&!transport.pushReady()) || (d.channel().equals("EMAIL")&&!transport.mailReady())) continue;
-            if(jdbc.update("UPDATE APP_NOTIF_ENVIO SET ESTADO='ENVIANDO',PROXIMO_INTENTO=SYSTIMESTAMP WHERE ID_ENVIO=? AND ESTADO='PENDIENTE'",d.id())!=1) continue;
-            try { send(d); }
-            catch(Exception ex) {
-                if(ex instanceof InterruptedException) Thread.currentThread().interrupt();
-                int attempts=d.attempts()+1;
-                jdbc.update("UPDATE APP_NOTIF_ENVIO SET ESTADO=?,INTENTOS=?,PROXIMO_INTENTO=?,ULTIMO_ERROR=? WHERE ID_ENVIO=?",attempts>=5?"FALLIDO":"PENDIENTE",attempts,Timestamp.from(Instant.now().plusSeconds(60L*(1L<<attempts))),ex.getClass().getSimpleName(),d.id());
-                // Do not log endpoints, payloads, SMTP recipients or credentials.
+
+    @Scheduled(
+        fixedDelayString = "${marigex.delivery.delay:30000}",
+        initialDelayString = "${marigex.delivery.initial-delay:60000}")
+public void deliver() {
+    jdbc.update(
+            "UPDATE APP_NOTIF_ENVIO " +
+            "SET ESTADO='PENDIENTE' " +
+            "WHERE ESTADO='ENVIANDO' AND PROXIMO_INTENTO<?",
+            Timestamp.from(Instant.now().minusSeconds(600)));
+
+    int pushAvailable = transport.pushReady() ? 1 : 0;
+    int emailAvailable = transport.mailReady() ? 1 : 0;
+
+    if (pushAvailable == 0 && emailAvailable == 0) {
+        return;
+    }
+
+    String sql = """
+            SELECT
+                D.ID_ENVIO,
+                D.ID_NOTIFICACION,
+                D.CANAL,
+                D.DESTINO,
+                D.INTENTOS,
+                N.ID_USUARIO,
+                N.MODULO,
+                N.MENSAJE
+            FROM APP_NOTIF_ENVIO D
+            JOIN APP_NOTIFICACION N
+                ON N.ID_NOTIFICACION = D.ID_NOTIFICACION
+            WHERE D.ESTADO = 'PENDIENTE'
+              AND D.PROXIMO_INTENTO <= SYSTIMESTAMP
+              AND (
+                    (D.CANAL = 'PUSH' AND ? = 1)
+                 OR (D.CANAL = 'EMAIL' AND ? = 1)
+              )
+            ORDER BY D.ID_ENVIO
+            FETCH FIRST 30 ROWS ONLY
+            """;
+
+    var rows = jdbc.query(
+            sql,
+            (rs, rowNum) -> new Delivery(
+                    rs.getLong(1),
+                    rs.getLong(2),
+                    rs.getString(3),
+                    rs.getString(4),
+                    rs.getInt(5),
+                    rs.getLong(6),
+                    rs.getString(7),
+                    rs.getString(8)),
+            pushAvailable,
+            emailAvailable);
+
+    for (var delivery : rows) {
+        if (Thread.currentThread().isInterrupted()) {
+            return;
+        }
+
+        int claimed = jdbc.update(
+                "UPDATE APP_NOTIF_ENVIO " +
+                "SET ESTADO='ENVIANDO', PROXIMO_INTENTO=SYSTIMESTAMP " +
+                "WHERE ID_ENVIO=? AND ESTADO='PENDIENTE'",
+                delivery.id());
+
+        if (claimed != 1) {
+            continue;
+        }
+
+        try {
+            send(delivery);
+        } catch (Exception ex) {
+            int attempts = delivery.attempts() + 1;
+
+            jdbc.update(
+                    "UPDATE APP_NOTIF_ENVIO " +
+                    "SET ESTADO=?, INTENTOS=?, PROXIMO_INTENTO=?, " +
+                    "ULTIMO_ERROR=? WHERE ID_ENVIO=?",
+                    attempts >= 5 ? "FALLIDO" : "PENDIENTE",
+                    attempts,
+                    Timestamp.from(
+                            Instant.now().plusSeconds(
+                                    60L * (1L << attempts))),
+                    ex.getClass().getSimpleName(),
+                    delivery.id());
+
+            if (ex instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                return;
             }
         }
     }
+}
     private void send(Delivery d) throws Exception {
         var names=jdbc.query("SELECT E.NOMBRE FROM APP_USUARIO U JOIN APP_EMPLEADO E ON E.ID_EMPLEADO=U.ID_EMPLEADO WHERE U.ID_USUARIO=? AND U.ACTIVO='S'",(rs,n)->rs.getString(1),d.user());
         var p=preferences.get(d.user());

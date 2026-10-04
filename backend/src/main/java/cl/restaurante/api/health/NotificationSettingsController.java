@@ -34,3 +34,28 @@ public class NotificationSettingsController {
         subscriptions.remove(access.current(session).id(),body.get("endpoint"));return Map.of("status","desactivado");
     }
 }
+@PostMapping("/push/activar")
+@org.springframework.transaction.annotation.Transactional
+public NotificationPreferences.Preferences activate(
+        @RequestBody PushSubscriptions.Subscription subscription,
+        HttpSession session) {
+
+    long user = access.current(session).id();
+
+    if (!transport.pushReady()) {
+        throw new IllegalArgumentException(
+                "Las notificaciones del dispositivo no están disponibles todavía.");
+    }
+
+    subscriptions.save(user, subscription);
+
+    NotificationPreferences.Preferences current = preferences.get(user);
+
+    return preferences.save(
+            user,
+            new NotificationPreferences.Preferences(
+                    current.internal(),
+                    true,
+                    current.mail(),
+                    current.email()));
+}
