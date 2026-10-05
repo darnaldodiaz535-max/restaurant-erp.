@@ -92,6 +92,38 @@ public class ModuleController {
     public ResponseEntity<Map<String, String>> update(@PathVariable String module, @PathVariable long id, @RequestBody Request request, HttpSession session) {
         Def d = definition(module); access.requireModuleEdit(session, module, false); Object[] values = values(d, request, session);
         requireRecord(module, d, id, session);
+                if ("tareas-diarias".equals(module)) {
+            var previousTask = jdbc.query(
+                    "SELECT METODO_COMPLETADO, ESTADO " +
+                    "FROM APP_TAREA_DIARIA WHERE ID_TAREA=? FOR UPDATE",
+                    (rs, row) -> new String[]{
+                            rs.getString(1),
+                            rs.getString(2)
+                    },
+                    id
+            );
+
+            if (previousTask.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String previousMethod = previousTask.getFirst()[0];
+            String previousState = previousTask.getFirst()[1];
+
+            // Conserva el método cuando el cliente envía solo cinco campos.
+            if (request.values().size() == 5) {
+                values[5] = previousMethod;
+            }
+
+            // Comprueba el estado guardado, no el enviado por el cliente.
+            if ("EN_REVISION".equalsIgnoreCase(previousState)
+                    && !previousMethod.equals(values[5])) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Revisa primero la evidencia pendiente antes de cambiar el método."
+                );
+            }
+        }
         if("inventario".equals(module) && request.values().size()==5) {
             values[5]=jdbc.queryForObject("SELECT STOCK_MAXIMO FROM APP_INSUMO WHERE ID_INSUMO=?",BigDecimal.class,id);
             if(values[5]!=null && ((BigDecimal)values[5]).compareTo((BigDecimal)values[4])<0)
@@ -179,6 +211,14 @@ public class ModuleController {
     }
 
     private Object[] values(Def d, Request request, HttpSession session) {
+        if ("APP_TAREA_DIARIA".equals(d.table)
+        && request != null
+        && request.values() != null
+        && request.values().size() == 5) {
+    var legacy = new ArrayList<>(request.values());
+    legacy.add("FOTO");
+    request = new Request(legacy, request.references());
+}
         if("APP_INSUMO".equals(d.table) && request!=null && request.values()!=null && request.values().size()==5) {
             var legacy=new ArrayList<>(request.values());legacy.add("");request=new Request(legacy,request.references());
         }
@@ -224,6 +264,19 @@ public class ModuleController {
             if(current.signum()<0 || min.signum()<0 || (max!=null && (max.signum()<0 || max.compareTo(min)<0)))
                 throw new IllegalArgumentException("El stock no puede ser negativo y el máximo debe ser mayor o igual al mínimo.");
         }
+        if ("APP_TAREA_DIARIA".equals(d.table)) {
+    String method = String.valueOf(result[5])
+            .trim()
+            .toUpperCase(java.util.Locale.ROOT);
+
+    if (!Set.of("SIMPLE", "FOTO").contains(method)) {
+        throw new IllegalArgumentException(
+                "Selecciona Marcar como hecha o Enviar foto."
+        );
+    }
+
+    result[5] = method;
+}
         return result;
     }
 
@@ -256,7 +309,15 @@ public class ModuleController {
         m.put("produccion", def("APP_PRODUCCION","ID_PRODUCCION",t("Preparación","PREPARACION"),n("Cantidad","CANTIDAD"),t("Unidad","UNIDAD"),e("Responsable","RESPONSABLE_ID"),d("Fecha","FECHA")));
         m.put("reportes", def("APP_REPORTE","ID_REPORTE",t("Nombre del reporte","NOMBRE"),t("Período","PERIODO"),d("Fecha","FECHA"),t("Estado","ESTADO")));
         m.put("reservas", def("APP_RESERVA","ID_RESERVA",t("Cliente","CLIENTE"),d("Fecha","FECHA"),t("Hora","HORA"),n("Personas","PERSONAS"),t("Contacto","CONTACTO"),t("Estado","ESTADO")));
-        m.put("tareas-diarias", def("APP_TAREA_DIARIA","ID_TAREA",t("Tarea","TAREA"),e("Responsable","RESPONSABLE_ID"),d("Fecha","FECHA"),t("Estado","ESTADO"),t("Área","AREA")));
+       m.put("tareas-diarias", def(
+        "APP_TAREA_DIARIA", "ID_TAREA",
+        t("Tarea", "TAREA"),
+        e("Responsable", "RESPONSABLE_ID"),
+        d("Fecha", "FECHA"),
+        t("Estado", "ESTADO"),
+        t("Área", "AREA"),
+        t("Método", "METODO_COMPLETADO")
+));
         m.put("turnos", def("APP_TURNO","ID_TURNO",e("Trabajador","EMPLEADO_ID"),d("Fecha","FECHA"),t("Hora de inicio","HORA_INICIO"),t("Hora de término","HORA_TERMINO"),t("Área","AREA")));
         return Map.copyOf(m);
     }

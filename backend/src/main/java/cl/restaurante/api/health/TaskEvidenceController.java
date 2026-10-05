@@ -45,15 +45,37 @@ public class TaskEvidenceController {
                 rs.getString(5), rs.getString(6), rs.getTimestamp(7).toLocalDateTime().toString().replace('T', ' '),rs.getString(8)), selected);
     }
 
-    @org.springframework.transaction.annotation.Transactional
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> submit(@RequestParam long taskId, @RequestParam MultipartFile photo, HttpSession session) throws IOException {
-        RoleAccessService.User user = access.current(session);
-        if (photo == null || photo.isEmpty() || photo.getSize() > MAX_PHOTO_BYTES || photo.getContentType() == null || !List.of("image/jpeg", "image/png", "image/webp").contains(photo.getContentType()))
-            return ResponseEntity.badRequest().body(Map.of("error", "Adjunta una foto JPG, PNG o WebP de hasta 4 MB."));
-        List<String> tasks = jdbc.query("SELECT TAREA FROM APP_TAREA_DIARIA WHERE ID_TAREA=? AND RESPONSABLE_ID=? AND AREA=? AND UPPER(ESTADO) NOT IN ('EN_REVISION','COMPLETADA','COMPLETADO','FINALIZADA','FINALIZADO') FOR UPDATE",
-                (rs, n) -> rs.getString(1), taskId, user.employeeId(), new AreaService(jdbc,access).employeeArea(user.employeeId()));
-        if (tasks.isEmpty()) return ResponseEntity.status(403).body(Map.of("error", "Esa tarea no está asignada a tu usuario."));
+@org.springframework.transaction.annotation.Transactional
+@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public ResponseEntity<?> submit(@RequestParam long taskId, @RequestParam MultipartFile photo, HttpSession session) throws IOException {
+ RoleAccessService.User user = access.current(session);
+ if (photo == null || photo.isEmpty() || photo.getSize() > MAX_PHOTO_BYTES || photo.getContentType() == null || !List.of("image/jpeg", "image/png", "image/webp").contains(photo.getContentType()))
+return ResponseEntity.badRequest().body(Map.of("error", "Adjunta una foto JPG, PNG o WebP de hasta 4 MB."));
+
+// PARA QUÉ SIRVE:
+// Solo permite enviar fotografía si la tarea fue configurada con método FOTO.
+// ARCHIVO: TaskEvidenceController.java
+// SECCIÓN: método submit(...)
+
+List<String> tasks = jdbc.query(
+        "SELECT TAREA FROM APP_TAREA_DIARIA " +
+        "WHERE ID_TAREA=? AND RESPONSABLE_ID=? AND AREA=? " +
+        "AND METODO_COMPLETADO='FOTO' " +
+        "AND UPPER(ESTADO) NOT IN " +
+        "('EN_REVISION','COMPLETADA','COMPLETADO','FINALIZADA','FINALIZADO') " +
+        "FOR UPDATE",
+        (rs, n) -> rs.getString(1),
+        taskId,
+        user.employeeId(),
+        new AreaService(jdbc, access).employeeArea(user.employeeId())
+);
+
+        if (tasks.isEmpty()) {
+    return ResponseEntity.status(403).body(Map.of(
+            "error",
+            "La tarea no está disponible para enviar una foto: revisa su asignación, método y estado."
+    ));
+}
         byte[] bytes = photo.getBytes();
         ImageUpload.validate(bytes, photo.getContentType());
         jdbc.update("INSERT INTO APP_EVIDENCIA_TAREA (ID_TAREA, ID_EMPLEADO, NOMBRE_ARCHIVO, TIPO_CONTENIDO, FOTO) VALUES (?, ?, ?, ?, ?)",
@@ -120,6 +142,97 @@ public class TaskEvidenceController {
         return ResponseEntity.ok(Map.of("status","revisada"));
     }
 
+    // PARA QUÉ SIRVE:
+// Permite completar una tarea SIMPLE sin necesidad de enviar fotografía.
+// ARCHIVO:
+// backend/src/main/java/cl/restaurante/api/health/TaskEvidenceController.java
+// UBICACIÓN:
+// Justo antes de "private record ReviewTask(...)"
+
+@org.springframework.transaction.annotation.Transactional
+@PostMapping("/tareas/{taskId}/completar")
+public ResponseEntity<?> completeWithoutPhoto(
+        @PathVariable long taskId,
+        HttpSession session) {
+
+    RoleAccessService.User user = access.current(session);
+    String employeeArea = new AreaService(jdbc, access)
+            .employeeArea(user.employeeId());
+
+    var tasks = jdbc.query(
+            "SELECT TAREA, METODO_COMPLETADO, ESTADO " +
+            "FROM APP_TAREA_DIARIA " +
+            "WHERE ID_TAREA=? AND RESPONSABLE_ID=? AND AREA=? " +
+            "FOR UPDATE",
+            (rs, row) -> new String[]{
+                    rs.getString(1),
+                    rs.getString(2),
+                    rs.getString(3)
+            },
+            taskId,
+            user.employeeId(),
+            employeeArea
+    );
+
+    if (tasks.isEmpty()) {
+        return ResponseEntity.status(403).body(Map.of(
+                "error",
+                "Esa tarea no está asignada a tu usuario y área."
+        ));
+    }
+
+    String title = tasks.getFirst()[0];
+    String method = tasks.getFirst()[1];
+    String state = String.valueOf(tasks.getFirst()[2])
+            .toUpperCase(java.util.Locale.ROOT);
+
+    if (!"SIMPLE".equals(method)) {
+        return ResponseEntity.status(409).body(Map.of(
+                "error",
+                "Esta tarea requiere una fotografía como evidencia."
+        ));
+    }
+
+    if (List.of(
+            "COMPLETADA", "COMPLETADO",
+            "FINALIZADA", "FINALIZADO"
+    ).contains(state)) {
+        return ResponseEntity.ok(Map.of(
+                "status", "Tarea ya completada"
+        ));
+    }
+
+    if ("EN_REVISION".equals(state)) {
+        return ResponseEntity.status(409).body(Map.of(
+                "error",
+                "Esta tarea tiene una evidencia pendiente de revisión."
+        ));
+    }
+
+    jdbc.update(
+            "UPDATE APP_TAREA_DIARIA SET ESTADO='COMPLETADA' " +
+            "WHERE ID_TAREA=? AND RESPONSABLE_ID=? " +
+            "AND METODO_COMPLETADO='SIMPLE'",
+            taskId,
+            user.employeeId()
+    );
+
+    notifications.administrators(
+            "Tareas diarias",
+            user.name() + " marcó como hecha la tarea: " + title
+    );
+
+    activity.record(
+            session,
+            "COMPLETAR_TAREA",
+            "Tareas diarias",
+            "Tarea completada sin fotografía: " + title
+    );
+
+    return ResponseEntity.ok(Map.of(
+            "status", "Tarea completada correctamente"
+    ));
+}
     private record ReviewTask(long id,String area,String title,String state,long assignee,long sender,String evidenceState) {}
     private String safeName(String name) {
         String value = name == null ? "foto" : name.replaceAll("[^A-Za-z0-9._-]", "_");

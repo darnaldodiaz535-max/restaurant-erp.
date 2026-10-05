@@ -251,7 +251,7 @@ const moduleKey = (name) => `restaurant-erp-module-${name}`;
 const moduleSchemas = {
     Asistencia: ["Trabajador", "Fecha", "Hora de entrada", "Hora de salida", "Estado"],
     Horarios: ["Trabajador", "Fecha", "Hora de inicio", "Hora de término", "Área"],
-    "Tareas diarias": ["Tarea", "Responsable", "Fecha", "Estado", "Área"],
+"Tareas diarias": ["Tarea", "Responsable", "Fecha", "Estado", "Área", "Método"],
     Inventario: ["Insumo", "Categoría", "Stock actual", "Unidad", "Stock mínimo", "Stock máximo"],
     Cocina: ["Preparación", "Responsable", "Hora", "Estado"],
     "Producción": ["Preparación", "Cantidad", "Unidad", "Responsable", "Fecha"],
@@ -317,22 +317,61 @@ async function renderModule(name, selectedArea = null) {
     const form = document.createElement("form"); form.className = "record-form"; form.hidden = true;
     const formFields = document.createElement("div"); formFields.className = "record-form-fields";
     const fields = moduleSchemas[name] || ["Nombre", "Descripción", "Estado"];
-    const inputs = fields.map((label) => {
-        const wrap = document.createElement("label"); wrap.textContent = label;
-        const isArea = slug === "tareas-diarias" && label === "Área";
-        const input = isArea || ["Trabajador", "Responsable"].includes(label) ? document.createElement("select") : document.createElement("input");
-        if (isArea) {
-            AREA_OPTIONS.forEach((a) => input.add(new Option(a.label, a.key)));
-            input.value = selectedArea === "SIN_AREA" ? "" : selectedArea;
-            input.disabled = selectedArea !== "SIN_AREA";
-        } else if (input.tagName === "SELECT") {
-            input.dataset.employeeReference = "true";
-            input.add(new Option("Selecciona una persona", ""));
-        }
-        if (input.tagName !== "SELECT") input.type = /fecha y hora/i.test(label) ? "datetime-local" : /fecha/i.test(label) ? "date" : /hora/i.test(label) ? "time" : /cantidad|stock|personas|temperatura/i.test(label) ? "number" : "text";
-        if (input.type === "number") { input.step = "any"; input.min = "0"; }
-        input.required = label !== "Stock máximo"; if (label === "Stock máximo") input.placeholder = "Opcional"; input.setAttribute("aria-label", label); wrap.appendChild(input); formFields.appendChild(wrap); return input;
-    });
+const inputs = fields.map((label) => {
+    const wrap = document.createElement("label");
+    wrap.textContent = label;
+
+    const isArea = slug === "tareas-diarias" && label === "Área";
+    const isMethod = slug === "tareas-diarias" && label === "Método";
+    const isEmployee = ["Trabajador", "Responsable"].includes(label);
+
+    const input = document.createElement(
+        isArea || isMethod || isEmployee ? "select" : "input"
+    );
+
+    if (isMethod) {
+        input.add(new Option("Enviar foto", "FOTO", true, true));
+        input.add(new Option("Marcar como hecha", "SIMPLE"));
+    } else if (isArea) {
+        AREA_OPTIONS.forEach((area) => {
+            input.add(new Option(area.label, area.key));
+        });
+        input.value = selectedArea === "SIN_AREA" ? "" : selectedArea;
+        input.disabled = selectedArea !== "SIN_AREA";
+    } else if (isEmployee) {
+        input.dataset.employeeReference = "true";
+        input.add(new Option("Selecciona una persona", ""));
+    }
+
+    if (input.tagName !== "SELECT") {
+        input.type = /fecha y hora/i.test(label)
+            ? "datetime-local"
+            : /fecha/i.test(label)
+                ? "date"
+                : /hora/i.test(label)
+                    ? "time"
+                    : /cantidad|stock|personas|temperatura/i.test(label)
+                        ? "number"
+                        : "text";
+    }
+
+    if (input.type === "number") {
+        input.step = "any";
+        input.min = "0";
+    }
+
+    input.required = label !== "Stock máximo";
+
+    if (label === "Stock máximo") {
+        input.placeholder = "Opcional";
+    }
+
+    input.setAttribute("aria-label", label);
+    wrap.appendChild(input);
+    formFields.appendChild(wrap);
+
+    return input;
+});
     const employeeSelects = inputs.filter((input) => input.dataset.employeeReference);
     if (employeeSelects.length) {
         if (isWorkerRole()) {
@@ -380,19 +419,77 @@ async function renderModule(name, selectedArea = null) {
             const row = document.createElement("tr");
             record.values.forEach((value) => { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); });
             const actions = document.createElement("td");
-            if (slug === "tareas-diarias" && Number(record.references?.[1]) === Number(currentProfile?.employeeId)
-                && normalizeArea(record.values[4]) === normalizeArea(currentProfile?.area)) {
-                const state=String(record.values[3]||'').toUpperCase();
-                const done=['COMPLETADA','COMPLETADO','FINALIZADA','FINALIZADO'].includes(state);
-                const send=actionButton(state==='EN_REVISION'?'Pendiente de revisión':done?'Tarea completada':'Realizar tarea',
-                    async () => {
-                        send.disabled = true;
-                        try { await ensureExperienceLoaded(); await openTaskCamera(record.id, record.values[0], loadRecords); }
-                        catch (error) { alert(error.message); }
-                        finally { send.disabled = done || state === 'EN_REVISION'; }
-                    });
-                send.disabled=done||state==='EN_REVISION';actions.append(send);
+           if (
+    slug === "tareas-diarias"
+    && Number(record.references?.[1]) === Number(currentProfile?.employeeId)
+    && normalizeArea(record.values[4]) === normalizeArea(currentProfile?.area)
+) {
+    const state = String(record.values[3] || "")
+        .trim().toUpperCase();
+
+    const method = String(record.values[5] || "FOTO")
+        .trim().toUpperCase();
+
+    const done = [
+        "COMPLETADA",
+        "COMPLETADO",
+        "FINALIZADA",
+        "FINALIZADO"
+    ].includes(state);
+
+    const inReview = state === "EN_REVISION";
+    const validMethod = ["SIMPLE", "FOTO"].includes(method);
+
+    const label = inReview
+        ? "Pendiente de revisión"
+        : done
+            ? "Tarea completada"
+            : method === "SIMPLE"
+                ? "Marcar como hecha"
+                : "Enviar foto";
+
+    let completedHere = false;
+
+    const send = actionButton(label, async () => {
+        if (done || inReview || !validMethod || completedHere) return;
+
+        send.disabled = true;
+
+        try {
+            if (method === "SIMPLE") {
+                if (!confirm("¿Marcar esta tarea como hecha?")) return;
+
+                await apiRequest(
+                    `/api/evidencias/tareas/${record.id}/completar`,
+                    { method: "POST" }
+                );
+
+                completedHere = true;
+                send.textContent = "Tarea completada";
+
+                await loadRecords();
+                await loadDashboardMetrics();
+
+                alert("Tarea completada correctamente");
+            } else {
+                await ensureExperienceLoaded();
+                await openTaskCamera(
+                    record.id,
+                    record.values[0],
+                    loadRecords
+                );
             }
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            send.disabled =
+                done || inReview || !validMethod || completedHere;
+        }
+    });
+
+    send.disabled = done || inReview || !validMethod;
+    actions.append(send);
+}
             if (canManageModule(slug)) {
             const edit = document.createElement("button"); edit.type = "button"; edit.className = "table-button"; edit.textContent = "Editar";
             const remove = document.createElement("button"); remove.type = "button"; remove.className = "table-button"; remove.textContent = "Eliminar";
