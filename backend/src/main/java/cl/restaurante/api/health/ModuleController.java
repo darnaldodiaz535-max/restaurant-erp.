@@ -129,6 +129,14 @@ public class ModuleController {
             if(values[5]!=null && ((BigDecimal)values[5]).compareTo((BigDecimal)values[4])<0)
                 throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST,"El stock máximo debe ser mayor o igual al mínimo.");
         }
+        if ("inventario".equals(module)
+        && request.values().size() <= 6) {
+    values[6] = jdbc.queryForObject(
+            "SELECT GRUPO FROM APP_INSUMO WHERE ID_INSUMO=?",
+            String.class,
+            id
+    );
+}
         Long previous=recipient(d,id);
         validateArea(module, values, session);
         String sets = d.fields.stream().map(f -> f.column + " = ?").collect(Collectors.joining(", "));
@@ -219,9 +227,21 @@ public class ModuleController {
     legacy.add("FOTO");
     request = new Request(legacy, request.references());
 }
-        if("APP_INSUMO".equals(d.table) && request!=null && request.values()!=null && request.values().size()==5) {
-            var legacy=new ArrayList<>(request.values());legacy.add("");request=new Request(legacy,request.references());
-        }
+    if ("APP_INSUMO".equals(d.table)
+        && request != null
+        && request.values() != null
+        && (request.values().size() == 5
+            || request.values().size() == 6)) {
+
+    var legacy = new ArrayList<>(request.values());
+
+    if (legacy.size() == 5) {
+        legacy.add("");
+    }
+
+    legacy.add("");
+    request = new Request(legacy, request.references());
+}
         if (request == null || request.values == null || request.values.size() != d.fields.size())
             throw new IllegalArgumentException("Completa todos los campos.");
         Object[] result = new Object[d.fields.size()];
@@ -250,10 +270,20 @@ public class ModuleController {
                         if (value == null || value.isBlank()) throw new IllegalArgumentException("Completa " + f.label + ".");
                         yield Timestamp.valueOf(LocalDateTime.parse(value));
                     }
-                    case TEXT -> {
-                        if (value == null || value.isBlank()) throw new IllegalArgumentException("Completa " + f.label + ".");
-                        yield value.trim();
-                    }
+                case TEXT -> {
+    if ("APP_INSUMO".equals(d.table)
+            && "GRUPO".equals(f.column)
+            && (value == null || value.isBlank())) {
+        yield null;
+    }
+
+    if (value == null || value.isBlank()) {
+        throw new IllegalArgumentException(
+                "Completa " + f.label + ".");
+    }
+
+    yield value.trim();
+}
                 };
             } catch (NumberFormatException | java.time.DateTimeException ex) {
                 throw new IllegalArgumentException("Revisa el valor de " + f.label + ".");
@@ -276,6 +306,18 @@ public class ModuleController {
     }
 
     result[5] = method;
+}
+if ("APP_INSUMO".equals(d.table) && result[6] != null) {
+    String group = result[6].toString()
+            .trim()
+            .toUpperCase(java.util.Locale.ROOT);
+
+    if (!Set.of("COCINA", "BARRA").contains(group)) {
+        throw new IllegalArgumentException(
+                "Selecciona Cocina o Barra.");
+    }
+
+    result[6] = group;
 }
         return result;
     }
@@ -302,7 +344,16 @@ public class ModuleController {
         m.put("configuracion", def("APP_CONFIGURACION","ID_CONFIGURACION",t("Opción","OPCION"),t("Valor","VALOR"),t("Descripción","DESCRIPCION")));
         m.put("control-sanitario", def("APP_CONTROL_SANITARIO","ID_CONTROL",t("Punto de control","PUNTO_CONTROL"),n("Temperatura (°C)","TEMPERATURA_C"),ts("Fecha y hora","FECHA_HORA"),e("Responsable","RESPONSABLE_ID"),t("Estado","ESTADO")));
         m.put("incidencias", def("APP_INCIDENCIA","ID_INCIDENCIA",t("Tipo","TIPO"),t("Área","AREA"),t("Descripción","DESCRIPCION"),e("Responsable","RESPONSABLE_ID"),t("Estado","ESTADO")));
-        m.put("inventario", def("APP_INSUMO","ID_INSUMO",t("Insumo","NOMBRE"),t("Categoría","CATEGORIA"),n("Stock actual","STOCK_ACTUAL"),t("Unidad","UNIDAD"),n("Stock mínimo","STOCK_MINIMO"),n("Stock máximo","STOCK_MAXIMO")));
+        m.put("inventario", def(
+        "APP_INSUMO", "ID_INSUMO",
+        t("Insumo", "NOMBRE"),
+        t("Categoría", "CATEGORIA"),
+        n("Stock actual", "STOCK_ACTUAL"),
+        t("Unidad", "UNIDAD"),
+        n("Stock mínimo", "STOCK_MINIMO"),
+        n("Stock máximo", "STOCK_MAXIMO"),
+        t("Grupo", "GRUPO")
+));
         m.put("limpieza", def("APP_LIMPIEZA","ID_LIMPIEZA",t("Área","AREA"),t("Tarea","TAREA"),e("Responsable","RESPONSABLE_ID"),t("Frecuencia","FRECUENCIA"),t("Estado","ESTADO")));
         m.put("mermas", def("APP_MERMA","ID_MERMA",t("Producto","PRODUCTO"),n("Cantidad","CANTIDAD"),t("Unidad","UNIDAD"),t("Motivo","MOTIVO"),d("Fecha","FECHA")));
         m.put("mise-en-place", def("APP_MISE_EN_PLACE","ID_MISE",t("Preparación","PREPARACION"),n("Cantidad","CANTIDAD"),e("Responsable","RESPONSABLE_ID"),t("Hora límite","HORA_LIMITE"),t("Estado","ESTADO")));

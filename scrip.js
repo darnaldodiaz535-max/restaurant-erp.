@@ -252,7 +252,7 @@ const moduleSchemas = {
     Asistencia: ["Trabajador", "Fecha", "Hora de entrada", "Hora de salida", "Estado"],
     Horarios: ["Trabajador", "Fecha", "Hora de inicio", "Hora de término", "Área"],
     "Tareas diarias": ["Tarea", "Responsable", "Fecha", "Estado", "Área"],
-    Inventario: ["Insumo", "Categoría", "Stock actual", "Unidad", "Stock mínimo", "Stock máximo"],
+    Inventario: ["Insumo", "Categoría", "Stock actual", "Unidad", "Stock mínimo", "Stock máximo", "Grupo"],
     Cocina: ["Preparación", "Responsable", "Hora", "Estado"],
     "Producción": ["Preparación", "Cantidad", "Unidad", "Responsable", "Fecha"],
     "Mise en place": ["Preparación", "Cantidad", "Responsable", "Hora límite", "Estado"],
@@ -320,7 +320,14 @@ async function renderModule(name, selectedArea = null) {
     const inputs = fields.map((label) => {
         const wrap = document.createElement("label"); wrap.textContent = label;
         const isArea = slug === "tareas-diarias" && label === "Área";
-        const input = isArea || ["Trabajador", "Responsable"].includes(label) ? document.createElement("select") : document.createElement("input");
+        const input = isArea || ["Trabajador", "Responsable"].includes(label) || (slug === "inventario" && label === "Grupo")
+    ? document.createElement("select")
+    : document.createElement("input");
+    if (slug === "inventario" && label === "Grupo") {
+    input.add(new Option("Selecciona Cocina o Barra", ""));
+    input.add(new Option("Cocina", "COCINA"));
+    input.add(new Option("Barra", "BARRA"));
+}
         if (isArea) {
             AREA_OPTIONS.forEach((a) => input.add(new Option(a.label, a.key)));
             input.value = selectedArea === "SIN_AREA" ? "" : selectedArea;
@@ -378,8 +385,38 @@ async function renderModule(name, selectedArea = null) {
         const filtered = records.map((record, index) => ({ record, index })).filter(({ record }) => record.values.join(" ").toLocaleLowerCase("es").includes(search.value.trim().toLocaleLowerCase("es")));
         filtered.forEach(({ record, index }) => {
             const row = document.createElement("tr");
-            record.values.forEach((value) => { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); });
-            const actions = document.createElement("td");
+         record.values.forEach((value, valueIndex) => {
+    const td = document.createElement("td");
+
+    if (
+        slug === "inventario" &&
+        [2, 4, 5].includes(valueIndex)
+    ) {
+        const stockControl = document.createElement("div");
+        stockControl.className = "stock-control";
+
+        const minus = document.createElement("button");
+        minus.type = "button";
+        minus.className = "stock-button";
+        minus.textContent = "−";
+
+        const amount = document.createElement("span");
+        amount.className = "stock-value";
+        amount.textContent = value ?? "0";
+
+        const plus = document.createElement("button");
+        plus.type = "button";
+        plus.className = "stock-button";
+        plus.textContent = "+";
+
+        stockControl.append(minus, amount, plus);
+        td.appendChild(stockControl);
+    } else {
+        td.textContent = value ?? "";
+    }
+
+    row.appendChild(td);
+});
             if (slug === "tareas-diarias" && Number(record.references?.[1]) === Number(currentProfile?.employeeId)
                 && normalizeArea(record.values[4]) === normalizeArea(currentProfile?.area)) {
                 const state=String(record.values[3]||'').toUpperCase();
