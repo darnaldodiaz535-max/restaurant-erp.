@@ -273,6 +273,68 @@ Inventario: [
     Reportes: ["Nombre del reporte", "Período", "Fecha", "Estado"],
     Configuración: ["Opción", "Valor", "Descripción"]
 };
+function getInventoryVisualState(values) {
+    const readNumber = (value) => {
+        if (value === null || value === undefined
+                || String(value).trim() === "") {
+            return null;
+        }
+
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    };
+
+    const current = readNumber(values[2]);
+    const minimum = readNumber(values[4]);
+    const maximum = readNumber(values[5]);
+
+    const hasMaximum = values[5] !== null
+        && values[5] !== undefined
+        && String(values[5]).trim() !== "";
+
+    if (
+        current === null
+        || minimum === null
+        || current < 0
+        || minimum < 0
+        || (hasMaximum && (maximum === null || maximum < minimum))
+    ) {
+        return {
+            key: "unknown",
+            text: "— Revisa las cantidades"
+        };
+    }
+
+    if (current < minimum) {
+        return {
+            key: "low",
+            text: "⚠️ Stock bajo"
+        };
+    }
+
+    if (maximum !== null && current > maximum) {
+        return {
+            key: "high",
+            text: "🔴 Sobre stock"
+        };
+    }
+
+    return {
+        key: "ok",
+        text: "✅ Stock bien"
+    };
+}
+
+function createInventoryStateBadge(values) {
+    const state = getInventoryVisualState(values);
+    const badge = document.createElement("span");
+
+    badge.className = `inventory-state inventory-state--${state.key}`;
+    badge.textContent = state.text;
+
+    return badge;
+}
+
 async function renderModule(name, selectedArea = null) {
     const revision = ++screenRevision;
     otherModule.replaceChildren();
@@ -475,12 +537,39 @@ const inputs = fields.map((label) => {
     const submit = document.createElement("button"); submit.type = "submit"; submit.className = "primary-button"; submit.textContent = "Guardar";
     const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "secondary-button"; cancel.textContent = "Cancelar";
     form.append(formFields, submit, cancel);
+    let inventoryStatePreview = null;
+
+const refreshInventoryStatePreview = () => {
+    if (!inventoryStatePreview) return;
+
+    inventoryStatePreview.replaceChildren(
+        document.createTextNode("Estado al guardar: "),
+        createInventoryStateBadge(
+            inputs.map((input) => input.value)
+        )
+    );
+};
+
+if (slug === "inventario") {
+    inventoryStatePreview = document.createElement("p");
+    inventoryStatePreview.className = "inventory-state-preview";
+    inventoryStatePreview.setAttribute("role", "status");
+    inventoryStatePreview.setAttribute("aria-live", "polite");
+
+    formFields.after(inventoryStatePreview);
+
+    [inputs[2], inputs[4], inputs[5]].forEach((input) => {
+        input.addEventListener("input", refreshInventoryStatePreview);
+    });
+
+    refreshInventoryStatePreview();
+}
     const tableWrap = document.createElement("div"); tableWrap.className = "table-container";
     const table = document.createElement("table");
     const thead = document.createElement("thead"); const headRow = document.createElement("tr");
-    fields
+fields
     .filter((label) => !(slug === "inventario" && label === "Grupo"))
-    .concat("Acciones")
+    .concat(slug === "inventario" ? ["Estado", "Acciones"] : ["Acciones"])
     .forEach((label) => {
         const th = document.createElement("th");
         th.textContent = label;
@@ -553,6 +642,13 @@ const filtered = records
     td.textContent = value;
     row.appendChild(td);
 });
+if (slug === "inventario") {
+    const stateCell = document.createElement("td");
+    stateCell.appendChild(
+        createInventoryStateBadge(record.values)
+    );
+    row.appendChild(stateCell);
+}
             const actions = document.createElement("td");
            if (
     slug === "tareas-diarias"
@@ -628,7 +724,19 @@ const filtered = records
             if (canManageModule(slug)) {
             const edit = document.createElement("button"); edit.type = "button"; edit.className = "table-button"; edit.textContent = "Editar";
             const remove = document.createElement("button"); remove.type = "button"; remove.className = "table-button"; remove.textContent = "Eliminar";
-            edit.addEventListener("click", () => { inputs.forEach((input, i) => { input.value = input.dataset.employeeReference ? (record.references[i] ?? "") : (record.values[i] || ""); }); form.dataset.editing = String(index); form.hidden = false; submit.textContent = "Guardar cambios"; inputs[0].focus(); });
+            edit.addEventListener("click", () => {
+    inputs.forEach((input, i) => {
+        input.value = input.dataset.employeeReference
+            ? (record.references[i] ?? "")
+            : (record.values[i] || "");
+    });
+
+    form.dataset.editing = String(index);
+    form.hidden = false;
+    submit.textContent = "Guardar cambios";
+    refreshInventoryStatePreview();
+    inputs[0].focus();
+});
             remove.addEventListener("click", async () => {
                 if (!confirm("¿Eliminar este registro de Oracle?")) return;
                 try { await apiRequest(`${modulesApi}/${slug}/${record.id}`, { method: "DELETE" }); await loadRecords(); await loadDashboardMetrics(); }
@@ -666,6 +774,7 @@ const filtered = records
     delete form.dataset.editing;
     submit.textContent = "Guardar";
     form.hidden = false;
+    refreshInventoryStatePreview();
     inputs[0].focus();
 });
     cancel.addEventListener("click", () => { form.reset(); delete form.dataset.editing; form.hidden = true; });

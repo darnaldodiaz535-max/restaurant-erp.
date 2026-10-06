@@ -1467,3 +1467,46 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     box-sizing: border-box;
     font: inherit;
 }
+.module-screen--inventario .inventory-state {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.module-screen--inventario .inventory-state--low {
+    color: #854d0e;
+    background-color: #fef9c3;
+    border-color: #fde047;
+}
+
+.module-screen--inventario .inventory-state--high {
+    color: #991b1b;
+    background-color: #fee2e2;
+    border-color: #fca5a5;
+}
+
+.module-screen--inventario .inventory-state--ok {
+    color: #166534;
+    background-color: #dcfce7;
+    border-color: #86efac;
+}
+
+.module-screen--inventario .inventory-state--unknown {
+    color: #475569;
+    background-color: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.module-screen--inventario .inventory-state-preview {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+}
