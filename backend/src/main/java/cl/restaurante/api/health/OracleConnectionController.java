@@ -100,6 +100,7 @@ public class OracleConnectionController {
                         .body(Map.of("error", "No puedes eliminar el trabajador asociado a la cuenta que está en uso."));
             }
         }
+        jdbcTemplate.execute("ALTER SESSION DISABLE PARALLEL DML");
         jdbcTemplate.update("DELETE FROM APP_EVIDENCIA_TAREA WHERE ID_EMPLEADO=?", id);
         int changed = jdbcTemplate.update("DELETE FROM APP_EMPLEADO WHERE ID_EMPLEADO = ?", id);
         if (changed > 0) activity.record(session, "ELIMINAR", "Personal", "Se eliminó un trabajador");
