@@ -252,7 +252,15 @@ const moduleSchemas = {
     Asistencia: ["Trabajador", "Fecha", "Hora de entrada", "Hora de salida", "Estado"],
     Horarios: ["Trabajador", "Fecha", "Hora de inicio", "Hora de término", "Área"],
 "Tareas diarias": ["Tarea", "Responsable", "Fecha", "Estado", "Área", "Método"],
-    Inventario: ["Insumo", "Categoría", "Stock actual", "Unidad", "Stock mínimo", "Stock máximo"],
+Inventario: [
+    "Insumo",
+    "Categoría",
+    "Stock actual",
+    "Unidad",
+    "Stock mínimo",
+    "Stock máximo",
+    "Grupo"
+],
     Cocina: ["Preparación", "Responsable", "Hora", "Estado"],
     "Producción": ["Preparación", "Cantidad", "Unidad", "Responsable", "Fecha"],
     "Mise en place": ["Preparación", "Cantidad", "Responsable", "Hora límite", "Estado"],
@@ -324,12 +332,21 @@ const inputs = fields.map((label) => {
     const isArea = slug === "tareas-diarias" && label === "Área";
     const isMethod = slug === "tareas-diarias" && label === "Método";
     const isEmployee = ["Trabajador", "Responsable"].includes(label);
+    const isInventoryGroup = slug === "inventario" && label === "Grupo";
+    const isInventoryStock = slug === "inventario"
+        && ["Stock actual", "Stock mínimo", "Stock máximo"].includes(label);
 
     const input = document.createElement(
-        isArea || isMethod || isEmployee ? "select" : "input"
+        isArea || isMethod || isEmployee || isInventoryGroup
+            ? "select"
+            : "input"
     );
 
-    if (isMethod) {
+    if (isInventoryGroup) {
+        input.add(new Option("Selecciona un grupo", "", true, true));
+        input.add(new Option("Cocina", "COCINA"));
+        input.add(new Option("Barra", "BARRA"));
+    } else if (isMethod) {
         input.add(new Option("Enviar foto", "FOTO", true, true));
         input.add(new Option("Marcar como hecha", "SIMPLE"));
     } else if (isArea) {
@@ -367,9 +384,67 @@ const inputs = fields.map((label) => {
     }
 
     input.setAttribute("aria-label", label);
-    wrap.appendChild(input);
-    formFields.appendChild(wrap);
 
+    if (isInventoryStock) {
+        const quantity = document.createElement("span");
+        quantity.className = "inventory-quantity";
+        input.inputMode = "decimal";
+
+        const adjust = (delta) => {
+            if (!canManageModule("inventario")) return;
+
+            const current = input.value === "" ? 0 : input.valueAsNumber;
+            if (!Number.isFinite(current)) {
+                input.reportValidity();
+                return;
+            }
+
+            input.value = String(
+                Number(Math.max(0, current + delta).toFixed(6))
+            );
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+
+        const minus = actionButton("−", () => adjust(-1));
+        const plus = actionButton("+", () => adjust(1));
+
+        minus.setAttribute("aria-label", `Disminuir ${label}`);
+        plus.setAttribute("aria-label", `Aumentar ${label}`);
+        minus.disabled = plus.disabled = !canManageModule("inventario");
+
+        input.addEventListener("input", () => {
+            if (Number.isFinite(input.valueAsNumber)
+                    && input.valueAsNumber < 0) {
+                input.value = "0";
+            }
+        });
+
+        quantity.append(minus, input, plus);
+        wrap.appendChild(quantity);
+    } else {
+        wrap.appendChild(input);
+    }
+
+    if (slug === "inventario" && label === "Unidad") {
+        const units = document.createElement("datalist");
+        units.id = "inventory-unit-options";
+
+        [
+            "kg", "gramos", "litros", "ml", "unidades",
+            "cajas", "botellas", "paquetes", "bolsas"
+        ].forEach((unit) => {
+            const option = document.createElement("option");
+            option.value = unit;
+            units.appendChild(option);
+        });
+
+        input.setAttribute("list", units.id);
+        input.maxLength = 20;
+        input.placeholder = "Selecciona o escribe una unidad";
+        wrap.appendChild(units);
+    }
+
+    formFields.appendChild(wrap);
     return input;
 });
     const employeeSelects = inputs.filter((input) => input.dataset.employeeReference);
@@ -403,7 +478,14 @@ const inputs = fields.map((label) => {
     const tableWrap = document.createElement("div"); tableWrap.className = "table-container";
     const table = document.createElement("table");
     const thead = document.createElement("thead"); const headRow = document.createElement("tr");
-    fields.concat("Acciones").forEach((label) => { const th = document.createElement("th"); th.textContent = label; headRow.appendChild(th); });
+    fields
+    .filter((label) => !(slug === "inventario" && label === "Grupo"))
+    .concat("Acciones")
+    .forEach((label) => {
+        const th = document.createElement("th");
+        th.textContent = label;
+        headRow.appendChild(th);
+    });
     thead.appendChild(headRow); const tbody = document.createElement("tbody"); table.append(thead, tbody); tableWrap.appendChild(table);
     const empty = document.createElement("p"); empty.className = "empty-state"; empty.textContent = "Todavía no hay registros. Usa el botón para agregar el primero.";
     if (selectedArea) controls.append(actionButton("← Áreas de tareas", renderTaskAreas));
@@ -411,13 +493,66 @@ const inputs = fields.map((label) => {
     if (revision !== screenRevision) return;
     otherModule.append(header, section); otherModule.hidden = false;
     let records = [];
-    let loadError = "";
-    const draw = () => {
+let loadError = "";
+let inventoryGroupFilter = null;
+
+if (slug === "inventario") {
+    const groupLabel = document.createElement("label");
+    groupLabel.textContent = "Inventario: ";
+
+    inventoryGroupFilter = document.createElement("select");
+    inventoryGroupFilter.setAttribute("aria-label", "Grupo de inventario");
+    inventoryGroupFilter.add(new Option("Cocina", "COCINA"));
+    inventoryGroupFilter.add(new Option("Barra", "BARRA"));
+    inventoryGroupFilter.add(
+        new Option("Pendientes de clasificar", "SIN_GRUPO")
+    );
+
+    inventoryGroupFilter.addEventListener("change", () => {
+        form.reset();
+        delete form.dataset.editing;
+        form.hidden = true;
+        draw();
+    });
+
+    groupLabel.appendChild(inventoryGroupFilter);
+    controls.prepend(groupLabel);
+}
+
+const draw = () => {
         tbody.replaceChildren();
-        const filtered = records.map((record, index) => ({ record, index })).filter(({ record }) => record.values.join(" ").toLocaleLowerCase("es").includes(search.value.trim().toLocaleLowerCase("es")));
+        const term = search.value.trim().toLocaleLowerCase("es");
+
+const filtered = records
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => {
+        const matchesText = record.values
+            .join(" ")
+            .toLocaleLowerCase("es")
+            .includes(term);
+
+        if (!matchesText) return false;
+        if (slug !== "inventario") return true;
+
+        const group = String(record.values[6] || "")
+            .trim()
+            .toUpperCase();
+
+        const selected = inventoryGroupFilter.value;
+
+        return selected === "SIN_GRUPO"
+            ? group === ""
+            : group === selected;
+    });
         filtered.forEach(({ record, index }) => {
             const row = document.createElement("tr");
-            record.values.forEach((value) => { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); });
+          record.values.forEach((value, columnIndex) => {
+    if (slug === "inventario" && columnIndex === 6) return;
+
+    const td = document.createElement("td");
+    td.textContent = value;
+    row.appendChild(td);
+});
             const actions = document.createElement("td");
            if (
     slug === "tareas-diarias"
@@ -513,7 +648,26 @@ const inputs = fields.map((label) => {
         catch (error) { records = []; loadError = error.message; }
         draw();
     };
-    add.addEventListener("click", () => { form.reset(); restoreFixedFields(); if (isWorkerRole()) employeeSelects.forEach((select) => { select.value = String(currentProfile.employeeId); }); delete form.dataset.editing; submit.textContent = "Guardar"; form.hidden = false; inputs[0].focus(); });
+    add.addEventListener("click", () => {
+    form.reset();
+    restoreFixedFields();
+
+    if (slug === "inventario") {
+        const selected = inventoryGroupFilter.value;
+        inputs[6].value = selected === "SIN_GRUPO" ? "" : selected;
+    }
+
+    if (isWorkerRole()) {
+        employeeSelects.forEach((select) => {
+            select.value = String(currentProfile.employeeId);
+        });
+    }
+
+    delete form.dataset.editing;
+    submit.textContent = "Guardar";
+    form.hidden = false;
+    inputs[0].focus();
+});
     cancel.addEventListener("click", () => { form.reset(); delete form.dataset.editing; form.hidden = true; });
     form.addEventListener("submit", async (event) => {
         event.preventDefault(); if (!canManageModule(slug)) return; const values = inputs.map((input) => input.value.trim());

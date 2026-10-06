@@ -1430,3 +1430,40 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .preference-toggle input { width:20px; height:20px; }
 .notification-preferences > button { margin:4px; }
 .notification-preferences small { display:block; margin-top:10px; }
+
+
+.module-screen--inventario .inventory-quantity {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.module-screen--inventario .inventory-quantity input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.module-screen--inventario .inventory-quantity button {
+    min-width: 36px;
+    padding: 8px;
+}
+
+.module-screen--inventario .module-controls > label {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 12px 8px 0;
+}
+
+.module-screen--inventario .module-controls select,
+.module-screen--inventario .record-form-fields select {
+    max-width: 100%;
+    min-width: 0;
+    padding: 8px;
+    box-sizing: border-box;
+    font: inherit;
+}
