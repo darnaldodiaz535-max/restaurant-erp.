@@ -606,6 +606,59 @@ if (slug === "inventario") {
 
     groupLabel.appendChild(inventoryGroupFilter);
     controls.prepend(groupLabel);
+    const inventoryFeedback = document.createElement("p");
+inventoryFeedback.className = "empty-state";
+inventoryFeedback.setAttribute("role", "status");
+inventoryFeedback.hidden = true;
+
+const sendInventoryButton = actionButton(
+    "Enviar inventario",
+    async () => {
+        if (!canManageModule("inventario")) return;
+
+        const group = inventoryGroupFilter?.value;
+        if (group !== "COCINA" && group !== "BARRA") {
+            inventoryFeedback.textContent =
+                "Selecciona Cocina o Barra antes de enviar.";
+            inventoryFeedback.hidden = false;
+            return;
+        }
+
+        const groupName = group === "COCINA" ? "Cocina" : "Barra";
+        if (!confirm(`¿Enviar el inventario completo de ${groupName}?`)) {
+            return;
+        }
+
+        sendInventoryButton.disabled = true;
+        inventoryFeedback.hidden = true;
+
+        try {
+            const result = await apiRequest("/api/inventario/enviar", {
+                method: "POST",
+                body: JSON.stringify({ group })
+            });
+
+            inventoryFeedback.textContent = result.message;
+            inventoryFeedback.hidden = false;
+
+            if (result.sent) {
+                await loadUserNotifications();
+            }
+        } catch (error) {
+            inventoryFeedback.textContent =
+                `No se pudo enviar el inventario: ${error.message}`;
+            inventoryFeedback.hidden = false;
+        } finally {
+            sendInventoryButton.disabled =
+                !canManageModule("inventario");
+        }
+    },
+    true
+);
+
+sendInventoryButton.disabled = !canManageModule("inventario");
+controls.append(sendInventoryButton);
+section.append(inventoryFeedback);
 }
 
 const draw = () => {

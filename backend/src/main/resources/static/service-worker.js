@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-login-tareas-20261002';
+const CACHE_NAME='marigex-shell-inventario-enviar-20261006-1';
 const DEVICE_CACHE='marigex-device';
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',event=>{

@@ -33,7 +33,7 @@ public class ActivityController {
         jdbc.query("SELECT USUARIO,MODULO,DETALLE FROM APP_ACTIVIDAD WHERE ACCION IN ('ENVIAR_TAREA','COMPLETAR_TAREA') OR (LOWER(MODULO)='incidencias' AND ACCION='CREAR') ORDER BY CREADO_EN DESC FETCH FIRST 8 ROWS ONLY",
             (rs,n)->new Alert(rs.getString(2).equalsIgnoreCase("incidencias")?"Incidencias":"Tareas diarias","🔔",1,rs.getString(1)+": "+rs.getString(3)))
             .forEach(alerts::add);
-        addAlert(alerts, "Inventario", "📦", "insumo(s) con stock bajo", "SELECT COUNT(*) FROM APP_INSUMO WHERE STOCK_ACTUAL <= STOCK_MINIMO");
+        addAlert(alerts, "Inventario", "📦", "insumo(s) con stock bajo", "SELECT COUNT(*) FROM APP_INSUMO WHERE STOCK_ACTUAL < STOCK_MINIMO");
         addAlert(alerts, "Tareas diarias", "✅", "tarea(s) pendiente(s)", "SELECT COUNT(*) FROM APP_TAREA_DIARIA WHERE UPPER(ESTADO) NOT IN ('COMPLETADA','COMPLETADO','FINALIZADA','FINALIZADO')");
         addAlert(alerts, "Control sanitario", "🌡️", "control(es) que requieren revisión", "SELECT COUNT(*) FROM APP_CONTROL_SANITARIO WHERE UPPER(ESTADO) NOT IN ('OK','CUMPLE','COMPLETADO','COMPLETADA','NORMAL')");
         addAlert(alerts, "Incidencias", "⚠️", "incidencia(s) sin resolver", "SELECT COUNT(*) FROM APP_INCIDENCIA WHERE UPPER(ESTADO) NOT IN ('CERRADA','CERRADO','RESUELTA','RESUELTO')");

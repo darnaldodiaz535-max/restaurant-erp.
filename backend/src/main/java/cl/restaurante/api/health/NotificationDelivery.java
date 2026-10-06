@@ -50,7 +50,8 @@ public void deliver() {
                 D.INTENTOS,
                 N.ID_USUARIO,
                 N.MODULO,
-                N.MENSAJE
+                 N.MENSAJE,
+                 N.DETALLE
             FROM APP_NOTIF_ENVIO D
             JOIN APP_NOTIFICACION N
                 ON N.ID_NOTIFICACION = D.ID_NOTIFICACION
@@ -74,7 +75,8 @@ public void deliver() {
                     rs.getInt(5),
                     rs.getLong(6),
                     rs.getString(7),
-                    rs.getString(8)),
+                    rs.getString(8),
+NotificationText.readClob(rs, "DETALLE")),
             pushAvailable,
             emailAvailable);
 
@@ -121,18 +123,60 @@ public void deliver() {
         var names=jdbc.query("SELECT E.NOMBRE FROM APP_USUARIO U JOIN APP_EMPLEADO E ON E.ID_EMPLEADO=U.ID_EMPLEADO WHERE U.ID_USUARIO=? AND U.ACTIVO='S'",(rs,n)->rs.getString(1),d.user());
         var p=preferences.get(d.user());
         if(names.isEmpty() || (d.channel().equals("PUSH")&&!p.push()) || (d.channel().equals("EMAIL")&&(!p.mail()||!d.target().equals(p.email())))) { finish(d,"OMITIDO");return; }
-        if(d.channel().equals("PUSH")) {
-            var subscriptions=jdbc.query("SELECT ENDPOINT,P256DH,AUTH FROM APP_PUSH_SUSCRIPCION WHERE ID_SUSCRIPCION=? AND ID_USUARIO=?",(rs,n)->new String[]{rs.getString(1),rs.getString(2),rs.getString(3)},Long.parseLong(d.target()),d.user());
-            if(subscriptions.isEmpty()) { finish(d,"OMITIDO");return; }
-            var s=subscriptions.getFirst();
-            String payload=json.writeValueAsString(Map.of("title","MariGex · "+d.module(),"body",pushPreview(d.message()),"userId",String.valueOf(d.user()),"tag","marigex-"+d.notice(),"url","/"));
-            int code=transport.push(s[0],s[1],s[2],payload);
-            if(code==404||code==410) {
-                jdbc.update("DELETE FROM APP_PUSH_SUSCRIPCION WHERE ID_SUSCRIPCION=? AND ID_USUARIO=?",Long.parseLong(d.target()),d.user());finish(d,"OMITIDO");return;
-            }
-            if(code<200||code>=300) throw new IllegalStateException("Push delivery rejected");
-        } else transport.mail(d.target(),names.getFirst(),d.module(),d.message());
-        finish(d,"ENVIADO");
+       if (d.channel().equals("PUSH")) {
+    var subscriptions = jdbc.query(
+            "SELECT ENDPOINT,P256DH,AUTH "
+                    + "FROM APP_PUSH_SUSCRIPCION "
+                    + "WHERE ID_SUSCRIPCION=? AND ID_USUARIO=?",
+            (rs, rowNum) -> new String[]{
+                    rs.getString(1),
+                    rs.getString(2),
+                    rs.getString(3)},
+            Long.parseLong(d.target()),
+            d.user());
+
+    if (subscriptions.isEmpty()) {
+        finish(d, "OMITIDO");
+        return;
+    }
+
+    var subscription = subscriptions.getFirst();
+    String payload = json.writeValueAsString(Map.of(
+            "title", "MariGex · " + d.module(),
+            "body", pushPreview(d.preview()),
+            "userId", String.valueOf(d.user()),
+            "tag", "marigex-" + d.notice(),
+            "url", "/?avisos=1"));
+
+    int code = transport.push(
+            subscription[0],
+            subscription[1],
+            subscription[2],
+            payload);
+
+    if (code == 404 || code == 410) {
+        jdbc.update(
+                "DELETE FROM APP_PUSH_SUSCRIPCION "
+                        + "WHERE ID_SUSCRIPCION=? AND ID_USUARIO=?",
+                Long.parseLong(d.target()),
+                d.user());
+        finish(d, "OMITIDO");
+        return;
+    }
+
+    if (code < 200 || code >= 300) {
+        throw new IllegalStateException("Push delivery rejected");
+    }
+} else {
+    String fullMessage = d.detail() == null ? d.preview() : d.detail();
+    transport.mail(
+            d.target(),
+            names.getFirst(),
+            d.module(),
+            fullMessage);
+}
+
+finish(d, "ENVIADO");
     }
     private static String pushPreview(String message) {
         // Keep encrypted payload below Web Push's 4096-byte minimum, including JSON escapes.
@@ -140,5 +184,14 @@ public void deliver() {
         return count<=400?message:message.substring(0,message.offsetByCodePoints(0,400))+"…";
     }
     private void finish(Delivery d,String state) { jdbc.update("UPDATE APP_NOTIF_ENVIO SET ESTADO=?,ULTIMO_ERROR=NULL WHERE ID_ENVIO=?",state,d.id()); }
-    private record Delivery(long id,long notice,String channel,String target,int attempts,long user,String module,String message) {}
+   private record Delivery(
+        long id,
+        long notice,
+        String channel,
+        String target,
+        int attempts,
+        long user,
+        String module,
+        String preview,
+        String detail) {}
 }

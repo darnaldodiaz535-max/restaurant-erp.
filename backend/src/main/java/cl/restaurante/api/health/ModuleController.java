@@ -26,9 +26,19 @@ public class ModuleController {
     private final RoleAccessService access;
     private final AreaService areas;
     private final NotificationService notifications;
-    private final InventoryAlertService inventory;
+  public ModuleController(
+        JdbcTemplate jdbc,
+        ActivityService activity,
+        RoleAccessService access,
+        AreaService areas,
+        NotificationService notifications) {
+    this.jdbc = jdbc;
+    this.activity = activity;
+    this.access = access;
+    this.areas = areas;
+    this.notifications = notifications;
+}
     private static final Map<String, Def> MODULES = definitions();
-    public ModuleController(JdbcTemplate jdbc, ActivityService activity, RoleAccessService access, AreaService areas, NotificationService notifications, InventoryAlertService inventory) { this.inventory=inventory; this.notifications=notifications; this.areas=areas; this.jdbc = jdbc; this.activity = activity; this.access = access; }
 
     @GetMapping("/{module}")
     public List<Row> list(@PathVariable String module, HttpSession session, @RequestParam(required=false) String area) {
@@ -77,11 +87,7 @@ public class ModuleController {
         String columns = d.fields.stream().map(Field::column).collect(Collectors.joining(", "));
         String marks = d.fields.stream().map(f -> "?").collect(Collectors.joining(", "));
         String insert="INSERT INTO " + d.table + " (" + columns + ") VALUES (" + marks + ")";
-        if("inventario".equals(module)) {
-            var keys=new org.springframework.jdbc.support.GeneratedKeyHolder();
-            jdbc.update(connection->{var st=connection.prepareStatement(insert,new String[]{d.id});for(int i=0;i<values.length;i++)st.setObject(i+1,values[i]);return st;},keys);
-            inventory.check(keys.getKey().longValue());
-        } else jdbc.update(insert,values);
+  jdbc.update(insert, values);
         notifyChange(module,d,values,"Se te asignó un registro");
         activity.record(session, "CREAR", module, "Se guardó un registro");
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("status", "guardado"));
@@ -143,7 +149,6 @@ public class ModuleController {
         Object[] params = java.util.Arrays.copyOf(values, values.length + 1); params[values.length] = id;
         int changed = jdbc.update("UPDATE " + d.table + " SET " + sets + " WHERE " + d.id + " = ?", params);
         if (changed == 0) return ResponseEntity.notFound().build();
-        if("inventario".equals(module)) inventory.check(id);
         if ("tareas-diarias".equals(module)) {
             RoleAccessService.User user = access.current(session);
             if (access.isManager(user)) jdbc.update("UPDATE APP_TAREA_DIARIA SET ESTADO='PENDIENTE' WHERE ID_TAREA=? AND UPPER(ESTADO)='EN_REVISION'", id);
