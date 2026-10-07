@@ -254,20 +254,20 @@ async function loadDashboardOverview() {
                             "aria-label",
                             `Eliminar actividad: ${title.textContent}`);
 
-                        remove.addEventListener("click", async () => {
-                            remove.disabled = true;
-                            try {
-                                await apiRequest(
-                                    `/api/dashboard/activity/${activity.id}`,
-                                    { method: "DELETE" });
-                                await loadDashboardMetrics();
-                            } catch (error) {
-                                remove.disabled = false;
-                                alert(
-                                    `No se pudo eliminar la actividad: `
-                                    + error.message);
-                            }
-                        });
+                     remove.addEventListener("click", async () => {
+    swipe.remove();
+
+    try {
+        await apiRequest(
+            `/api/dashboard/activity/${activity.id}`,
+            { method: "DELETE" });
+        await loadDashboardMetrics();
+    } catch (error) {
+        await loadDashboardMetrics();
+        window.alert(
+            `No se pudo eliminar la actividad: ${error.message}`);
+    }
+});
 
                         let startX = 0;
                         let startY = 0;
@@ -361,22 +361,22 @@ async function loadDashboardOverview() {
                     dismiss.setAttribute(
                         "aria-label",
                         `Descartar alerta: ${alert.module}`);
+dismiss.addEventListener("click", async () => {
+    item.remove();
+    alertSection.hidden = alertList.children.length === 0;
 
-                    dismiss.addEventListener("click", async () => {
-                        dismiss.disabled = true;
-                        try {
-                            await apiRequest(
-                                `/api/dashboard/alerts/`
-                                    + encodeURIComponent(alert.id),
-                                { method: "DELETE" });
-                            await loadDashboardMetrics();
-                        } catch (error) {
-                            dismiss.disabled = false;
-                            alert(
-                                `No se pudo descartar la alerta: `
-                                + error.message);
-                        }
-                    });
+    try {
+        await apiRequest(
+            `/api/dashboard/alerts/`
+                + encodeURIComponent(alert.id),
+            { method: "DELETE" });
+        await loadDashboardMetrics();
+    } catch (error) {
+        await loadDashboardMetrics();
+        window.alert(
+            `No se pudo descartar la alerta: ${error.message}`);
+    }
+});
 
                     item.append(dismiss);
                 }
