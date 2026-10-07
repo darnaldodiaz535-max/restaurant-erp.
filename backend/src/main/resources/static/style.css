@@ -1510,3 +1510,136 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     gap: 8px;
     margin: 12px 0;
 }
+/* Acciones del historial y alertas del Dashboard */
+.activity-swipe {
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.activity-swipe:last-child {
+    border-bottom: 0;
+}
+
+.activity-swipe .activity-item {
+    position: relative;
+    z-index: 1;
+    background: #fff;
+    border-bottom: 0;
+    transition: transform 180ms ease;
+}
+
+.activity-delete {
+    position: absolute;
+    z-index: 2;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 0;
+    border-radius: 8px;
+    background: #b91c1c;
+    color: #fff;
+    min-height: 42px;
+    padding: 0 14px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.activity-delete:disabled,
+.alert-dismiss:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.alert-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.alert-open {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.alert-open:focus-visible,
+.activity-delete:focus-visible,
+.alert-dismiss:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 3px;
+}
+
+.alert-content {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.alert-message {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.alert-dismiss {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid #b91c1c;
+    border-radius: 8px;
+    background: #fff;
+    color: #991b1b;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@media (max-width: 900px) {
+    .activity-delete {
+        z-index: 0;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 92px;
+        min-height: 0;
+        padding: 0 8px;
+        border-radius: 0;
+        transform: none;
+        visibility: hidden;
+    }
+
+    .activity-swipe--open .activity-delete {
+        visibility: visible;
+    }
+
+    .activity-swipe--open .activity-item {
+        transform: translateX(-92px);
+    }
+
+    .alert-item {
+        align-items: flex-start;
+    }
+
+    .alert-dismiss {
+        min-height: 44px;
+        padding: 0 10px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .activity-swipe .activity-item {
+        transition: none;
+    }
+}

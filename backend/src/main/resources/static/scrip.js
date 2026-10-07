@@ -178,16 +178,20 @@ async function loadDashboardMetrics() {
     } catch (error) { console.error("No se pudieron actualizar los indicadores:", error); }
     await loadDashboardOverview();
 }
+
 async function loadDashboardOverview() {
     if (!currentProfile) return;
+
     try {
         const overview = await apiRequest("/api/dashboard/overview");
         const activities = overview.activities || [];
         const alerts = overview.alerts || [];
         const activityList = document.querySelector(".activity-list");
         const activitySection = document.querySelector(".recent-activity");
+
         if (activityList) {
             activityList.replaceChildren();
+
             if (!activities.length) {
                 const empty = document.createElement("p");
                 empty.className = "empty-state";
@@ -195,41 +199,197 @@ async function loadDashboardOverview() {
                 activityList.appendChild(empty);
             } else {
                 activities.forEach((activity) => {
-                    const item = document.createElement("div"); item.className = "activity-item";
-                    const icon = document.createElement("span"); icon.className = "activity-icon";
-                    const moduleLabel = menuItems.map(navLabel).find((label) => slugifyLabel(label) === activity.module) || activity.module;
-                    icon.textContent = moduleLabel === "Personal" ? "👥" : moduleLabel === "Asistencia" ? "🕒" : moduleLabel.includes("Tarea") ? "✅" : "📋";
-                    const content = document.createElement("div"); content.className = "activity-content";
+                    const swipe = document.createElement("div");
+                    swipe.className = "activity-swipe";
+
+                    const item = document.createElement("div");
+                    item.className = "activity-item";
+                    item.dataset.activityId = String(activity.id);
+
+                    const icon = document.createElement("span");
+                    icon.className = "activity-icon";
+
+                    const moduleLabel = menuItems
+                        .map(navLabel)
+                        .find((label) =>
+                            slugifyLabel(label) === activity.module)
+                        || activity.module;
+
+                    icon.textContent =
+                        moduleLabel === "Personal" ? "👥"
+                        : moduleLabel === "Asistencia" ? "🕒"
+                        : moduleLabel.includes("Tarea") ? "✅"
+                        : "📋";
+
+                    const content = document.createElement("div");
+                    content.className = "activity-content";
+
                     const title = document.createElement("strong");
-                    const actionNames = { CREAR: "Registro agregado", ACTUALIZAR: "Registro actualizado", ELIMINAR: "Registro eliminado", ENVIAR_TAREA: "Tarea enviada para revisión", COMPLETAR_TAREA: "Tarea completada" };
-                    title.textContent = `${actionNames[activity.action] || activity.action} · ${moduleLabel}`;
-                    const detail = document.createElement("p"); detail.textContent = `${activity.detail} · Usuario: ${activity.username}`;
-                    const time = document.createElement("small"); time.textContent = activity.createdAt;
-                    content.append(title, detail, time); item.append(icon, content); activityList.appendChild(item);
+                    const actionNames = {
+                        CREAR: "Registro agregado",
+                        ACTUALIZAR: "Registro actualizado",
+                        ELIMINAR: "Registro eliminado",
+                        ENVIAR_TAREA: "Tarea enviada para revisión",
+                        COMPLETAR_TAREA: "Tarea completada"
+                    };
+                    title.textContent =
+                        `${actionNames[activity.action] || activity.action}`
+                        + ` · ${moduleLabel}`;
+
+                    const detail = document.createElement("p");
+                    detail.textContent =
+                        `${activity.detail} · Usuario: ${activity.username}`;
+
+                    const time = document.createElement("small");
+                    time.textContent = activity.createdAt;
+                    content.append(title, detail, time);
+                    item.append(icon, content);
+
+                    if (isOwnerRole()) {
+                        const remove = document.createElement("button");
+                        remove.type = "button";
+                        remove.className = "activity-delete";
+                        remove.textContent = "Eliminar";
+                        remove.setAttribute(
+                            "aria-label",
+                            `Eliminar actividad: ${title.textContent}`);
+
+                        remove.addEventListener("click", async () => {
+                            remove.disabled = true;
+                            try {
+                                await apiRequest(
+                                    `/api/dashboard/activity/${activity.id}`,
+                                    { method: "DELETE" });
+                                await loadDashboardMetrics();
+                            } catch (error) {
+                                remove.disabled = false;
+                                alert(
+                                    `No se pudo eliminar la actividad: `
+                                    + error.message);
+                            }
+                        });
+
+                        let startX = 0;
+                        let startY = 0;
+
+                        item.addEventListener(
+                            "touchstart",
+                            (event) => {
+                                const touch = event.changedTouches[0];
+                                startX = touch.clientX;
+                                startY = touch.clientY;
+                            },
+                            { passive: true });
+
+                        item.addEventListener(
+                            "touchend",
+                            (event) => {
+                                const touch = event.changedTouches[0];
+                                const dx = touch.clientX - startX;
+                                const dy = touch.clientY - startY;
+
+                                if (Math.abs(dx) < 45
+                                        || Math.abs(dx) < Math.abs(dy)) {
+                                    return;
+                                }
+
+                                if (dx < 0) {
+                                    swipe.classList.add(
+                                        "activity-swipe--open");
+                                } else {
+                                    swipe.classList.remove(
+                                        "activity-swipe--open");
+                                }
+                            },
+                            { passive: true });
+
+                        swipe.append(remove);
+                    }
+
+                    swipe.append(item);
+                    activityList.append(swipe);
                 });
             }
         }
+
         const alertSection = document.querySelector(".alerts");
         const alertList = document.querySelector(".alert-list");
+
         if (alertSection && alertList) {
             alertList.replaceChildren();
             alertSection.hidden = alerts.length === 0;
+
             alerts.forEach((alert) => {
-                const item = document.createElement("div"); item.className = "alert-item"; item.tabIndex = 0; item.setAttribute("role", "link");
-                const icon = document.createElement("span"); icon.className = "alert-icon"; icon.textContent = alert.icon;
-                const content = document.createElement("div"); content.className = "alert-content";
-                const title = document.createElement("strong"); title.textContent = alert.module;
-                const message = document.createElement("p"); message.textContent = alert.message;
-                content.append(title, message); item.append(icon, content);
-                const goToModule = () => { const target = menuItems.find((link) => navLabel(link) === alert.module); if (target) showScreen(target); };
-                item.addEventListener("click", goToModule);
-                item.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); goToModule(); } });
+                const item = document.createElement("div");
+                item.className = "alert-item";
+
+                const open = document.createElement("button");
+                open.type = "button";
+                open.className = "alert-open";
+
+                const icon = document.createElement("span");
+                icon.className = "alert-icon";
+                icon.textContent = alert.icon;
+
+                const content = document.createElement("span");
+                content.className = "alert-content";
+
+                const title = document.createElement("strong");
+                title.textContent = alert.module;
+
+                const message = document.createElement("span");
+                message.className = "alert-message";
+                message.textContent = alert.message;
+
+                content.append(title, message);
+                open.append(icon, content);
+
+                const goToModule = () => {
+                    const target = menuItems.find(
+                        (link) => navLabel(link) === alert.module);
+                    if (target) showScreen(target);
+                };
+                open.addEventListener("click", goToModule);
+
+                item.append(open);
+
+                if (isOwnerRole()) {
+                    const dismiss = document.createElement("button");
+                    dismiss.type = "button";
+                    dismiss.className = "alert-dismiss";
+                    dismiss.textContent = "Descartar";
+                    dismiss.setAttribute(
+                        "aria-label",
+                        `Descartar alerta: ${alert.module}`);
+
+                    dismiss.addEventListener("click", async () => {
+                        dismiss.disabled = true;
+                        try {
+                            await apiRequest(
+                                `/api/dashboard/alerts/`
+                                    + encodeURIComponent(alert.id),
+                                { method: "DELETE" });
+                            await loadDashboardMetrics();
+                        } catch (error) {
+                            dismiss.disabled = false;
+                            alert(
+                                `No se pudo descartar la alerta: `
+                                + error.message);
+                        }
+                    });
+
+                    item.append(dismiss);
+                }
+
                 alertList.appendChild(item);
             });
         }
+
         await loadUserNotifications();
     } catch (error) {
-        console.error("No se pudo actualizar la actividad y las alertas:", error);
+        console.error(
+            "No se pudo actualizar la actividad y las alertas:",
+            error);
     }
 }
 function showScreen(link) {

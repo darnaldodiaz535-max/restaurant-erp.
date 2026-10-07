@@ -824,4 +824,132 @@ void inventorySendNotifiesEveryActiveAdministrativeAccountWithSameDetail() throw
             assertThrows(IllegalArgumentException.class,()->PushSubscriptions.validateEndpoint(endpoint));
     }
 
+
+@Test
+void dashboardActivityCanBeHiddenByOwnerWithoutDeletingBusinessData()
+        throws Exception {
+    jdbc.update(
+            "INSERT INTO APP_INSUMO "
+                    + "(NOMBRE,CATEGORIA,STOCK_ACTUAL,UNIDAD,STOCK_MINIMO,"
+                    + "STOCK_MAXIMO,ALERTA_ESTADO,GRUPO) "
+                    + "VALUES ('Producto prueba','Secos',5,'kg',2,10,"
+                    + "'NORMAL','COCINA')");
+
+    jdbc.update(
+            "INSERT INTO APP_ACTIVIDAD "
+                    + "(USUARIO,ACCION,MODULO,DETALLE) "
+                    + "VALUES ('user1','CREAR','Personal','Actividad de prueba')");
+
+    long activityId = jdbc.queryForObject(
+            "SELECT ID_ACTIVIDAD FROM APP_ACTIVIDAD",
+            Long.class);
+
+    mvc.perform(get("/api/dashboard/overview").session(owner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.activities[0].id").value(activityId));
+
+    mvc.perform(delete("/api/dashboard/activity/" + activityId)
+                    .session(worker))
+            .andExpect(status().isForbidden());
+
+    mvc.perform(delete("/api/dashboard/activity/" + activityId)
+                    .session(owner))
+            .andExpect(status().isNoContent());
+
+    assertEquals(
+            "S",
+            jdbc.queryForObject(
+                    "SELECT OCULTA FROM APP_ACTIVIDAD WHERE ID_ACTIVIDAD=?",
+                    String.class,
+                    activityId));
+
+    assertEquals(
+            1,
+            jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM APP_ACTIVIDAD WHERE ID_ACTIVIDAD=?",
+                    Integer.class,
+                    activityId));
+
+    assertEquals(
+            1,
+            jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM APP_INSUMO "
+                            + "WHERE NOMBRE='Producto prueba'",
+                    Integer.class));
+
+    mvc.perform(get("/api/dashboard/overview").session(owner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.activities.length()").value(0));
+}
+
+@Test
+void dashboardAlertDismissalPersistsAndResetsAfterConditionClears()
+        throws Exception {
+    jdbc.update(
+            "INSERT INTO APP_INSUMO "
+                    + "(NOMBRE,CATEGORIA,STOCK_ACTUAL,UNIDAD,STOCK_MINIMO,"
+                    + "STOCK_MAXIMO,ALERTA_ESTADO,GRUPO) "
+                    + "VALUES ('Arroz prueba','Secos',1,'kg',5,20,"
+                    + "'NORMAL','COCINA')");
+
+    mvc.perform(get("/api/dashboard/overview").session(owner))
+            .andExpect(status().isOk())
+           .andExpect(jsonPath(
+        "$.alerts[?(@.id == 'INVENTARIO_BAJO')]",
+        org.hamcrest.Matchers.hasSize(1)));
+
+    mvc.perform(delete("/api/dashboard/alerts/INVENTARIO_BAJO")
+                    .session(worker))
+            .andExpect(status().isForbidden());
+
+    mvc.perform(delete("/api/dashboard/alerts/INVENTARIO_BAJO")
+                    .session(owner))
+            .andExpect(status().isNoContent());
+
+    assertEquals(
+            1,
+            jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM APP_INSUMO "
+                            + "WHERE NOMBRE='Arroz prueba'",
+                    Integer.class));
+
+    mvc.perform(get("/api/dashboard/overview").session(owner))
+            .andExpect(status().isOk())
+           .andExpect(jsonPath(
+        "$.alerts[?(@.id == 'INVENTARIO_BAJO')]",
+        org.hamcrest.Matchers.hasSize(0)));
+
+    jdbc.update(
+            "UPDATE APP_INSUMO SET STOCK_ACTUAL=5 "
+                    + "WHERE NOMBRE='Arroz prueba'");
+
+    mvc.perform(get("/api/dashboard/overview").session(owner))
+            .andExpect(status().isOk());
+
+    jdbc.update(
+            "UPDATE APP_INSUMO SET STOCK_ACTUAL=1 "
+                    + "WHERE NOMBRE='Arroz prueba'");
+
+    mvc.perform(get("/api/dashboard/overview").session(owner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath(
+        "$.alerts[?(@.id == 'INVENTARIO_BAJO')]",
+        org.hamcrest.Matchers.hasSize(1)));
+}
+
+@Test
+void dashboardDeleteEndpointsRequireAuthentication() throws Exception {
+    mvc.perform(delete("/api/dashboard/activity/1"))
+            .andExpect(status().isUnauthorized());
+
+    mvc.perform(delete("/api/dashboard/alerts/INVENTARIO_BAJO"))
+            .andExpect(status().isUnauthorized());
+}
+
+@Test
+void dashboardRejectsUnknownAlertKeys() throws Exception {
+    mvc.perform(delete("/api/dashboard/alerts/APP_INSUMO")
+                    .session(owner))
+            .andExpect(status().isBadRequest());
+}
 }
