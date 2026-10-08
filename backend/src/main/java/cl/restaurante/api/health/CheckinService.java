@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -546,7 +547,7 @@ public class CheckinService {
     private void materializeTasks(LocalDate date) {
         try {
             jdbc.update(
-                    "INSERT INTO APP_CHECKIN_TAREA "
+                    "INSERT /*+ DISABLE_PARALLEL_DML */ INTO APP_CHECKIN_TAREA "
                             + "(ID_CHECKIN_DIA,ID_PLANTILLA,"
                             + "TAREA_SNAPSHOT,METODO_COMPLETADO,ESTADO) "
                             + "SELECT D.ID_CHECKIN_DIA,P.ID_PLANTILLA,"
