@@ -21,7 +21,7 @@ public class NotificationService {
         for(long user:jdbc.query("SELECT ID_USUARIO FROM APP_USUARIO WHERE ACTIVO='S' AND ROL IN ('ADMIN','EMPRESA','JEFE_SALON','JEFE_COCINA','JEFE_LOCAL')",(rs,n)->rs.getLong(1))) notify(user,module,message);
     }
     @org.springframework.transaction.annotation.Transactional
-public void administratorsWithDetail(
+    public void administratorsWithDetail(
         String module,
         String pushPreview,
         String fullDetail) {
@@ -36,6 +36,40 @@ public void administratorsWithDetail(
         notifyWithDetail(user, module, pushPreview, fullDetail);
     }
 }
+
+    /** Delivers a detailed notification to exactly one authenticated account. */
+    @org.springframework.transaction.annotation.Transactional
+    public void userWithDetail(
+            long userId,
+            String module,
+            String pushPreview,
+            String fullDetail) {
+        Integer active = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM APP_USUARIO WHERE ID_USUARIO=? AND ACTIVO='S'",
+                Integer.class,
+                userId);
+        if (active != null && active == 1) {
+            notifyWithDetail(userId, module, pushPreview, fullDetail);
+        }
+    }
+
+    /** Sends the global Check-in report only to company administrators. */
+    @org.springframework.transaction.annotation.Transactional
+    public void checkinAdministratorsWithDetail(
+            String pushPreview,
+            String fullDetail) {
+        List<Long> users = jdbc.query(
+                "SELECT ID_USUARIO FROM APP_USUARIO "
+                        + "WHERE ACTIVO='S' AND ROL IN ('ADMIN','EMPRESA')",
+                (rs, rowNum) -> rs.getLong(1));
+        for (long user : users) {
+            notifyWithDetail(
+                    user,
+                    "Check-in Diario",
+                    pushPreview,
+                    fullDetail);
+        }
+    }
 private void notifyWithDetail(
         long user,
         String module,

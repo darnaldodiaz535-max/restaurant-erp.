@@ -45,6 +45,7 @@ const iconPaths = {
     Asistencia: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     Horarios: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
     "Tareas diarias": '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 10 2 2 5-5M8 16h8"/>',
+    "Check-in Diario": '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18m-13 5 2 2 4-4"/>',
     Inventario: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="M3 8v9l9 5 9-5V8M12 13v9"/>',
     Cocina: '<path d="M6 13h12l-1 8H7l-1-8ZM5 13a3 3 0 0 1 0-6 4 4 0 0 1 8-1 4 4 0 0 1 7 2 3 3 0 0 1-1 5"/>',
     Salón: '<circle cx="12" cy="12" r="7"/><path d="M2 3v6M5 3v6M2 6h3M3.5 9v12M21 3v18"/>',
@@ -401,10 +402,135 @@ function showScreen(link) {
     if (label === "Dashboard") dashboard.hidden = false;
     else if (label === "Personal") personal.hidden = false;
     else if (label === "Tareas diarias") renderTaskAreas();
+    else if (label === "Check-in Diario") void renderCheckinModule();
     else if (["Cocina", "Salón", "Barra", "Copería"].includes(label)) void renderArea(normalizeArea(label));
     else void renderModule(label);
     activateNav(link);
     if (label === "Dashboard") void loadDashboardMetrics();
+}
+
+const checkinAreas = ["SALON", "COPERIA", "COCINA", "BARRA"];
+const checkinAreaNames = { SALON: "Salón", COPERIA: "Copería", COCINA: "Cocina", BARRA: "Barra" };
+const checkinAdmin = () => ["ADMIN", "EMPRESA"].includes(accessRole());
+function checkinNode(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; }
+function checkinButton(label, handler, cls = "secondary-button") { const button = checkinNode("button", cls, label); button.type = "button"; button.addEventListener("click", handler); return button; }
+function checkinAreaForProfile() {
+    const raw = String(currentProfile?.area || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (raw.includes("COPER")) return "COPERIA"; if (raw.includes("SALON")) return "SALON";
+    if (raw.includes("COCINA")) return "COCINA"; if (raw.includes("BARRA")) return "BARRA"; return "";
+}
+function checkinWeekStart() {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date()).map(part => [part.type, part.value]));
+    const d = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), 12));
+    d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7 - 7);
+    return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+}
+function checkinHeader(title, subtitle) {
+    const h = checkinNode("div", "module-header checkin-header"), heading = checkinNode("div", "module-heading"), copy = checkinNode("div");
+    heading.appendChild(checkinNode("span", "module-icon", "📋")); copy.append(checkinNode("h2", "", title), checkinNode("p", "", subtitle)); heading.appendChild(copy); h.appendChild(heading); return h;
+}
+async function renderCheckinModule(selectedArea = null, adminView = false) {
+    const revision = ++screenRevision; dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
+    otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--checkin-diario"; otherModule.style.setProperty("--module-accent", "#2563eb");
+    const admin = checkinAdmin(), area = selectedArea || checkinAreaForProfile();
+    otherModule.appendChild(checkinHeader(adminView ? "Check-in administrador" : "Check-in Diario", adminView ? "Resumen del equipo por plaza." : "Busca tu nombre y completa solo tu propio check-in."));
+    const section = checkinNode("section", "generic-data checkin-data"), tabs = checkinNode("div", "checkin-tabs");
+    if (admin) {
+        tabs.appendChild(checkinButton("Mi check-in", () => void renderCheckinModule()));
+        tabs.appendChild(checkinButton("Check-in administrador", () => void renderCheckinModule(area || "COCINA", true), adminView ? "primary-button" : "secondary-button"));
+    }
+    if (!area && !adminView) {
+        checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code), "checkin-area-button")));
+        section.append(tabs, checkinNode("p", "empty-state", "Elige tu plaza para buscar tu nombre. Solo podrás abrir tu propio check-in.")); otherModule.appendChild(section); return;
+    }
+    if (adminView) checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code, true), area === code ? "primary-button" : "secondary-button")));
+    section.appendChild(tabs); const code = area || checkinAreaForProfile();
+    if (!code) { section.appendChild(checkinNode("p", "empty-state", "Tu usuario no tiene una plaza compatible.")); otherModule.appendChild(section); return; }
+    section.appendChild(checkinNode("h3", "checkin-area-title", checkinAreaNames[code]));
+    const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "status"); section.appendChild(feedback);
+    if (adminView) await renderCheckinAdminArea(section, code, revision, feedback); else await renderCheckinWorkerArea(section, code, revision, feedback);
+    if (revision === screenRevision) otherModule.appendChild(section);
+}
+async function renderCheckinWorkerArea(section, area, revision, feedback) {
+    try {
+        const roster = await apiRequest("/api/checkin/areas/" + encodeURIComponent(area) + "/personas"); if (revision !== screenRevision) return;
+        const list = checkinNode("div", "checkin-roster");
+        roster.forEach(person => {
+            const row = checkinNode("div", "checkin-roster-row" + (person.self ? " is-self" : ""));
+            row.appendChild(checkinNode("span", "", person.name));
+            if (person.canOpen) row.appendChild(checkinButton("Abrir mi check-in", async () => { try { await renderCheckinWorkerDay(section, feedback); } catch (e) { feedback.textContent = e.message; } }, "primary-button"));
+            else row.appendChild(checkinNode("span", "checkin-private-label", "Privado")); list.appendChild(row);
+        });
+        section.appendChild(list); if (!roster.some(p => p.self)) feedback.textContent = "Tu nombre no aparece en esta plaza; solo puedes acceder a tu área.";
+    } catch (e) { feedback.textContent = "No se pudo cargar el equipo: " + e.message; return; }
+    try {
+        const date = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" });
+        const day = await apiRequest("/api/checkin/me/dia?fecha=" + encodeURIComponent(date));
+        if (day.employeeName) await renderCheckinDay(section, feedback, day);
+        await renderCheckinPersonalSummary(section);
+    } catch (e) { feedback.textContent = "No se pudo cargar tu check-in: " + e.message; }
+}
+async function renderCheckinWorkerDay(section, feedback) { const day = await apiRequest("/api/checkin/me"); await renderCheckinDay(section, feedback, day); }
+async function renderCheckinDay(section, feedback, day) {
+    section.querySelector(".checkin-day")?.remove(); const card = checkinNode("div", "checkin-day"), title = checkinNode("div", "checkin-day-title");
+    title.append(checkinNode("div", "", day.employeeName + " · " + day.date), checkinNode("span", "checkin-percent", day.dayStatus === "LIBRE" ? "Día libre" : day.compliancePercent + "%")); card.appendChild(title);
+    const actionUrl = day.dayStatus === "LIBRE" ? "/api/checkin/me/trabajando" : "/api/checkin/me/libre";
+    card.appendChild(checkinButton(day.dayStatus === "LIBRE" ? "Cambiar a día trabajado" : "Marcar día LIBRE", async () => {
+        if (day.dayStatus !== "LIBRE" && !confirm("¿Marcar hoy como día libre? No contará como incumplimiento.")) return;
+        try { await renderCheckinDay(section, feedback, await apiRequest(actionUrl, { method: "PUT" })); } catch (e) { feedback.textContent = e.message; }
+    }));
+    if (day.dayStatus === "LIBRE") card.appendChild(checkinNode("p", "checkin-note", "Este día no afecta tu porcentaje semanal."));
+    else if (!day.tasks.length) card.appendChild(checkinNode("p", "empty-state", "Aún no hay tareas configuradas para tu plaza."));
+    day.tasks.forEach(task => {
+        const row = checkinNode("article", "checkin-task" + (task.status === "REALIZADA" ? " is-done" : ""));
+        const copy = checkinNode("div", "checkin-task-copy"), state = task.status === "REALIZADA" ? "Hecha" : task.method === "FOTO" ? "Pendiente · requiere foto" : "Pendiente";
+        copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", state + (task.completedAt ? " · " + task.completedAt.replace("T", " ") : ""))); row.appendChild(copy);
+        if (task.photoId) row.appendChild(checkinButton("Ver foto", () => window.open("/api/checkin/fotos/" + task.photoId, "_blank", "noopener")));
+        if (task.status !== "REALIZADA" && day.dayStatus !== "LIBRE") {
+            if (task.method === "FOTO") {
+                const label = checkinNode("label", "checkin-photo-button", "Subir foto"), input = checkinNode("input"); input.type = "file"; input.accept = "image/jpeg,image/png,image/webp"; input.hidden = true;
+                input.addEventListener("change", async () => { if (!input.files?.[0]) return; const form = new FormData(); form.append("foto", input.files[0]); try { const updated = await uploadRequest("/api/checkin/tareas/" + task.id + "/foto", form); feedback.textContent = "Evidencia guardada."; await renderCheckinDay(section, feedback, updated); } catch (e) { feedback.textContent = e.message; } });
+                label.appendChild(input); row.appendChild(label);
+            } else row.appendChild(checkinButton("Hecho", async () => { try { const updated = await apiRequest("/api/checkin/tareas/" + task.id + "/hecha", { method: "POST" }); feedback.textContent = "Tarea guardada."; await renderCheckinDay(section, feedback, updated); } catch (e) { feedback.textContent = e.message; } }, "primary-button"));
+        }
+        card.appendChild(row);
+    });
+    section.appendChild(card);
+}
+async function renderCheckinPersonalSummary(section) {
+    const week = await apiRequest("/api/checkin/me/semanal?semana=" + encodeURIComponent(checkinWeekStart()));
+    const trend = await apiRequest("/api/checkin/me/tendencia"), card = checkinNode("div", "checkin-summary-card");
+    card.appendChild(checkinNode("h3", "", "Mi semana · " + week.weekStart + " al " + week.weekEnd)); const stats = checkinNode("div", "checkin-stats");
+    [["Días trabajados", week.daysWorked], ["Días libres", week.daysFree], ["Tareas asignadas", week.assignedTasks], ["Realizadas", week.completedTasks], ["No realizadas", week.incompleteTasks], ["Cumplimiento", week.compliancePercent == null ? "—" : week.compliancePercent + "%"]].forEach(pair => { const item = checkinNode("div", "checkin-stat"); item.append(checkinNode("small", "", pair[0]), checkinNode("strong", "", String(pair[1]))); stats.appendChild(item); });
+    card.append(stats, checkinTrendChart(trend, false)); section.appendChild(card);
+}
+function checkinTrendChart(points, admin) {
+    const chart = checkinNode("div", "checkin-trend"); chart.appendChild(checkinNode("h3", "", admin ? "Cumplimiento semanal por trabajador" : "Mi cumplimiento por semana"));
+    if (!points || !points.length) { chart.appendChild(checkinNode("p", "empty-state", "Aún no hay semanas con resultados.")); return chart; }
+    points.forEach(point => {
+        const row = checkinNode("div", "checkin-trend-row"), value = point.compliancePercent, label = admin ? point.name + " · " + (checkinAreaNames[point.area] || point.area) + " · " + point.weekStart : point.weekStart;
+        row.appendChild(checkinNode("span", "checkin-trend-label", label)); const track = checkinNode("div", "checkin-progress"), bar = checkinNode("span", "checkin-progress-bar" + (value != null && value > 90 ? " is-excellent" : ""));
+        bar.style.width = Math.max(0, Math.min(100, value || 0)) + "%"; track.appendChild(bar); row.appendChild(track); row.appendChild(checkinNode("strong", "checkin-trend-value", value == null ? "—" : value + "%")); chart.appendChild(row);
+    }); return chart;
+}
+async function renderCheckinAdminArea(section, area, revision, feedback) {
+    try {
+        const results = await Promise.all([
+            apiRequest("/api/checkin/admin/area/" + encodeURIComponent(area)),
+            apiRequest("/api/checkin/admin/semanal?semana=" + encodeURIComponent(checkinWeekStart())),
+            apiRequest("/api/checkin/admin/tendencia")
+        ]);
+        if (revision !== screenRevision) return; const today = results[0], report = results[1], trend = results[2];
+        const daily = checkinNode("div", "checkin-summary-card"); daily.appendChild(checkinNode("h3", "", "Estado de hoy"));
+        if (!today.length) daily.appendChild(checkinNode("p", "empty-state", "No hay trabajadores activos con usuario en esta plaza."));
+        today.forEach(person => { const row = checkinNode("div", "checkin-admin-person"); row.append(checkinNode("strong", "", person.name), checkinNode("span", "", person.dayStatus === "LIBRE" ? "LIBRE" : person.completedTasks + "/" + person.assignedTasks + " tareas · " + (person.compliancePercent == null ? "—" : person.compliancePercent + "%"))); daily.appendChild(row); }); section.appendChild(daily);
+        const weekly = checkinNode("div", "checkin-summary-card"); weekly.appendChild(checkinNode("h3", "", "Reporte semanal global · " + report.weekStart + " al " + report.weekEnd)); const stats = checkinNode("div", "checkin-stats");
+        [["Cumplimiento general", report.compliancePercent == null ? "—" : report.compliancePercent + "%"], ["Días trabajados", report.daysWorked], ["Días libres", report.daysFree], ["Tareas asignadas", report.assignedTasks], ["Realizadas", report.completedTasks], ["No realizadas", report.incompleteTasks]].forEach(pair => { const item = checkinNode("div", "checkin-stat"); item.append(checkinNode("small", "", pair[0]), checkinNode("strong", "", String(pair[1]))); stats.appendChild(item); }); weekly.appendChild(stats);
+        (report.employees || []).filter(p => p.area === area).forEach(person => { const row = checkinNode("div", "checkin-admin-person"); row.append(checkinNode("strong", "", person.name), checkinNode("span", "", (person.compliancePercent == null ? "—" : person.compliancePercent + "%") + " · " + person.completedTasks + "/" + person.assignedTasks + " hechas · " + person.daysFree + " libres")); weekly.appendChild(row); });
+        section.append(weekly, checkinTrendChart(trend, true));
+    } catch (e) { feedback.textContent = "No se pudo cargar el reporte administrativo: " + e.message; }
 }
 
 const moduleKey = (name) => `restaurant-erp-module-${name}`;

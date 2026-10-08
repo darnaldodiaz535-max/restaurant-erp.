@@ -165,7 +165,7 @@ jdbc.execute("CREATE TABLE APP_INSUMO("
         }
         String[] roles={"EMPRESA","TRABAJADOR","EMPLEADO","JEFE_COCINA","JEFE_SALON"};
         for(int i=1;i<=5;i++) {
-            jdbc.update("INSERT INTO APP_EMPLEADO VALUES(?,?,?,?,?)",i,"Persona "+i,"Cocinero",i==3?"Salón":"Cocina","ACTIVO");
+            jdbc.update("INSERT INTO APP_EMPLEADO (ID_EMPLEADO,NOMBRE,CARGO,AREA,ESTADO) VALUES(?,?,?,?,?)",i,"Persona "+i,"Cocinero",i==3?"Salón":"Cocina","ACTIVO");
             jdbc.update("INSERT INTO APP_USUARIO(ID_USUARIO,ID_EMPLEADO,USUARIO,ROL,ACTIVO) VALUES(?,?,?,?,?)",i,i,"user"+i,roles[i-1],"S");
         }
         jdbc.update("INSERT INTO APP_TAREA_DIARIA(ID_TAREA,TAREA,RESPONSABLE_ID,FECHA,ESTADO,AREA) VALUES(10,'Preparar',2,DATE '2026-09-28','PENDIENTE','COCINA')");
@@ -260,7 +260,7 @@ jdbc.execute("CREATE TABLE APP_INSUMO("
         String[] roles={"ADMIN","EMPRESA","JEFE_SALON","JEFE_COCINA","JEFE_LOCAL","TRABAJADOR","EMPLEADO"};
         for(int i=0;i<roles.length;i++) {
             int employeeId=20+i;
-            jdbc.update("INSERT INTO APP_EMPLEADO VALUES(?,?,?,?,?)",employeeId,"Cuenta "+i,"Mesero","Salón","ACTIVO");
+            jdbc.update("INSERT INTO APP_EMPLEADO (ID_EMPLEADO,NOMBRE,CARGO,AREA,ESTADO) VALUES(?,?,?,?,?)",employeeId,"Cuenta "+i,"Mesero","Salón","ACTIVO");
             String username="cuenta"+i;
             String password="ClavePersonalSegura"+i;
             String body="{\"employeeId\":"+employeeId+",\"username\":\""+username+"\",\"password\":\""+password+"\",\"role\":\""+roles[i]+"\"}";
@@ -292,7 +292,7 @@ jdbc.execute("CREATE TABLE APP_INSUMO("
         assertEquals("EMPRESA",jdbc.queryForObject("SELECT ROL FROM APP_USUARIO WHERE ID_USUARIO=1",String.class));
     }
     @Test void accountCreationRejectsInvalidAndDuplicateInputs() throws Exception {
-        jdbc.update("INSERT INTO APP_EMPLEADO VALUES(20,'Nueva persona','Mesero','Salón','ACTIVO')");
+        jdbc.update("INSERT INTO APP_EMPLEADO (ID_EMPLEADO,NOMBRE,CARGO,AREA,ESTADO) VALUES(20,'Nueva persona','Mesero','Salón','ACTIVO')");
         String valid="{\"employeeId\":20,\"username\":\"nuevo\",\"password\":\"ClaveSegura123\",\"role\":\"JEFE_LOCAL\"}";
         mvc.perform(post("/api/auth/users").contentType("application/json").content(valid)).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/users").session(worker).contentType("application/json").content(valid)).andExpect(status().isForbidden());
@@ -304,7 +304,7 @@ jdbc.execute("CREATE TABLE APP_INSUMO("
     }
 
     private MockHttpSession passwordAccount(String role) throws Exception {
-        jdbc.update("INSERT INTO APP_EMPLEADO VALUES(50,'Cuenta clave','Mesero','Salón','ACTIVO')");
+        jdbc.update("INSERT INTO APP_EMPLEADO (ID_EMPLEADO,NOMBRE,CARGO,AREA,ESTADO) VALUES(50,'Cuenta clave','Mesero','Salón','ACTIVO')");
         mvc.perform(post("/api/auth/users").session(owner).contentType("application/json")
             .content("{\"employeeId\":50,\"username\":\"claveusuario\",\"password\":\"AnteriorSegura123\",\"role\":\""+role+"\"}"))
             .andExpect(status().isCreated());
