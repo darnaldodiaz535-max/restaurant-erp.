@@ -42,14 +42,9 @@ async function loadUserNotifications(more = false) {
             "aria-label",
             `Notificaciones, ${data.unread} pendientes`
         );
-
-        const markRead = document.getElementById("markNotificationsRead");
-        markRead.textContent = "Marcar todas como leídas";
-        markRead.hidden = !data.unread;
-
-        const clearAll = document.getElementById("clearNotifications");
-        clearAll.hidden = data.items.length === 0 && !data.hasMore;
-
+const markRead = document.getElementById("markNotificationsRead");
+markRead.textContent = "Marcar leídas y quitar todas";
+markRead.hidden = data.items.length === 0 && !data.hasMore;
         data.items.forEach(notice => {
             const item = element(
                 "div",
@@ -157,28 +152,8 @@ async function loadUserNotifications(more = false) {
         console.error("Notificaciones:", error.message);
     }
 }
-document.getElementById("clearNotifications")
-    ?.addEventListener("click", async event => {
-        if (!confirm("¿Eliminar todas tus notificaciones de la bandeja?")) {
-            return;
-        }
 
-        const button = event.currentTarget;
-        button.disabled = true;
 
-        try {
-            await apiRequest("/api/notificaciones", {
-                method: "DELETE"
-            });
-
-            noticeBefore = 0;
-            await loadUserNotifications();
-        } catch (error) {
-            alert(error.message);
-        } finally {
-            button.disabled = false;
-        }
-    });
 function renderAiSchedules(imageSection) {
     const section=element('section',undefined,'data-section ai-schedule-section');imageSection.after(section);
     const feedback=element('p','','empty-state');feedback.setAttribute('role','status');
