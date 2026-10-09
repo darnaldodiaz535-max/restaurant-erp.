@@ -7,37 +7,178 @@ function resetNotifications() {
     const badge=document.querySelector('.notification-badge');if(badge){badge.textContent='0';badge.hidden=true;}
     const count=notificationMenu?.querySelector('.notification-header span');if(count)count.textContent='Sin avisos';
 }
-async function loadUserNotifications(more=false) {
-    if(!currentProfile || !notificationMenu) return;
-    const profile=currentProfile;
+async function loadUserNotifications(more = false) {
+    if (!currentProfile || !notificationMenu) return;
+
+    const profile = currentProfile;
+
     try {
-        const data=await apiRequest('/api/notificaciones'+(more?'?before='+noticeBefore:''));
-        if(currentProfile!==profile)return;
-        if(!more) notificationMenu.querySelectorAll('.notification-item').forEach(n=>n.remove());
-        notificationMenu.querySelectorAll('.notice-more').forEach(n=>n.remove());
-        const badge=document.querySelector('.notification-badge');badge.textContent=String(data.unread);badge.hidden=!data.unread;
-        notificationMenu.querySelector('.notification-header span').textContent=data.unread+' pendientes';
-        notificationBtn.setAttribute('aria-label',`Notificaciones, ${data.unread} pendientes`);
-        const footer=document.getElementById('markNotificationsRead');footer.textContent='Marcar todas como leídas';footer.hidden=!data.unread;
-        data.items.forEach(notice=>{
-            const item=element('div',undefined,'notification-item'+(notice.read?' notice-read':''));
-            const content=element('div');content.append(element('strong',notice.module),element('p',notice.message),element('small',notice.createdAt));
-            const open=actionButton('Abrir',async()=>{
-                try {await apiRequest(`/api/notificaciones/${notice.id}/leida`,{method:'POST'});await loadUserNotifications();notificationMenu.classList.remove('show');
-                    const link=Array.from(menuItems).find(l=>navLabel(l)===notice.module);if(link)showScreen(link);
-                }catch(error){alert(error.message);}
-            });content.append(open);
-            if(!notice.read)content.append(actionButton('Marcar leída',async()=>{try{await apiRequest(`/api/notificaciones/${notice.id}/leida`,{method:'POST'});await loadUserNotifications();}catch(error){alert(error.message);}}));
-            item.append(content);notificationMenu.insertBefore(item,footer);noticeBefore=notice.id;
+        const url = "/api/notificaciones" +
+            (more ? "?before=" + noticeBefore : "");
+        const data = await apiRequest(url);
+
+        if (currentProfile !== profile) return;
+
+        if (!more) {
+            noticeBefore = 0;
+            notificationMenu
+                .querySelectorAll(".notification-item")
+                .forEach(item => item.remove());
+        }
+
+        notificationMenu
+            .querySelectorAll(".notice-more")
+            .forEach(item => item.remove());
+
+        const badge = document.querySelector(".notification-badge");
+        badge.textContent = String(data.unread);
+        badge.hidden = !data.unread;
+
+        notificationMenu.querySelector(
+            ".notification-header span"
+        ).textContent = data.unread + " pendientes";
+
+        notificationBtn.setAttribute(
+            "aria-label",
+            `Notificaciones, ${data.unread} pendientes`
+        );
+
+        const markRead = document.getElementById("markNotificationsRead");
+        markRead.textContent = "Marcar todas como leídas";
+        markRead.hidden = !data.unread;
+
+        const clearAll = document.getElementById("clearNotifications");
+        clearAll.hidden = data.items.length === 0 && !data.hasMore;
+
+        data.items.forEach(notice => {
+            const item = element(
+                "div",
+                undefined,
+                "notification-item" + (notice.read ? " notice-read" : "")
+            );
+
+            const content = element("div");
+            content.append(
+                element("strong", notice.module),
+                element("p", notice.message),
+                element("small", notice.createdAt)
+            );
+
+            const actions = element("div", undefined, "notification-actions");
+
+            actions.append(actionButton("Abrir", async () => {
+                try {
+                    await apiRequest(
+                        `/api/notificaciones/${notice.id}/leida`,
+                        { method: "POST" }
+                    );
+                    await loadUserNotifications();
+                    notificationMenu.classList.remove("show");
+
+                    const link = Array.from(menuItems)
+                        .find(item => navLabel(item) === notice.module);
+
+                    if (link) showScreen(link);
+                } catch (error) {
+                    alert(error.message);
+                }
+            }));
+
+            if (!notice.read) {
+                actions.append(actionButton("Marcar leída", async () => {
+                    try {
+                        await apiRequest(
+                            `/api/notificaciones/${notice.id}/leida`,
+                            { method: "POST" }
+                        );
+                        await loadUserNotifications();
+                    } catch (error) {
+                        alert(error.message);
+                    }
+                }));
+            }
+
+            const remove = actionButton("Eliminar", async () => {
+                if (!confirm("¿Eliminar esta notificación de tu bandeja?")) {
+                    return;
+                }
+
+                remove.disabled = true;
+
+                try {
+                    await apiRequest(
+                        `/api/notificaciones/${notice.id}`,
+                        { method: "DELETE" }
+                    );
+                    await loadUserNotifications();
+                } catch (error) {
+                    remove.disabled = false;
+                    alert(error.message);
+                }
+            });
+
+            remove.classList.add("notification-delete");
+            actions.append(remove);
+            content.append(actions);
+            item.append(content);
+            notificationMenu.insertBefore(
+                item,
+                document.getElementById("markNotificationsRead")
+            );
+
+            noticeBefore = notice.id;
         });
-        if(!data.items.length && !more)notificationMenu.insertBefore(element('div','No tienes notificaciones.','notification-item'),footer);
-        if(data.hasMore){const next=actionButton('Ver anteriores',()=>void loadUserNotifications(true));next.classList.add('notice-more');notificationMenu.insertBefore(next,footer);}
-    }catch(error){
-        if(currentProfile!==profile)return;
-        notificationMenu.querySelector('.notification-header span').textContent='No se pudieron cargar';
-        console.error('Notificaciones:',error.message);
+
+        if (!data.items.length && !more) {
+            notificationMenu.insertBefore(
+                element("div", "No tienes notificaciones.", "notification-item"),
+                document.getElementById("markNotificationsRead")
+            );
+        }
+
+        if (data.hasMore) {
+            const next = actionButton(
+                "Ver anteriores",
+                () => void loadUserNotifications(true)
+            );
+            next.classList.add("notice-more");
+            notificationMenu.insertBefore(
+                next,
+                document.getElementById("markNotificationsRead")
+            );
+        }
+    } catch (error) {
+        if (currentProfile !== profile) return;
+
+        notificationMenu.querySelector(
+            ".notification-header span"
+        ).textContent = "No se pudieron cargar";
+
+        console.error("Notificaciones:", error.message);
     }
 }
+document.getElementById("clearNotifications")
+    ?.addEventListener("click", async event => {
+        if (!confirm("¿Eliminar todas tus notificaciones de la bandeja?")) {
+            return;
+        }
+
+        const button = event.currentTarget;
+        button.disabled = true;
+
+        try {
+            await apiRequest("/api/notificaciones", {
+                method: "DELETE"
+            });
+
+            noticeBefore = 0;
+            await loadUserNotifications();
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            button.disabled = false;
+        }
+    });
 function renderAiSchedules(imageSection) {
     const section=element('section',undefined,'data-section ai-schedule-section');imageSection.after(section);
     const feedback=element('p','','empty-state');feedback.setAttribute('role','status');

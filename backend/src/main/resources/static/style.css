@@ -1677,3 +1677,18 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .checkin-roster-row > button, .checkin-task > button, .checkin-photo-button { width: 100%; min-height: 44px; }
     .checkin-trend-row { grid-template-columns: 95px minmax(50px, 1fr) 42px; gap: 7px; }
 }
+/* NOTIFICACIONES - Botones de acciones */
+
+.notification-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.notification-item .notification-actions .notification-delete {
+    color: #b91c1c;
+}
+
+.notification-footer.notification-clear {
+    color: #b91c1c;
+}

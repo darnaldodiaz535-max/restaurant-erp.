@@ -2,11 +2,19 @@ package cl.restaurante.api.health;
 
 import java.util.List;
 import java.util.Map;
-import jakarta.servlet.http.HttpSession;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.bind.annotation.*;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import jakarta.servlet.http.HttpSession;
 
 @RestController
 @RequestMapping("/api/notificaciones")
@@ -65,6 +73,45 @@ public Page list(
     public Map<String,String> readAll(HttpSession session) {
         jdbc.update("UPDATE APP_NOTIFICACION SET LEIDA='S' WHERE ID_USUARIO=? AND LEIDA='N'",access.current(session).id());
         return Map.of("status","leídas");
+    }
+        @DeleteMapping("/{id}")
+    public Map<String, String> hide(
+            @PathVariable long id,
+            HttpSession session) {
+        long userId = access.current(session).id();
+
+        int changed = jdbc.update(
+                "UPDATE APP_NOTIFICACION "
+                        + "SET VISIBLE='N' "
+                        + "WHERE ID_NOTIFICACION=? "
+                        + "AND ID_USUARIO=? "
+                        + "AND VISIBLE='S'",
+                id,
+                userId);
+
+        if (changed == 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Notificación no encontrada.");
+        }
+
+        return Map.of("status", "eliminada");
+    }
+
+    @DeleteMapping
+    public Map<String, Object> hideAll(HttpSession session) {
+        long userId = access.current(session).id();
+
+        int changed = jdbc.update(
+                "UPDATE APP_NOTIFICACION "
+                        + "SET VISIBLE='N' "
+                        + "WHERE ID_USUARIO=? "
+                        + "AND VISIBLE='S'",
+                userId);
+
+        return Map.of(
+                "status", "eliminadas",
+                "count", changed);
     }
     public record Notice(long id,String module,String message,boolean read,String createdAt) {}
     public record Page(long unread,List<Notice> items,boolean hasMore) {}
