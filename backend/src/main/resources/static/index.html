@@ -589,8 +589,8 @@
             + Agregar trabajador
 
         </button>
-        <button class="secondary-button" id="importEmployeesButton" type="button">
-    Importar desde Excel
+<button class="secondary-button" id="importEmployeesButton" type="button">
+    Importar desde
 </button>
 
     </div>
@@ -858,6 +858,40 @@
             <button id="cancelEmployeeAccount" class="secondary-button" type="button">Cancelar</button>
         </form>
     </dialog>
+   <dialog id="employeeImportDialog" class="profile-dialog">
+    <h2>Importar trabajadores</h2>
+    <p>Elige cómo quieres cargar los datos:</p>
+
+    <button id="employeeImportExcel" class="secondary-button" type="button">
+        Excel (.xlsx o .xls)
+    </button>
+
+    <button id="employeeImportCsv" class="secondary-button" type="button">
+        CSV
+    </button>
+
+    <button id="employeeImportPaste" class="secondary-button" type="button">
+        Pegar texto
+    </button>
+
+    <div id="employeeImportPasteArea" hidden>
+        <label for="employeeImportText">
+            Pega la tabla con las columnas NOMBRE, CARGO, AREA y RUT:
+        </label>
+        <textarea
+            id="employeeImportText"
+            rows="8"
+            placeholder="NOMBRE&#9;CARGO&#9;AREA&#9;RUT">
+        </textarea>
+        <button id="employeeImportTextSubmit" class="primary-button" type="button">
+            Revisar e importar
+        </button>
+    </div>
+
+    <button id="employeeImportClose" class="secondary-button" type="button">
+        Cancelar
+    </button>
+</dialog>
     <dialog id="changePasswordDialog" class="profile-dialog" aria-labelledby="changePasswordTitle">
         <h2 id="changePasswordTitle">Cambiar contraseña</h2>
         <form id="changePasswordForm" class="auth-form">

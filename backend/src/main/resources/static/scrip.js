@@ -1245,16 +1245,155 @@ employeeSearch?.addEventListener("input", () => {
     const query = employeeSearch.value.trim().toLocaleLowerCase("es");
     [...employeeBody.rows].forEach((row) => { row.hidden = !row.textContent.toLocaleLowerCase("es").includes(query); });
 });
+const importDialog = document.getElementById("employeeImportDialog");
+const pasteArea = document.getElementById("employeeImportPasteArea");
+const pasteText = document.getElementById("employeeImportText");
+
 document.getElementById("importEmployeesButton")?.addEventListener("click", () => {
     if (!isOwnerRole()) return;
+    importDialog?.showModal();
+});
 
+document.getElementById("employeeImportClose")?.addEventListener("click", () => {
+    importDialog?.close();
+    pasteArea.hidden = true;
+    pasteText.value = "";
+});
+
+async function confirmarTrabajadores(filas) {
+    if (!filas.length) {
+        alert("No encontré trabajadores para importar.");
+        return;
+    }
+
+    const confirmar = window.confirm(
+        `Se importarán ${filas.length} trabajadores. ¿Deseas continuar?`
+    );
+    if (!confirmar) return;
+
+    try {
+        await apiRequest("/api/empleados/importacion/confirm", {
+            method: "POST",
+            body: JSON.stringify({ filas })
+        });
+
+        importDialog?.close();
+        pasteArea.hidden = true;
+        pasteText.value = "";
+        await loadEmployees();
+        await loadDashboardMetrics();
+        alert("Trabajadores importados correctamente.");
+    } catch (error) {
+        alert(`No se pudo importar: ${error.message}`);
+    }
+}
+
+function convertirTextoAFilas(texto) {
+    const lineas = texto.trim().split(/\r?\n/).filter(linea => linea.trim());
+    if (lineas.length < 2) {
+        throw new Error("Pega los encabezados y al menos un trabajador.");
+    }
+
+    const separador = lineas[0].includes("\t")
+        ? "\t"
+        : lineas[0].includes(";")
+            ? ";"
+            : ",";
+
+    function separarLinea(linea) {
+        const celdas = [];
+        let valor = "";
+        let dentroDeComillas = false;
+
+        for (let i = 0; i < linea.length; i++) {
+            const caracter = linea[i];
+
+            if (caracter === '"' && linea[i + 1] === '"' && dentroDeComillas) {
+                valor += '"';
+                i++;
+            } else if (caracter === '"') {
+                dentroDeComillas = !dentroDeComillas;
+            } else if (caracter === separador && !dentroDeComillas) {
+                celdas.push(valor.trim());
+                valor = "";
+            } else {
+                valor += caracter;
+            }
+        }
+
+        celdas.push(valor.trim());
+        return celdas;
+    }
+
+    const encabezados = separarLinea(lineas[0]).map(encabezado =>
+        encabezado.normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim()
+            .toLowerCase()
+    );
+
+    const indice = nombre => encabezados.findIndex(encabezado =>
+        encabezado === nombre || encabezado === `${nombre} trabajador`
+    );
+
+    const columnas = {
+        nombre: indice("nombre"),
+        cargo: indice("cargo"),
+        area: indice("area"),
+        rut: indice("rut")
+    };
+
+    const faltantes = Object.entries(columnas)
+        .filter(([, posicion]) => posicion < 0)
+        .map(([nombre]) => nombre.toUpperCase());
+
+    if (faltantes.length) {
+        throw new Error(`Faltan columnas en los encabezados: ${faltantes.join(", ")}.`);
+    }
+
+    return lineas.slice(1).map(linea => {
+        const celdas = separarLinea(linea);
+        return {
+            nombre: celdas[columnas.nombre] || "",
+            cargo: celdas[columnas.cargo] || "",
+            area: celdas[columnas.area] || "",
+            rut: celdas[columnas.rut] || ""
+        };
+    }).filter(fila => fila.nombre || fila.cargo || fila.area || fila.rut);
+}
+
+document.getElementById("employeeImportPaste")?.addEventListener("click", () => {
+    pasteArea.hidden = false;
+    pasteText.focus();
+});
+
+document.getElementById("employeeImportTextSubmit")?.addEventListener("click", async () => {
+    try {
+        const filas = convertirTextoAFilas(pasteText.value);
+        await confirmarTrabajadores(filas);
+    } catch (error) {
+        alert(error.message);
+    }
+});
+
+async function seleccionarArchivo(tipo) {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".xlsx,.xls";
+    input.accept = tipo === "excel" ? ".xlsx,.xls" : ".csv";
 
     input.addEventListener("change", async () => {
-        const archivo = input.files[0];
+        const archivo = input.files?.[0];
         if (!archivo) return;
+
+        if (tipo === "csv") {
+            try {
+                const filas = convertirTextoAFilas(await archivo.text());
+                await confirmarTrabajadores(filas);
+            } catch (error) {
+                alert(`No se pudo leer el CSV: ${error.message}`);
+            }
+            return;
+        }
 
         const datos = new FormData();
         datos.append("archivo", archivo);
@@ -1268,43 +1407,33 @@ document.getElementById("importEmployeesButton")?.addEventListener("click", () =
             const filas = vistaPrevia.filas || [];
             const conErrores = filas.filter(fila => !fila.valida);
 
-            if (conErrores.length > 0) {
+            if (conErrores.length) {
                 const detalle = conErrores
                     .map(fila => `Fila ${fila.fila}: ${fila.errores.join(", ")}`)
                     .join("\n");
-
                 alert(`Hay filas que debes corregir en el Excel:\n\n${detalle}`);
                 return;
             }
 
-            if (filas.length === 0) {
-                alert("El archivo no contiene trabajadores para importar.");
-                return;
-            }
-
-            const confirmar = window.confirm(
-                `Se importarán ${filas.length} trabajadores. ¿Deseas continuar?`
+            await confirmarTrabajadores(
+                filas.map(({ nombre, cargo, area, rut }) => ({
+                    nombre, cargo, area, rut
+                }))
             );
-            if (!confirmar) return;
-
-            await apiRequest("/api/empleados/importacion/confirm", {
-                method: "POST",
-                body: JSON.stringify({
-                    filas: filas.map(({ nombre, cargo, area, rut }) => ({
-                        nombre, cargo, area, rut
-                    }))
-                })
-            });
-
-            await loadEmployees();
-            await loadDashboardMetrics();
-            alert("Trabajadores importados correctamente.");
         } catch (error) {
-            alert(`No se pudo importar el archivo: ${error.message}`);
+            alert(`No se pudo importar el Excel: ${error.message}`);
         }
     });
 
     input.click();
+}
+
+document.getElementById("employeeImportExcel")?.addEventListener("click", () => {
+    seleccionarArchivo("excel");
+});
+
+document.getElementById("employeeImportCsv")?.addEventListener("click", () => {
+    seleccionarArchivo("csv");
 });
 document.getElementById("addEmployeeButton")?.addEventListener("click", async () => {
     if (!isOwnerRole()) return;
