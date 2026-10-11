@@ -33,59 +33,70 @@ public class OracleConnectionController {
         this.access = access;
     }
 
-    @GetMapping
-    public List<Employee> list(HttpSession session) {
-        RoleAccessService.User user = access.current(session);
-        String sql =
-                "SELECT E.ID_EMPLEADO, E.NOMBRE, E.CARGO, E.AREA, E.ESTADO, " +
-                        "CASE WHEN U.ID_USUARIO IS NULL THEN 0 ELSE 1 END AS TIENE_CUENTA " +
-                        "FROM APP_EMPLEADO E LEFT JOIN APP_USUARIO U ON U.ID_EMPLEADO = E.ID_EMPLEADO " +
-                        "ORDER BY E.ID_EMPLEADO";
-        return jdbcTemplate.query(sql,
-                (rs, rowNum) -> new Employee(
-                        rs.getLong("ID_EMPLEADO"),
-                        rs.getString("NOMBRE"),
-                        rs.getString("CARGO"),
-                        rs.getString("AREA"),
-                        "ACTIVO".equalsIgnoreCase(rs.getString("ESTADO")),
-                        rs.getInt("TIENE_CUENTA") == 1
-                )
-        );
+@GetMapping
+public List<Employee> list(HttpSession session) {
+    RoleAccessService.User user = access.current(session);
+    String sql =
+            "SELECT E.ID_EMPLEADO, E.NOMBRE, E.CARGO, E.AREA, E.RUT, E.ESTADO, " +
+                    "CASE WHEN U.ID_USUARIO IS NULL THEN 0 ELSE 1 END AS TIENE_CUENTA " +
+                    "FROM APP_EMPLEADO E LEFT JOIN APP_USUARIO U ON U.ID_EMPLEADO = E.ID_EMPLEADO " +
+                    "ORDER BY E.ID_EMPLEADO";
+    return jdbcTemplate.query(sql,
+            (rs, rowNum) -> new Employee(
+                    rs.getLong("ID_EMPLEADO"),
+                    rs.getString("NOMBRE"),
+                    rs.getString("CARGO"),
+                    rs.getString("AREA"),
+                    rs.getString("RUT"),
+                    "ACTIVO".equalsIgnoreCase(rs.getString("ESTADO")),
+                    rs.getInt("TIENE_CUENTA") == 1
+            )
+    );
+}
+
+   @PostMapping
+public ResponseEntity<Map<String, String>> create(@RequestBody EmployeeRequest request, HttpSession session) {
+    RoleAccessService.User user = access.current(session);
+    if (!access.isOwner(user)) {
+        return ResponseEntity.status(403).body(Map.of("error", "No tienes permiso para crear personal."));
+    }
+    if (!valid(request)) {
+        return ResponseEntity.badRequest().body(Map.of("error", "Completa nombre, cargo y área."));
     }
 
-    @PostMapping
-    public ResponseEntity<Map<String, String>> create(@RequestBody EmployeeRequest request, HttpSession session) {
-        RoleAccessService.User user = access.current(session);
-        if (!access.isOwner(user)) return ResponseEntity.status(403).body(Map.of("error", "No tienes permiso para crear personal."));
-        if (!valid(request)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Completa nombre, cargo y área."));
-        }
-        String status = request.active() == null || request.active() ? "ACTIVO" : "INACTIVO";
-        jdbcTemplate.update(
-                "INSERT INTO APP_EMPLEADO (NOMBRE, CARGO, AREA, ESTADO) VALUES (?, ?, ?, ?)",
-                request.name().trim(), request.role().trim(), request.area().trim(), status
-        );
-        activity.record(session, "CREAR", "Personal", "Se agregó un trabajador");
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("status", "guardado"));
+    String status = request.active() == null || request.active() ? "ACTIVO" : "INACTIVO";
+    String rut = request.rut() == null || request.rut().isBlank() ? null : request.rut().trim();
+
+    jdbcTemplate.update(
+            "INSERT INTO APP_EMPLEADO (NOMBRE, CARGO, AREA, RUT, ESTADO) VALUES (?, ?, ?, ?, ?)",
+            request.name().trim(), request.role().trim(), request.area().trim(), rut, status
+    );
+    activity.record(session, "CREAR", "Personal", "Se agregó un trabajador");
+    return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("status", "guardado"));
+}
+
+   @PutMapping("/{id}")
+public ResponseEntity<Map<String, String>> update(@PathVariable long id, @RequestBody EmployeeRequest request, HttpSession session) {
+    RoleAccessService.User user = access.current(session);
+    if (!access.isOwner(user)) {
+        return ResponseEntity.status(403).body(Map.of("error", "No tienes permiso para modificar Personal."));
+    }
+    if (!valid(request)) {
+        return ResponseEntity.badRequest().body(Map.of("error", "Completa nombre, cargo y área."));
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<Map<String, String>> update(@PathVariable long id, @RequestBody EmployeeRequest request, HttpSession session) {
-        RoleAccessService.User user = access.current(session);
-        if (!access.isOwner(user)) return ResponseEntity.status(403).body(Map.of("error", "No tienes permiso para modificar Personal."));
-        if (!valid(request)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Completa nombre, cargo y área."));
-        }
-        String status = request.active() == null || request.active() ? "ACTIVO" : "INACTIVO";
-        int changed = jdbcTemplate.update(
-                "UPDATE APP_EMPLEADO SET NOMBRE = ?, CARGO = ?, AREA = ?, ESTADO = ? WHERE ID_EMPLEADO = ?",
-                request.name().trim(), request.role().trim(), request.area().trim(), status, id
-        );
-        if (changed == 0) return ResponseEntity.notFound().build();
-        activity.record(session, "ACTUALIZAR", "Personal", "Se actualizaron los datos de un trabajador");
-        return ResponseEntity.ok(Map.of("status", "actualizado"));
-    }
+    String status = request.active() == null || request.active() ? "ACTIVO" : "INACTIVO";
+    String rut = request.rut() == null || request.rut().isBlank() ? null : request.rut().trim();
 
+    int changed = jdbcTemplate.update(
+            "UPDATE APP_EMPLEADO SET NOMBRE = ?, CARGO = ?, AREA = ?, RUT = ?, ESTADO = ? WHERE ID_EMPLEADO = ?",
+            request.name().trim(), request.role().trim(), request.area().trim(), rut, status, id
+    );
+    if (changed == 0) return ResponseEntity.notFound().build();
+
+    activity.record(session, "ACTUALIZAR", "Personal", "Se actualizaron los datos de un trabajador");
+    return ResponseEntity.ok(Map.of("status", "actualizado"));
+}
     @DeleteMapping("/{id}")
     @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<?> delete(@PathVariable long id, HttpSession session) {
@@ -112,11 +123,9 @@ public class OracleConnectionController {
                 && request.role() != null && !request.role().isBlank()
                 && request.area() != null && !request.area().isBlank();
     }
-
-    public record Employee(long id, String name, String role, String area, boolean active, boolean hasAccount) {}
-    public record EmployeeRequest(String name, String role, String area, Boolean active) {}
+public record Employee(long id, String name, String role, String area, String rut, boolean active, boolean hasAccount) {}
+public record EmployeeRequest(String name, String role, String area, String rut, Boolean active) {}
 }
-
 
 
 

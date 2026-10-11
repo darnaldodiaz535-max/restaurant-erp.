@@ -1245,6 +1245,67 @@ employeeSearch?.addEventListener("input", () => {
     const query = employeeSearch.value.trim().toLocaleLowerCase("es");
     [...employeeBody.rows].forEach((row) => { row.hidden = !row.textContent.toLocaleLowerCase("es").includes(query); });
 });
+document.getElementById("importEmployeesButton")?.addEventListener("click", () => {
+    if (!isOwnerRole()) return;
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xlsx,.xls";
+
+    input.addEventListener("change", async () => {
+        const archivo = input.files[0];
+        if (!archivo) return;
+
+        const datos = new FormData();
+        datos.append("archivo", archivo);
+
+        try {
+            const vistaPrevia = await uploadRequest(
+                "/api/empleados/importacion/preview",
+                datos
+            );
+
+            const filas = vistaPrevia.filas || [];
+            const conErrores = filas.filter(fila => !fila.valida);
+
+            if (conErrores.length > 0) {
+                const detalle = conErrores
+                    .map(fila => `Fila ${fila.fila}: ${fila.errores.join(", ")}`)
+                    .join("\n");
+
+                alert(`Hay filas que debes corregir en el Excel:\n\n${detalle}`);
+                return;
+            }
+
+            if (filas.length === 0) {
+                alert("El archivo no contiene trabajadores para importar.");
+                return;
+            }
+
+            const confirmar = window.confirm(
+                `Se importarán ${filas.length} trabajadores. ¿Deseas continuar?`
+            );
+            if (!confirmar) return;
+
+            await apiRequest("/api/empleados/importacion/confirm", {
+                method: "POST",
+                body: JSON.stringify({
+                    filas: filas.map(({ nombre, cargo, area, rut }) => ({
+                        nombre, cargo, area, rut
+                    }))
+                })
+            });
+
+            await loadEmployees();
+            await loadDashboardMetrics();
+            alert("Trabajadores importados correctamente.");
+        } catch (error) {
+            alert(`No se pudo importar el archivo: ${error.message}`);
+        }
+    });
+
+    input.click();
+});
 document.getElementById("addEmployeeButton")?.addEventListener("click", async () => {
     if (!isOwnerRole()) return;
     const name = prompt("Nombre del trabajador:"); if (!name?.trim()) return;
