@@ -874,19 +874,24 @@
         Pegar texto
     </button>
 
-    <div id="employeeImportPasteArea" hidden>
-        <label for="employeeImportText">
-            Pega la tabla con las columnas NOMBRE, CARGO, AREA y RUT:
-        </label>
-        <textarea
-            id="employeeImportText"
-            rows="8"
-            placeholder="NOMBRE&#9;CARGO&#9;AREA&#9;RUT">
-        </textarea>
-        <button id="employeeImportTextSubmit" class="primary-button" type="button">
-            Revisar e importar
-        </button>
-    </div>
+<div id="employeeImportPasteArea" class="employee-import-paste" hidden>
+    <label for="employeeImportText">
+        Pega los encabezados y los trabajadores. Separa las columnas con tabulaciones:
+    </label>
+
+    <p class="employee-import-hint">
+        Orden: NOMBRE, CARGO, AREA y RUT. La primera línea debe llevar esos encabezados.
+    </p>
+
+    <textarea
+        id="employeeImportText"
+        rows="6"
+        placeholder="NOMBRE&#9;CARGO&#9;AREA&#9;RUT&#10;Arnaldo&#9;Trabajador&#9;Salón&#9;280888176"></textarea>
+
+    <button id="employeeImportTextSubmit" class="primary-button" type="button">
+        Revisar e importar
+    </button>
+</div>
 
     <button id="employeeImportClose" class="secondary-button" type="button">
         Cancelar

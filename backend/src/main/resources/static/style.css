@@ -1692,3 +1692,44 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .notification-footer.notification-clear {
     color: #b91c1c;
 }
+#employeeImportPasteArea[hidden] {
+    display: none !important;
+}
+
+#employeeImportPasteArea:not([hidden]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin: 16px 0;
+}
+
+#employeeImportPasteArea label {
+    display: block;
+    margin: 0;
+    line-height: 1.45;
+}
+
+#employeeImportPasteArea .employee-import-hint {
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+#employeeImportText {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    min-height: 150px;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+#employeeImportTextSubmit {
+    width: 100%;
+}
