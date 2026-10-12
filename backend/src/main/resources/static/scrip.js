@@ -662,11 +662,19 @@ async function renderModule(name, selectedArea = null) {
     const icon = document.createElement("span"); icon.className = "module-icon"; icon.textContent = icons[slug] || "📋"; icon.setAttribute("aria-hidden", "true");
     const copy = document.createElement("div"); copy.append(title, description); heading.append(icon, copy);
     const add = document.createElement("button"); add.className = "primary-button"; add.type = "button"; add.textContent = `+ ${name === "Horarios" ? "Crear horario por trabajador" : name === "Asistencia" ? "Registrar asistencia" : "Agregar registro"}`;
+    const importInventory = document.createElement("button");
+importInventory.className = "secondary-button";
+importInventory.type = "button";
+importInventory.textContent = "Importar";
+importInventory.hidden = name !== "Inventario" || !canManageModule(slug);
+importInventory.addEventListener("click", () => {
+    document.getElementById("inventoryImportDialog")?.showModal();
+});
     if (!canManageModule(slug)) {
         add.disabled = true; add.title = "Solo administración puede gestionar estos registros";
     }
     if (selectedArea === "SIN_AREA") add.hidden = true;
-    header.append(heading, add);
+  header.append(heading, add, importInventory);
     const section = document.createElement("div"); section.className = "data-section generic-data";
     const controls = document.createElement("div"); controls.className = "module-controls";
     const search = document.createElement("input"); search.type = "search"; search.placeholder = `Buscar en ${name.toLocaleLowerCase("es")}...`; search.setAttribute("aria-label", `Buscar en ${name}`);
@@ -1248,6 +1256,194 @@ employeeSearch?.addEventListener("input", () => {
 const importDialog = document.getElementById("employeeImportDialog");
 const pasteArea = document.getElementById("employeeImportPasteArea");
 const pasteText = document.getElementById("employeeImportText");
+const inventoryImportDialog = document.getElementById("inventoryImportDialog");
+const inventoryPasteArea = document.getElementById("inventoryImportPasteArea");
+const inventoryPasteText = document.getElementById("inventoryImportText");
+
+document.getElementById("inventoryImportPaste")?.addEventListener("click", () => {
+    inventoryPasteArea.hidden = false;
+    inventoryPasteText.focus();
+});
+
+document.getElementById("inventoryImportClose")?.addEventListener("click", () => {
+    inventoryImportDialog?.close();
+    inventoryPasteArea.hidden = true;
+    inventoryPasteText.value = "";
+});
+function convertirTextoAInsumos(texto) {
+    const lineas = texto.trim().split(/\r?\n/).filter(linea => linea.trim());
+
+    if (lineas.length < 2) {
+        throw new Error("Incluye los encabezados y al menos un insumo.");
+    }
+
+    const separador = lineas[0].includes("\t")
+        ? "\t"
+        : lineas[0].includes(";")
+            ? ";"
+            : ",";
+
+    function separarLinea(linea) {
+        const celdas = [];
+        let valor = "";
+        let entreComillas = false;
+
+        for (let i = 0; i < linea.length; i++) {
+            const caracter = linea[i];
+
+            if (caracter === '"' && linea[i + 1] === '"' && entreComillas) {
+                valor += '"';
+                i++;
+            } else if (caracter === '"') {
+                entreComillas = !entreComillas;
+            } else if (caracter === separador && !entreComillas) {
+                celdas.push(valor.trim());
+                valor = "";
+            } else {
+                valor += caracter;
+            }
+        }
+
+        celdas.push(valor.trim());
+        return celdas;
+    }
+
+    const encabezados = separarLinea(lineas[0]).map(encabezado =>
+        encabezado.normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]+/g, "_")
+    );
+
+    const columnas = {
+        insumo: encabezados.indexOf("INSUMO"),
+        categoria: encabezados.indexOf("CATEGORIA"),
+        stockActual: encabezados.indexOf("STOCK_ACTUAL"),
+        unidad: encabezados.indexOf("UNIDAD"),
+        stockMinimo: encabezados.indexOf("STOCK_MINIMO"),
+        stockMaximo: encabezados.indexOf("STOCK_MAXIMO"),
+        grupo: encabezados.indexOf("GRUPO")
+    };
+
+    const faltantes = Object.entries(columnas)
+        .filter(([, indice]) => indice < 0)
+        .map(([nombre]) => nombre);
+
+    if (faltantes.length) {
+        throw new Error(`Faltan columnas: ${faltantes.join(", ")}.`);
+    }
+
+    return lineas.slice(1).map(linea => {
+        const celdas = separarLinea(linea);
+        return Object.fromEntries(
+            Object.entries(columnas).map(([nombre, indice]) => [
+                nombre,
+                celdas[indice] || ""
+            ])
+        );
+    }).filter(fila => Object.values(fila).some(valor => valor.trim()));
+}
+
+async function confirmarInsumos(filas) {
+    if (!filas.length) {
+        alert("No encontré insumos para importar.");
+        return;
+    }
+
+    if (!window.confirm(`Se importarán ${filas.length} insumos. ¿Deseas continuar?`)) {
+        return;
+    }
+
+    try {
+        await apiRequest("/api/inventario/importacion/confirm", {
+            method: "POST",
+            body: JSON.stringify({ filas })
+        });
+
+        inventoryImportDialog?.close();
+        inventoryPasteArea.hidden = true;
+        inventoryPasteText.value = "";
+        await renderModule("Inventario");
+        alert("Insumos importados correctamente.");
+    } catch (error) {
+        alert(`No se pudo importar: ${error.message}`);
+    }
+}
+
+document.getElementById("inventoryImportTextSubmit")?.addEventListener("click", async () => {
+    try {
+        await confirmarInsumos(convertirTextoAInsumos(inventoryPasteText.value));
+    } catch (error) {
+        alert(error.message);
+    }
+});
+
+document.getElementById("inventoryImportCsv")?.addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv";
+
+    input.addEventListener("change", async () => {
+        const archivo = input.files?.[0];
+        if (!archivo) return;
+
+        try {
+            const filas = convertirTextoAInsumos(await archivo.text());
+            await confirmarInsumos(filas);
+        } catch (error) {
+            alert(`No se pudo leer el CSV: ${error.message}`);
+        }
+    });
+
+    input.click();
+});
+
+document.getElementById("inventoryImportExcel")?.addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xlsx,.xls";
+
+    input.addEventListener("change", async () => {
+        const archivo = input.files?.[0];
+        if (!archivo) return;
+
+        const datos = new FormData();
+        datos.append("archivo", archivo);
+
+        try {
+            const vistaPrevia = await uploadRequest(
+                "/api/inventario/importacion/preview",
+                datos
+            );
+
+            const filas = vistaPrevia.filas || [];
+            const conErrores = filas.filter(fila => !fila.valida);
+
+            if (conErrores.length) {
+                const detalle = conErrores
+                    .map(fila => `Fila ${fila.fila}: ${fila.errores.join(", ")}`)
+                    .join("\n");
+                alert(`Corrige estas filas del Excel:\n\n${detalle}`);
+                return;
+            }
+
+            await confirmarInsumos(filas.map(fila => ({
+                insumo: fila.insumo,
+                categoria: fila.categoria,
+                stockActual: fila.stockActual,
+                unidad: fila.unidad,
+                stockMinimo: fila.stockMinimo,
+                stockMaximo: fila.stockMaximo,
+                grupo: fila.grupo
+            })));
+        } catch (error) {
+            alert(`No se pudo importar el Excel: ${error.message}`);
+        }
+    });
+
+    input.click();
+});
 
 document.getElementById("importEmployeesButton")?.addEventListener("click", () => {
     if (!isOwnerRole()) return;
