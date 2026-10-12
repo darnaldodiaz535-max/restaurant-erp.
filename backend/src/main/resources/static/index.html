@@ -897,6 +897,47 @@
         Cancelar
     </button>
 </dialog>
+<dialog id="inventoryImportDialog" class="profile-dialog">
+    <h2>Importar inventario</h2>
+    <p>Elige cómo quieres cargar los insumos:</p>
+
+    <button id="inventoryImportExcel" class="secondary-button" type="button">
+        Excel (.xlsx o .xls)
+    </button>
+
+    <button id="inventoryImportCsv" class="secondary-button" type="button">
+        CSV
+    </button>
+
+    <button id="inventoryImportPaste" class="secondary-button" type="button">
+        Pegar texto
+    </button>
+
+    <div id="inventoryImportPasteArea" class="employee-import-paste" hidden>
+        <label for="inventoryImportText">
+            Pega los encabezados y los insumos. Separa las columnas con tabulaciones:
+        </label>
+
+        <p class="employee-import-hint">
+            Orden: INSUMO, CATEGORIA, STOCK_ACTUAL, UNIDAD, STOCK_MINIMO,
+            STOCK_MAXIMO y GRUPO. Grupo debe ser COCINA o BARRA.
+            STOCK_MAXIMO puede quedar vacío.
+        </p>
+
+        <textarea
+            id="inventoryImportText"
+            rows="8"
+            placeholder="INSUMO&#9;CATEGORIA&#9;STOCK_ACTUAL&#9;UNIDAD&#9;STOCK_MINIMO&#9;STOCK_MAXIMO&#9;GRUPO"></textarea>
+
+        <button id="inventoryImportTextSubmit" class="primary-button" type="button">
+            Revisar e importar
+        </button>
+    </div>
+
+    <button id="inventoryImportClose" class="secondary-button" type="button">
+        Cancelar
+    </button>
+</dialog>
     <dialog id="changePasswordDialog" class="profile-dialog" aria-labelledby="changePasswordTitle">
         <h2 id="changePasswordTitle">Cambiar contraseña</h2>
         <form id="changePasswordForm" class="auth-form">
