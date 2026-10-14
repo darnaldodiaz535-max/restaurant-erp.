@@ -110,7 +110,11 @@ public class AttendanceController {
             case "mes" -> { from = anchor.withDayOfMonth(1); to = YearMonth.from(anchor).atEndOfMonth(); }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El período debe ser dia, semana o mes.");
         }
-        Long selectedEmployee = admin ? empleadoId : user.employeeId();
+        // Administrators can request all staff by leaving empleadoId unset.
+        // Avoid ternary unboxing of null when the other branch is primitive long.
+        Long selectedEmployee;
+        if (admin) selectedEmployee = empleadoId;
+        else selectedEmployee = Long.valueOf(user.employeeId());
         if (empleadoId != null && !admin) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo administración puede consultar a otra persona.");
 
         String filter = selectedEmployee == null ? "" : " AND E.ID_EMPLEADO=?";
