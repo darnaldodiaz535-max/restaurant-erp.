@@ -56,6 +56,10 @@ public class ModuleController {
         if (ref != null) sql.append(" LEFT JOIN APP_EMPLEADO E ON E.ID_EMPLEADO = T.").append(ref.column);
         RoleAccessService.User user = access.current(session);
         List<Object> args = new ArrayList<>();
+        if ("asistencia".equalsIgnoreCase(module) && !Set.of("ADMIN", "EMPRESA").contains(user.role())) {
+            sql.append(" WHERE T.EMPLEADO_ID=?");
+            args.add(user.employeeId());
+        }
         if ("tareas-diarias".equals(module)) {
             String clause = sql.indexOf(" WHERE ") >= 0 ? " AND " : " WHERE ";
             if ("SIN_AREA".equals(area)) {
@@ -83,6 +87,7 @@ public class ModuleController {
     @org.springframework.transaction.annotation.Transactional
     @PostMapping("/{module}")
     public ResponseEntity<Map<String, String>> create(@PathVariable String module, @RequestBody Request request, HttpSession session) {
+        rejectGenericAttendanceWrite(module);
         Def d = definition(module); access.requireModuleEdit(session, module, false); Object[] values = values(d, request, session); validateArea(module, values, session);
         String columns = d.fields.stream().map(Field::column).collect(Collectors.joining(", "));
         String marks = d.fields.stream().map(f -> "?").collect(Collectors.joining(", "));
@@ -96,6 +101,7 @@ public class ModuleController {
     @org.springframework.transaction.annotation.Transactional
     @PutMapping("/{module}/{id}")
     public ResponseEntity<Map<String, String>> update(@PathVariable String module, @PathVariable long id, @RequestBody Request request, HttpSession session) {
+        rejectGenericAttendanceWrite(module);
         Def d = definition(module); access.requireModuleEdit(session, module, false); Object[] values = values(d, request, session);
         requireRecord(module, d, id, session);
                 if ("tareas-diarias".equals(module)) {
@@ -162,6 +168,7 @@ public class ModuleController {
     @org.springframework.transaction.annotation.Transactional
     @DeleteMapping("/{module}/{id}")
     public ResponseEntity<Void> delete(@PathVariable String module, @PathVariable long id, HttpSession session) {
+        rejectGenericAttendanceWrite(module);
         Def d = definition(module); access.requireModuleEdit(session, module, true);
         requireRecord(module, d, id, session);
         Long previous=recipient(d,id);
@@ -174,6 +181,9 @@ public class ModuleController {
     }
 
     private String label(String module) { return switch(module) { case "turnos" -> "Horarios"; case "tareas-diarias" -> "Tareas diarias"; case "incidencias" -> "Incidencias"; default -> module; }; }
+    private void rejectGenericAttendanceWrite(String module) {
+        if ("asistencia".equalsIgnoreCase(module)) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Usa los botones Entrada y Salida para registrar asistencia.");
+    }
     private Long recipient(Def d,long id) {
         var ref=d.fields.stream().filter(f->f.kind==Kind.EMPLOYEE).findFirst().orElse(null);
         if(ref==null) return null;

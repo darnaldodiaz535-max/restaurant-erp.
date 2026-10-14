@@ -1740,3 +1740,16 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     font-weight: 700;
     cursor: pointer;
 }
+
+.attendance-panel { display: grid; gap: 18px; }
+.attendance-clock, .attendance-summary-item { border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; background: #fff; }
+.attendance-clock h3 { margin: 0 0 14px; }
+.attendance-rut-label { display: grid; gap: 7px; max-width: 340px; color: #374151; font-weight: 600; }
+.attendance-rut, .attendance-filter { min-height: 42px; padding: 8px 11px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #111827; }
+.attendance-actions, .attendance-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.attendance-filters { margin: 0; }
+.attendance-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.attendance-summary-item { display: grid; gap: 5px; }
+.attendance-summary-item span { color: #4b5563; font-size: 14px; }
+.attendance-table-wrap { overflow-x: auto; }
+.attendance-table-wrap table { min-width: 680px; }

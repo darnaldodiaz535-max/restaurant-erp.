@@ -94,6 +94,7 @@ function readStore(key, fallback) {
 }
 function accessRole() { return currentProfile?.role || ""; }
 function isOwnerRole() { return ["ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_LOCAL"].includes(accessRole()); }
+function isAdminRole() { return ["ADMIN", "EMPRESA"].includes(accessRole()); }
 function isSalonRole() { return accessRole() === "JEFE_SALON"; }
 function isKitchenRole() { return accessRole() === "JEFE_COCINA"; }
 function isWorkerRole() { return ["TRABAJADOR", "EMPLEADO"].includes(accessRole()); }
@@ -403,6 +404,7 @@ function showScreen(link) {
     else if (label === "Personal") personal.hidden = false;
     else if (label === "Tareas diarias") renderTaskAreas();
     else if (label === "Check-in Diario") void renderCheckinModule();
+    else if (label === "Asistencia") void renderAttendanceModule();
     else if (["Cocina", "Salón", "Barra", "Copería"].includes(label)) void renderArea(normalizeArea(label));
     else void renderModule(label);
     activateNav(link);
@@ -533,6 +535,106 @@ async function renderCheckinAdminArea(section, area, revision, feedback) {
     } catch (e) { feedback.textContent = "No se pudo cargar el reporte administrativo: " + e.message; }
 }
 
+async function renderAttendanceModule() {
+    const revision = ++screenRevision;
+    dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
+    otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--asistencia";
+    otherModule.style.setProperty("--module-accent", "#0891b2");
+    const header = checkinHeader("Asistencia", "Registra tu entrada y salida. Administración puede revisar y descargar los reportes del personal.");
+    otherModule.appendChild(header);
+    const section = checkinNode("section", "generic-data attendance-panel");
+    const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "status"); feedback.setAttribute("aria-live", "polite");
+    const profileCard = checkinNode("div", "attendance-clock");
+    let identity = { nombre: currentProfile?.name || "", rut: "" };
+    try { identity = await apiRequest("/api/asistencia/me"); } catch (error) { feedback.textContent = error.message; }
+    if (revision !== screenRevision) return;
+    profileCard.appendChild(checkinNode("h3", "", "Marcar asistencia · " + (identity.nombre || currentProfile?.name || "")));
+    const rutLabel = checkinNode("label", "attendance-rut-label", "RUT registrado en tu cuenta");
+    const rutInput = checkinNode("input", "attendance-rut"); rutInput.type = "text"; rutInput.value = identity.rut || ""; rutInput.autocomplete = "off"; rutInput.maxLength = 20; rutInput.placeholder = "Escribe tu RUT"; rutInput.setAttribute("aria-label", "RUT registrado en tu cuenta"); rutLabel.appendChild(rutInput);
+    profileCard.appendChild(rutLabel);
+    const actions = checkinNode("div", "attendance-actions");
+    const mark = async (type) => {
+        if (!rutInput.value.trim()) { feedback.textContent = "Escribe tu RUT para continuar."; rutInput.focus(); return; }
+        if (!navigator.mediaDevices?.getUserMedia) { feedback.textContent = "Este dispositivo no permite abrir la cámara desde el navegador."; return; }
+        let stream;
+        try {
+            feedback.textContent = "Abriendo cámara para registrar la foto…";
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+            const video = document.createElement("video"); video.muted = true; video.playsInline = true; video.srcObject = stream;
+            await video.play();
+            await new Promise(resolve => { if (video.videoWidth > 0) return resolve(); video.addEventListener("loadedmetadata", resolve, { once: true }); setTimeout(resolve, 3000); });
+            if (!video.videoWidth || !video.videoHeight) throw new Error("La cámara no entregó una imagen. Vuelve a intentarlo.");
+            const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+            const canvas = document.createElement("canvas"); canvas.width = Math.max(1, Math.round(video.videoWidth * scale)); canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+            canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+            const photo = await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("No se pudo capturar la foto.")), "image/jpeg", 0.78));
+            const formData = new FormData(); formData.append("tipo", type); formData.append("rut", rutInput.value.trim()); formData.append("foto", photo, "asistencia.jpg");
+            const result = await uploadRequest("/api/asistencia/marcar", formData);
+            feedback.textContent = `${type === "ENTRADA" ? "Entrada" : "Salida"} registrada a las ${result.hora}.`;
+            await loadAttendanceReport(section, controls.period.value, controls.date.value, admin ? controls.employee.value : "", feedback);
+        } catch (error) { feedback.textContent = error.message || "No se pudo registrar la asistencia."; }
+        finally { stream?.getTracks().forEach(track => track.stop()); }
+    };
+    actions.append(checkinButton("Entrada · tomar foto", () => void mark("ENTRADA"), "primary-button"), checkinButton("Salida · tomar foto", () => void mark("SALIDA"), "secondary-button"));
+    profileCard.appendChild(actions);
+
+    const admin = isAdminRole();
+    if (admin) {
+        const importButton = checkinButton("Importar personal", () => document.getElementById("importEmployeesButton")?.click());
+        profileCard.appendChild(importButton);
+    }
+    section.append(profileCard, feedback);
+    const controls = { period: checkinNode("select", "attendance-filter"), date: checkinNode("input", "attendance-filter"), employee: checkinNode("select", "attendance-filter") };
+    controls.period.add(new Option("Día", "dia")); controls.period.add(new Option("Semana", "semana")); controls.period.add(new Option("Mes", "mes")); controls.period.value = "mes";
+    controls.date.type = "date"; controls.date.value = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" }); controls.date.setAttribute("aria-label", "Fecha del período");
+    const filterRow = checkinNode("div", "attendance-filters"); filterRow.append(checkinNode("label", "", "Período"), controls.period, checkinNode("label", "", "Fecha"), controls.date);
+    if (admin) { controls.employee.add(new Option("Todo el personal", "")); controls.employee.setAttribute("aria-label", "Filtrar por trabajador"); filterRow.append(checkinNode("label", "", "Trabajador"), controls.employee); }
+    const reload = async () => loadAttendanceReport(section, controls.period.value, controls.date.value, admin ? controls.employee.value : "", feedback);
+    controls.period.addEventListener("change", () => void reload()); controls.date.addEventListener("change", () => void reload()); controls.employee.addEventListener("change", () => void reload());
+    const download = checkinButton("Descargar CSV", async () => {
+        try {
+            const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&fecha=${encodeURIComponent(controls.date.value)}${admin && controls.employee.value ? `&empleadoId=${encodeURIComponent(controls.employee.value)}` : ""}`);
+            const lines = [["Tipo", "Nombre", "RUT", "Fecha", "Entrada", "Salida", "Turnos programados", "Turnos completos", "Porcentaje"],
+                ...(report.resumen || []).map(person => ["Resumen", person.nombre, person.rut, `${report.desde} a ${report.hasta}`, "", "", person.turnosProgramados, person.turnosCompletos, person.porcentaje]),
+                ...(report.marcas || []).map(row => ["Marca", row.nombre, row.rut, row.fecha, row.entrada, row.salida, "", "", ""])];
+            const csv = lines.map(line => line.map(value => { const text = String(value ?? ""); const safe = /^[=+@\-]/.test(text) ? "'" + text : text; return `"${safe.replaceAll('"', '""')}"`; }).join(";")).join("\r\n");
+            const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = `asistencia-${report.desde}-${report.hasta}.csv`; link.click(); URL.revokeObjectURL(url);
+        } catch (error) { feedback.textContent = error.message; }
+    });
+    section.append(filterRow, download);
+    const summary = checkinNode("div", "attendance-summary"); summary.dataset.attendanceSummary = "true"; section.appendChild(summary);
+    const tableWrap = checkinNode("div", "table-container attendance-table-wrap"), table = checkinNode("table"), thead = checkinNode("thead"), head = checkinNode("tr");
+    ["Trabajador", "RUT", "Fecha", "Entrada", "Salida", "Fotos"].forEach(label => head.appendChild(checkinNode("th", "", label))); thead.appendChild(head); table.append(thead, checkinNode("tbody")); tableWrap.appendChild(table); section.appendChild(tableWrap);
+    otherModule.appendChild(section);
+    await loadAttendanceReport(section, controls.period.value, controls.date.value, "", feedback);
+    if (admin) {
+        try {
+            const data = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&fecha=${encodeURIComponent(controls.date.value)}`);
+            data.personas.forEach(person => controls.employee.add(new Option(person.nombre, person.id)));
+        } catch (error) { feedback.textContent = error.message; }
+    }
+}
+
+async function loadAttendanceReport(section, period, date, employeeId, feedback) {
+    try {
+        const suffix = employeeId ? `&empleadoId=${encodeURIComponent(employeeId)}` : "";
+        const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(period)}&fecha=${encodeURIComponent(date)}${suffix}`);
+        const summary = section.querySelector("[data-attendance-summary]"); summary.replaceChildren();
+        report.resumen.forEach(person => {
+            const item = checkinNode("article", "attendance-summary-item"); item.append(checkinNode("strong", "", person.nombre), checkinNode("span", "", `${person.turnosCompletos}/${person.turnosProgramados} turnos · ${person.porcentaje}`)); summary.appendChild(item);
+        });
+        const tbody = section.querySelector(".attendance-table-wrap tbody"); tbody.replaceChildren();
+        report.marcas.forEach(row => {
+            const tr = checkinNode("tr"); [row.nombre, row.rut, row.fecha, row.entrada || "—", row.salida || "—"].forEach(value => tr.appendChild(checkinNode("td", "", value)));
+            const photos = checkinNode("td");
+            if (row.entradaFoto) photos.appendChild(checkinButton("Entrada", () => window.open(`/api/asistencia/${row.id}/foto/entrada`, "_blank", "noopener")));
+            if (row.salidaFoto) photos.appendChild(checkinButton("Salida", () => window.open(`/api/asistencia/${row.id}/foto/salida`, "_blank", "noopener")));
+            tr.appendChild(photos); tbody.appendChild(tr);
+        });
+        if (!report.marcas.length) feedback.textContent = `No hay marcas entre ${report.desde} y ${report.hasta}.`;
+    } catch (error) { feedback.textContent = error.message; }
+}
+
 const moduleKey = (name) => `restaurant-erp-module-${name}`;
 const moduleSchemas = {
     Asistencia: ["Trabajador", "Fecha", "Hora de entrada", "Hora de salida", "Estado"],
@@ -622,6 +724,7 @@ function createInventoryStateBadge(values) {
 }
 
 async function renderModule(name, selectedArea = null) {
+    if (name === "Asistencia") return renderAttendanceModule();
     const revision = ++screenRevision;
     otherModule.replaceChildren();
     const slug = slugifyLabel(name);
@@ -1555,7 +1658,7 @@ document.getElementById("inventoryImportExcel")?.addEventListener("click", () =>
 });
 
 document.getElementById("importEmployeesButton")?.addEventListener("click", () => {
-    if (!isOwnerRole()) return;
+    if (!isAdminRole()) return;
     importDialog?.showModal();
 });
 
@@ -1649,7 +1752,7 @@ function convertirTextoAFilas(texto) {
     };
 
     const faltantes = Object.entries(columnas)
-        .filter(([, posicion]) => posicion < 0)
+        .filter(([nombre, posicion]) => posicion < 0 && ["nombre", "rut"].includes(nombre))
         .map(([nombre]) => nombre.toUpperCase());
 
     if (faltantes.length) {
@@ -1660,8 +1763,8 @@ function convertirTextoAFilas(texto) {
         const celdas = separarLinea(linea);
         return {
             nombre: celdas[columnas.nombre] || "",
-            cargo: celdas[columnas.cargo] || "",
-            area: celdas[columnas.area] || "",
+            cargo: columnas.cargo < 0 ? "TRABAJADOR" : celdas[columnas.cargo] || "TRABAJADOR",
+            area: columnas.area < 0 ? "SIN ASIGNAR" : celdas[columnas.area] || "SIN ASIGNAR",
             rut: celdas[columnas.rut] || ""
         };
     }).filter(fila => fila.nombre || fila.cargo || fila.area || fila.rut);
@@ -1816,6 +1919,7 @@ async function enterApplication(profile) {
         if (currentProfile === profile) return bindPushAccount();
     }).catch(error => console.warn('El acceso continúa sin Push:', error.message));
     document.getElementById("addEmployeeButton").disabled = !isOwnerRole();
+    document.getElementById("importEmployeesButton").hidden = !isAdminRole();
     document.getElementById("managePlazasButton").hidden = false;
     document.getElementById("managePlazasButton").textContent = isOwnerRole() ? "Agregar plaza / Gestionar plazas" : "Ver plazas";
     adminMenu?.querySelectorAll("button").forEach((button) => { if (button.textContent.includes("Configuración")) button.disabled = false; });

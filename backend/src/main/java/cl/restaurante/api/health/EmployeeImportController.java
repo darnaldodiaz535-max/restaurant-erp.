@@ -57,7 +57,7 @@ public class EmployeeImportController {
             HttpSession session
     ) throws IOException {
         RoleAccessService.User user = access.current(session);
-        if (!access.isOwner(user)) {
+        if (!Set.of("ADMIN", "EMPRESA").contains(user.role())) {
             return ResponseEntity.status(403)
                     .body(Map.of("error", "No tienes permiso para importar personal."));
         }
@@ -96,7 +96,7 @@ public class EmployeeImportController {
                 }
             }
 
-            List<String> requiredColumns = List.of("NOMBRE", "CARGO", "AREA", "RUT");
+            List<String> requiredColumns = List.of("NOMBRE", "RUT");
             List<String> missingColumns = new ArrayList<>();
 
             for (String column : requiredColumns) {
@@ -121,11 +121,11 @@ public class EmployeeImportController {
                 }
 
                 String name = readCell(row, columns.get("NOMBRE"), formatter);
-                String role = readCell(row, columns.get("CARGO"), formatter);
-                String area = readCell(row, columns.get("AREA"), formatter);
+                String role = columns.containsKey("CARGO") ? readCell(row, columns.get("CARGO"), formatter) : "TRABAJADOR";
+                String area = columns.containsKey("AREA") ? readCell(row, columns.get("AREA"), formatter) : "SIN ASIGNAR";
                 String rut = readCell(row, columns.get("RUT"), formatter);
 
-                if (name.isBlank() && role.isBlank() && area.isBlank() && rut.isBlank()) {
+                if (name.isBlank() && rut.isBlank()) {
                     continue;
                 }
 
@@ -136,8 +136,6 @@ public class EmployeeImportController {
 
                 List<String> errors = new ArrayList<>();
                 if (name.isBlank()) errors.add("Falta el nombre.");
-                if (role.isBlank()) errors.add("Falta el cargo.");
-                if (area.isBlank()) errors.add("Falta el área.");
                 if (rut.isBlank()) errors.add("Falta el RUT.");
 
                 Map<String, Object> previewRow = new HashMap<>();
@@ -162,7 +160,7 @@ public class EmployeeImportController {
             HttpSession session
     ) {
         RoleAccessService.User user = access.current(session);
-        if (!access.isOwner(user)) {
+        if (!Set.of("ADMIN", "EMPRESA").contains(user.role())) {
             return ResponseEntity.status(403)
                     .body(Map.of("error", "No tienes permiso para importar personal."));
         }
@@ -190,14 +188,12 @@ public class EmployeeImportController {
             }
 
             String name = clean(employee.nombre());
-            String role = clean(employee.cargo());
-            String area = clean(employee.area());
+            String role = clean(employee.cargo()).isBlank() ? "TRABAJADOR" : clean(employee.cargo());
+            String area = clean(employee.area()).isBlank() ? "SIN ASIGNAR" : clean(employee.area());
             String rut = clean(employee.rut());
             String rutKey = normalizeRut(rut);
 
             if (name.isBlank()) errors.add("Fila " + spreadsheetRow + ": falta el nombre.");
-            if (role.isBlank()) errors.add("Fila " + spreadsheetRow + ": falta el cargo.");
-            if (area.isBlank()) errors.add("Fila " + spreadsheetRow + ": falta el área.");
             if (rutKey.isBlank()) errors.add("Fila " + spreadsheetRow + ": falta el RUT.");
 
             if (name.length() > 160) errors.add("Fila " + spreadsheetRow + ": el nombre supera 160 caracteres.");
