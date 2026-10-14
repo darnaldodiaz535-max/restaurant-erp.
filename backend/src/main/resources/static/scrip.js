@@ -575,13 +575,16 @@ async function renderAttendanceModule() {
         } catch (error) { feedback.textContent = error.message || "No se pudo registrar la asistencia."; }
         finally { stream?.getTracks().forEach(track => track.stop()); }
     };
-    actions.append(checkinButton("Entrada · tomar foto", () => void mark("ENTRADA"), "primary-button"), checkinButton("Salida · tomar foto", () => void mark("SALIDA"), "secondary-button"));
+    actions.append(checkinButton("Entrada", () => void mark("ENTRADA"), "primary-button attendance-mark-button"), checkinButton("Salida", () => void mark("SALIDA"), "primary-button attendance-mark-button"));
     profileCard.appendChild(actions);
 
     const admin = isAdminRole();
     if (admin) {
+        const adminActions = checkinNode("div", "attendance-admin-actions");
+        adminActions.appendChild(checkinNode("p", "attendance-admin-label", "Administración"));
         const importButton = checkinButton("Importar personal", () => document.getElementById("importEmployeesButton")?.click());
-        profileCard.appendChild(importButton);
+        adminActions.appendChild(importButton);
+        profileCard.appendChild(adminActions);
     }
     section.append(profileCard, feedback);
     const controls = { period: checkinNode("select", "attendance-filter"), date: checkinNode("input", "attendance-filter"), employee: checkinNode("select", "attendance-filter") };

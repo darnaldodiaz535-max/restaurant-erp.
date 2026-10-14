@@ -1748,6 +1748,9 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .attendance-rut, .attendance-filter { min-height: 42px; padding: 8px 11px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #111827; }
 .attendance-actions, .attendance-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .attendance-filters { margin: 0; }
+.attendance-mark-button { min-width: 130px; }
+.attendance-admin-actions { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+.attendance-admin-label { margin: 0 0 8px; color: #6b7280; font-size: 13px; font-weight: 700; }
 .attendance-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .attendance-summary-item { display: grid; gap: 5px; }
 .attendance-summary-item span { color: #4b5563; font-size: 14px; }
