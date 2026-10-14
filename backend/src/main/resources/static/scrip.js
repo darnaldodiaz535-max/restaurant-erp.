@@ -982,12 +982,60 @@ const filtered = records
     });
         filtered.forEach(({ record, index }) => {
             const row = document.createElement("tr");
-          record.values.forEach((value, columnIndex) => {
+        const stockInputs = [];
+
+record.values.forEach((value, columnIndex) => {
     if (slug === "inventario" && columnIndex === 6) return;
 
     const td = document.createElement("td");
-    td.textContent = value;
+    const esStockInventario =
+        slug === "inventario" && [2, 4, 5].includes(columnIndex);
+
+    if (!esStockInventario) {
+        td.textContent = value;
+        row.appendChild(td);
+        return;
+    }
+
+    const cantidad = document.createElement("span");
+    cantidad.className = "inventory-quantity";
+
+    const input = document.createElement("input");
+    input.type = "number";
+    input.inputMode = "decimal";
+    input.min = "0";
+    input.step = "any";
+    input.setAttribute("aria-label", fields[columnIndex]);
+    input.value = columnIndex === 5 ? (value ?? "") : (value || "0");
+    input.disabled = !canManageModule("inventario");
+
+    const ajustar = (delta) => {
+        if (!canManageModule("inventario")) return;
+
+        const actual = input.value === "" ? 0 : input.valueAsNumber;
+        if (!Number.isFinite(actual)) return;
+
+        input.value = String(Math.max(0, actual + delta));
+    };
+
+    const menos = actionButton("−", () => ajustar(-1));
+    const mas = actionButton("+", () => ajustar(1));
+
+    menos.setAttribute("aria-label", `Disminuir ${fields[columnIndex]}`);
+    mas.setAttribute("aria-label", `Aumentar ${fields[columnIndex]}`);
+    menos.disabled = mas.disabled = !canManageModule("inventario");
+
+    input.addEventListener("input", () => {
+        if (Number.isFinite(input.valueAsNumber) && input.valueAsNumber < 0) {
+            input.value = "0";
+        }
+    });
+
+    cantidad.append(menos, input, mas);
+    td.appendChild(cantidad);
     row.appendChild(td);
+
+    stockInputs.push({ columnIndex, input });
 });
 if (slug === "inventario") {
     const stateCell = document.createElement("td");
@@ -1069,6 +1117,40 @@ if (slug === "inventario") {
     actions.append(send);
 }
             if (canManageModule(slug)) {
+                if (slug === "inventario") {
+    const acceptChanges = document.createElement("button");
+    acceptChanges.type = "button";
+    acceptChanges.className = "table-button";
+    acceptChanges.textContent = "Aceptar cambios";
+
+    acceptChanges.addEventListener("click", async () => {
+        acceptChanges.disabled = true;
+
+        try {
+            const values = [...record.values];
+
+            stockInputs.forEach(({ columnIndex, input }) => {
+                values[columnIndex] = input.value.trim();
+            });
+
+            await apiRequest(`${modulesApi}/${slug}/${record.id}`, {
+                method: "PUT",
+                body: JSON.stringify({
+                    values,
+                    references: record.references || []
+                })
+            });
+
+            await loadRecords();
+            await loadDashboardMetrics();
+        } catch (error) {
+            alert(`No se pudieron guardar los cambios: ${error.message}`);
+            acceptChanges.disabled = false;
+        }
+    });
+
+    actions.append(acceptChanges);
+}
             const edit = document.createElement("button"); edit.type = "button"; edit.className = "table-button"; edit.textContent = "Editar";
             const remove = document.createElement("button"); remove.type = "button"; remove.className = "table-button"; remove.textContent = "Eliminar";
             edit.addEventListener("click", () => {
@@ -1373,7 +1455,32 @@ async function confirmarInsumos(filas) {
 
 document.getElementById("inventoryImportTextSubmit")?.addEventListener("click", async () => {
     try {
-        await confirmarInsumos(convertirTextoAInsumos(inventoryPasteText.value));
+        const nombres = inventoryPasteText.value
+    .split(/\r?\n/)
+    .map(nombre => nombre.trim())
+    .filter(Boolean);
+
+if (!nombres.length) {
+    throw new Error("Pega al menos un nombre de insumo, uno por línea.");
+}
+
+const grupo = document.querySelector('[aria-label="Grupo de inventario"]')?.value;
+
+if (grupo !== "COCINA" && grupo !== "BARRA") {
+    throw new Error("Selecciona Cocina o Barra en el inventario.");
+}
+
+const filas = nombres.map(insumo => ({
+    insumo,
+    categoria: "Por clasificar",
+    stockActual: "0",
+    unidad: "Unidad",
+    stockMinimo: "0",
+    stockMaximo: "",
+    grupo
+}));
+
+await confirmarInsumos(filas);
     } catch (error) {
         alert(error.message);
     }

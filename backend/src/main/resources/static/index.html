@@ -915,19 +915,18 @@
 
     <div id="inventoryImportPasteArea" class="employee-import-paste" hidden>
         <label for="inventoryImportText">
-            Pega los encabezados y los insumos. Separa las columnas con tabulaciones:
+            Pega un nombre de insumo por línea:
         </label>
 
         <p class="employee-import-hint">
-            Orden: INSUMO, CATEGORIA, STOCK_ACTUAL, UNIDAD, STOCK_MINIMO,
-            STOCK_MAXIMO y GRUPO. Grupo debe ser COCINA o BARRA.
-            STOCK_MAXIMO puede quedar vacío.
+            Pega un nombre de insumo por línea. Se agregarán con stock 0 y luego podrás editarlos.
+
         </p>
 
         <textarea
             id="inventoryImportText"
             rows="8"
-            placeholder="INSUMO&#9;CATEGORIA&#9;STOCK_ACTUAL&#9;UNIDAD&#9;STOCK_MINIMO&#9;STOCK_MAXIMO&#9;GRUPO"></textarea>
+            placeholder="Agua con gas&#10;Agua sin gas"></textarea>
 
         <button id="inventoryImportTextSubmit" class="primary-button" type="button">
             Revisar e importar
