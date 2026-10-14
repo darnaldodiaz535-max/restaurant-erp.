@@ -61,6 +61,7 @@ public class InventoryImportController {
     @PostMapping(value = "/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> preview(
             @RequestParam("archivo") MultipartFile archivo,
+            @RequestParam(value = "grupo", required = false) String grupoSeleccionado,
             HttpSession session
     ) throws IOException {
         if (!access.isOwner(access.current(session))) {
@@ -104,32 +105,51 @@ public class InventoryImportController {
                 }
             }
 
-            List<String> faltantes = COLUMNAS.stream()
-                    .filter(columna -> !posiciones.containsKey(columna))
-                    .toList();
-
-            if (!faltantes.isEmpty()) {
+            boolean formatoCompleto = COLUMNAS.stream().allMatch(posiciones::containsKey);
+            boolean listaConEncabezado = posiciones.containsKey("INSUMO")
+                    || posiciones.containsKey("NOMBRE")
+                    || posiciones.containsKey("PRODUCTO")
+                    || posiciones.containsKey("INGREDIENTE");
+            int columnaNombre = posiciones.getOrDefault("INSUMO",
+                    posiciones.getOrDefault("NOMBRE",
+                            posiciones.getOrDefault("PRODUCTO", posiciones.getOrDefault("INGREDIENTE", 0))));
+            String grupoLista = texto(grupoSeleccionado).toUpperCase(Locale.ROOT);
+            if (!formatoCompleto && listaConEncabezado && posiciones.size() > 1) {
+                List<String> faltantes = COLUMNAS.stream()
+                        .filter(columna -> !posiciones.containsKey(columna))
+                        .toList();
                 return ResponseEntity.badRequest().body(Map.of(
-                        "error", "Revisa los encabezados del Excel.",
+                        "error", "La planilla tiene encabezados incompletos. Usa la lista de una sola columna o completa los siete encabezados requeridos.",
                         "columnasFaltantes", faltantes
+                ));
+            }
+            if (!formatoCompleto && !grupoLista.equals("COCINA") && !grupoLista.equals("BARRA")) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Selecciona Cocina o Barra en el inventario antes de importar solo nombres."
                 ));
             }
 
             List<Map<String, Object>> filas = new ArrayList<>();
 
-            for (int i = sheet.getFirstRowNum() + 1; i <= sheet.getLastRowNum(); i++) {
+            int primeraFilaDatos = formatoCompleto || listaConEncabezado
+                    ? sheet.getFirstRowNum() + 1
+                    : sheet.getFirstRowNum();
+            for (int i = primeraFilaDatos; i <= sheet.getLastRowNum(); i++) {
                 Row fila = sheet.getRow(i);
                 if (fila == null) continue;
 
-                Insumo insumo = new Insumo(
-                        celda(fila, posiciones.get("INSUMO"), formatter),
-                        celda(fila, posiciones.get("CATEGORIA"), formatter),
-                        celda(fila, posiciones.get("STOCK_ACTUAL"), formatter),
-                        celda(fila, posiciones.get("UNIDAD"), formatter),
-                        celda(fila, posiciones.get("STOCK_MINIMO"), formatter),
-                        celda(fila, posiciones.get("STOCK_MAXIMO"), formatter),
-                        celda(fila, posiciones.get("GRUPO"), formatter)
-                );
+                Insumo insumo = formatoCompleto
+                        ? new Insumo(
+                                celda(fila, posiciones.get("INSUMO"), formatter),
+                                celda(fila, posiciones.get("CATEGORIA"), formatter),
+                                celda(fila, posiciones.get("STOCK_ACTUAL"), formatter),
+                                celda(fila, posiciones.get("UNIDAD"), formatter),
+                                celda(fila, posiciones.get("STOCK_MINIMO"), formatter),
+                                celda(fila, posiciones.get("STOCK_MAXIMO"), formatter),
+                                celda(fila, posiciones.get("GRUPO"), formatter))
+                        : new Insumo(
+                                celda(fila, columnaNombre, formatter),
+                                "Por clasificar", "0", "Unidad", "0", "", grupoLista);
 
                 if (insumo.vacio()) continue;
 

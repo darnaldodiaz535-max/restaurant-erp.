@@ -1517,6 +1517,8 @@ document.getElementById("inventoryImportExcel")?.addEventListener("click", () =>
 
         const datos = new FormData();
         datos.append("archivo", archivo);
+        const grupo = document.querySelector('[aria-label="Grupo de inventario"]')?.value;
+        if (grupo) datos.append("grupo", grupo);
 
         try {
             const vistaPrevia = await uploadRequest(
