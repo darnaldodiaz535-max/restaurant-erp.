@@ -96,6 +96,7 @@ function readStore(key, fallback) {
 function accessRole() { return currentProfile?.role || ""; }
 function isOwnerRole() { return ["ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_LOCAL"].includes(accessRole()); }
 function isAdminRole() { return ["ADMIN", "EMPRESA"].includes(accessRole()); }
+function isAttendanceQrAdminRole() { return accessRole() === "ADMIN"; }
 function isSalonRole() { return accessRole() === "JEFE_SALON"; }
 function isKitchenRole() { return accessRole() === "JEFE_COCINA"; }
 function isWorkerRole() { return ["TRABAJADOR", "EMPLEADO"].includes(accessRole()); }
@@ -623,9 +624,30 @@ async function renderAttendanceModule() {
     profileCard.appendChild(actions);
 
     const admin = isAdminRole();
+    const qrAdmin = isAttendanceQrAdminRole();
+    if (!qrAdmin) {
+        const locationHelp = checkinNode("div", "attendance-location-help");
+        const locationStatus = checkinNode("p", "attendance-location-status", "Activa la ubicación de este dispositivo antes de marcar. Al escanear el QR, la aplicación comprobará que estás en el local.");
+        const enableLocation = checkinButton("Activar ubicación", async () => {
+            enableLocation.disabled = true;
+            try {
+                const position = await getAttendancePosition();
+                if (position.coords.accuracy > 100) throw new Error("La ubicación se detectó, pero no es precisa. Activa el GPS y vuelve a intentarlo.");
+                locationStatus.textContent = `Ubicación activada en este dispositivo (precisión aproximada: ${Math.round(position.coords.accuracy)} m). Al marcar, se volverá a comprobar.`;
+            } catch (error) {
+                locationStatus.textContent = error.message || "No se pudo activar la ubicación. Revisa el permiso de ubicación del navegador y el GPS.";
+            } finally { enableLocation.disabled = false; }
+        }, "secondary-button");
+        locationHelp.append(locationStatus, enableLocation);
+        profileCard.appendChild(locationHelp);
+    }
     if (admin) {
         const adminActions = checkinNode("div", "attendance-admin-actions");
         adminActions.appendChild(checkinNode("p", "attendance-admin-label", "Administración"));
+        const importButton = checkinButton("Importar personal", () => document.getElementById("importEmployeesButton")?.click());
+        adminActions.appendChild(importButton);
+        profileCard.appendChild(adminActions);
+        if (qrAdmin) {
         const qrPanel = checkinNode("section", "attendance-qr-admin");
         qrPanel.appendChild(checkinNode("h4", "", "QR de asistencia del local"));
         qrPanel.appendChild(checkinNode("p", "attendance-qr-help", "Muestra este código en el local. Se renueva automáticamente antes de vencer; el trabajador lo escanea al marcar entrada o salida."));
@@ -654,9 +676,6 @@ async function renderAttendanceModule() {
         qrDisplay.append(qrCode, qrExpiry, changeLocation);
         qrPanel.append(qrSetup, qrDisplay, locationStatus);
         adminActions.appendChild(qrPanel);
-        const importButton = checkinButton("Importar personal", () => document.getElementById("importEmployeesButton")?.click());
-        adminActions.appendChild(importButton);
-        profileCard.appendChild(adminActions);
         const refreshAttendanceQr = async () => {
             if (qrDisplay.hidden || revision !== screenRevision) return;
             try {
@@ -685,6 +704,7 @@ async function renderAttendanceModule() {
                 attendanceQrTimer = setInterval(() => void refreshAttendanceQr(), 15000);
             }
         } catch (error) { locationStatus.textContent = error.message || "No se pudo cargar la configuración del QR."; }
+        }
     }
     section.append(profileCard, feedback);
     const controls = { period: checkinNode("select", "attendance-filter"), date: checkinNode("input", "attendance-filter"), employee: checkinNode("select", "attendance-filter") };
