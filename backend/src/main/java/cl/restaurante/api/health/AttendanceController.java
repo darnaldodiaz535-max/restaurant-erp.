@@ -1,9 +1,11 @@
 package cl.restaurante.api.health;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -124,10 +126,16 @@ public class AttendanceController {
         List<Map<String, Object>> rows = jdbc.query("SELECT A.ID_ASISTENCIA,E.ID_EMPLEADO,E.NOMBRE,E.RUT,A.FECHA,A.HORA_ENTRADA,A.HORA_SALIDA,A.ENTRADA_EN,A.SALIDA_EN,A.FOTO_ENTRADA,A.FOTO_SALIDA " +
                         "FROM APP_ASISTENCIA A JOIN APP_EMPLEADO E ON E.ID_EMPLEADO=A.EMPLEADO_ID " +
                         "WHERE A.FECHA>=? AND A.FECHA<?" + filter + " ORDER BY E.NOMBRE,A.FECHA,A.ID_ASISTENCIA",
-                (rs, n) -> Map.ofEntries(Map.entry("id", rs.getLong(1)), Map.entry("empleadoId", rs.getLong(2)),
-                        Map.entry("nombre", rs.getString(3)), Map.entry("rut", rs.getString(4) == null ? "" : rs.getString(4)),
-                        Map.entry("fecha", rs.getDate(5).toLocalDate().toString()), Map.entry("entrada", safe(rs.getString(6))),
-                        Map.entry("salida", safe(rs.getString(7))), Map.entry("entradaFoto", rs.getBytes(10) != null), Map.entry("salidaFoto", rs.getBytes(11) != null)), rowArgs);
+                (rs, n) -> {
+                    String entry = safe(rs.getString(6));
+                    String exit = safe(rs.getString(7));
+                    String hours = workedHours(entry, exit, rs.getTimestamp(8), rs.getTimestamp(9));
+                    return Map.ofEntries(Map.entry("id", rs.getLong(1)), Map.entry("empleadoId", rs.getLong(2)),
+                            Map.entry("nombre", rs.getString(3)), Map.entry("rut", rs.getString(4) == null ? "" : rs.getString(4)),
+                            Map.entry("fecha", rs.getDate(5).toLocalDate().toString()), Map.entry("entrada", entry),
+                            Map.entry("salida", exit), Map.entry("horasTrabajadas", hours),
+                            Map.entry("entradaFoto", rs.getBytes(10) != null), Map.entry("salidaFoto", rs.getBytes(11) != null));
+                }, rowArgs);
 
         List<Map<String, Object>> employees = admin ? jdbc.query("SELECT ID_EMPLEADO,NOMBRE,RUT FROM APP_EMPLEADO WHERE ESTADO='ACTIVO' ORDER BY NOMBRE",
                 (rs, n) -> Map.of("id", rs.getLong(1), "nombre", rs.getString(2), "rut", rs.getString(3) == null ? "" : rs.getString(3))) : List.of();
@@ -166,5 +174,21 @@ public class AttendanceController {
     private boolean isAdmin(RoleAccessService.User user) { return Set.of("ADMIN", "EMPRESA").contains(user.role()); }
     private static String normalizeRut(String value) { return value == null ? "" : value.toUpperCase().replaceAll("[.\\-\\s]", ""); }
     private static String safe(String value) { return value == null ? "" : value; }
+    private static String workedHours(String entry, String exit, java.sql.Timestamp entryAt, java.sql.Timestamp exitAt) {
+        if (exit.isBlank()) return "Pendiente";
+        try {
+            LocalDateTime start = entryAt == null
+                    ? LocalDateTime.of(LocalDate.of(2000, 1, 1), LocalTime.parse(entry, HOUR))
+                    : entryAt.toLocalDateTime();
+            LocalDateTime end = exitAt == null
+                    ? LocalDateTime.of(start.toLocalDate(), LocalTime.parse(exit, HOUR))
+                    : exitAt.toLocalDateTime();
+            if (end.isBefore(start)) end = end.plusDays(1);
+            long minutes = Duration.between(start, end).toMinutes();
+            return String.format(java.util.Locale.ROOT, "%d h %02d min", minutes / 60, minutes % 60);
+        } catch (java.time.DateTimeException ex) {
+            return "Pendiente";
+        }
+    }
     private record Photo(byte[] bytes, String type, long employeeId) {}
 }

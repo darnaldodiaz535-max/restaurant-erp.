@@ -597,9 +597,8 @@ async function renderAttendanceModule() {
     const download = checkinButton("Descargar CSV", async () => {
         try {
             const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&fecha=${encodeURIComponent(controls.date.value)}${admin && controls.employee.value ? `&empleadoId=${encodeURIComponent(controls.employee.value)}` : ""}`);
-            const lines = [["Tipo", "Nombre", "RUT", "Fecha", "Entrada", "Salida", "Turnos programados", "Turnos completos", "Porcentaje"],
-                ...(report.resumen || []).map(person => ["Resumen", person.nombre, person.rut, `${report.desde} a ${report.hasta}`, "", "", person.turnosProgramados, person.turnosCompletos, person.porcentaje]),
-                ...(report.marcas || []).map(row => ["Marca", row.nombre, row.rut, row.fecha, row.entrada, row.salida, "", "", ""])];
+            const lines = [["Nombre", "RUT", "Fecha", "Hora de entrada", "Hora de salida", "Horas trabajadas"],
+                ...(report.marcas || []).map(row => [row.nombre, row.rut, row.fecha, row.entrada, row.salida, row.horasTrabajadas || "Pendiente"])];
             const csv = lines.map(line => line.map(value => { const text = String(value ?? ""); const safe = /^[=+@\-]/.test(text) ? "'" + text : text; return `"${safe.replaceAll('"', '""')}"`; }).join(";")).join("\r\n");
             const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = `asistencia-${report.desde}-${report.hasta}.csv`; link.click(); URL.revokeObjectURL(url);
         } catch (error) { feedback.textContent = error.message; }
