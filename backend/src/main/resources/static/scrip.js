@@ -33,6 +33,7 @@ const employeesApi = "/api/empleados";
 const modulesApi = "/api/modulos";
 const authApi = "/api/auth";
 let screenRevision = 0;
+let attendanceQrTimer = null;
 dashboard.parentElement.append(personal, otherModule);
 document.querySelector(".activity-list")?.replaceChildren();
 document.querySelector(".alert-list")?.replaceChildren();
@@ -106,7 +107,7 @@ function canManageModule(key) {
 function canSeeModule(key) { return Boolean(currentProfile); }
 async function uploadRequest(url, formData) {
     const response = await fetch(url, { method: "POST", body: formData, credentials: "same-origin" });
-    if (!response.ok) { const problem = await response.json().catch(() => ({})); throw new Error(problem.error || `Error del servidor (${response.status})`); }
+    if (!response.ok) { const problem = await response.json().catch(() => ({})); throw new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`); }
     return response.json();
 }
 async function apiRequest(url, options = {}) {
@@ -117,7 +118,7 @@ async function apiRequest(url, options = {}) {
     });
     if (!response.ok) {
         const problem = await response.json().catch(() => ({}));
-        const error = new Error(problem.error || problem.message || `Error del servidor (${response.status})`); error.status = response.status; throw error;
+        const error = new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`); error.status = response.status; throw error;
     }
     return response.status === 204 ? null : response.json();
 }
@@ -535,7 +536,45 @@ async function renderCheckinAdminArea(section, area, revision, feedback) {
     } catch (e) { feedback.textContent = "No se pudo cargar el reporte administrativo: " + e.message; }
 }
 
+function getAttendancePosition() {
+    if (!navigator.geolocation) return Promise.reject(new Error("Este dispositivo no permite obtener la ubicación."));
+    return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve,
+        error => reject(new Error(error.code === 1 ? "Activa el permiso de ubicación para registrar asistencia." : "No se pudo obtener tu ubicación. Activa el GPS e inténtalo otra vez.")),
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }));
+}
+
+async function scanAttendanceQr(feedback) {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+    const overlay = checkinNode("div", "attendance-scan-overlay"), dialog = checkinNode("section", "attendance-scan-dialog");
+    dialog.setAttribute("role", "dialog"); dialog.setAttribute("aria-modal", "true"); dialog.setAttribute("aria-label", "Escanear QR de asistencia");
+    dialog.appendChild(checkinNode("h3", "", "Escanea el QR que muestra administración"));
+    dialog.appendChild(checkinNode("p", "", "Apunta la cámara al código visible en el local."));
+    const video = document.createElement("video"); video.className = "attendance-scan-video"; video.muted = true; video.playsInline = true; video.srcObject = stream;
+    const canvas = document.createElement("canvas"); canvas.hidden = true; const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const status = checkinNode("p", "attendance-scan-status", "Buscando el código…");
+    const cancel = checkinButton("Cancelar", () => {}, "secondary-button"); dialog.append(video, canvas, status, cancel); overlay.appendChild(dialog); document.body.appendChild(overlay);
+    await video.play(); feedback.textContent = "Escanea el QR actual del local para continuar.";
+    return new Promise((resolve, reject) => {
+        let done = false, lastScan = 0;
+        const finish = (error, token) => {
+            if (done) return; done = true; clearInterval(scanner); clearTimeout(timeout); stream.getTracks().forEach(track => track.stop()); overlay.remove();
+            if (error) reject(error); else resolve(token);
+        };
+        const scanner = setInterval(() => {
+            if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || Date.now() - lastScan < 120) return;
+            lastScan = Date.now(); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = window.jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: "dontInvert" });
+            if (code?.data) finish(null, code.data);
+        }, 100);
+        const timeout = setTimeout(() => finish(new Error("No se detectó el QR. Comprueba que esté visible e inténtalo otra vez.")), 90000);
+        cancel.addEventListener("click", () => finish(new Error("Registro cancelado.")), { once: true });
+    });
+}
+
 async function renderAttendanceModule() {
+    if (attendanceQrTimer) { clearInterval(attendanceQrTimer); attendanceQrTimer = null; }
     const revision = ++screenRevision;
     dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
     otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--asistencia";
@@ -555,10 +594,14 @@ async function renderAttendanceModule() {
     const actions = checkinNode("div", "attendance-actions");
     const mark = async (type) => {
         if (!rutInput.value.trim()) { feedback.textContent = "Escribe tu RUT para continuar."; rutInput.focus(); return; }
-        if (!navigator.mediaDevices?.getUserMedia) { feedback.textContent = "Este dispositivo no permite abrir la cámara desde el navegador."; return; }
+        if (!navigator.mediaDevices?.getUserMedia || typeof window.jsQR !== "function") { feedback.textContent = "No se pudo iniciar el lector de QR. Recarga la página e inténtalo otra vez."; return; }
         let stream;
         try {
-            feedback.textContent = "Abriendo cámara para registrar la foto…";
+            const qrToken = await scanAttendanceQr(feedback);
+            feedback.textContent = "QR validado. Comprobando que estás en el local…";
+            const position = await getAttendancePosition();
+            if (position.coords.accuracy > 100) throw new Error("La ubicación no es suficientemente precisa. Activa el GPS y vuelve a intentarlo.");
+            feedback.textContent = "QR y ubicación listos. Tomando la foto…";
             stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
             const video = document.createElement("video"); video.muted = true; video.playsInline = true; video.srcObject = stream;
             await video.play();
@@ -569,6 +612,7 @@ async function renderAttendanceModule() {
             canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
             const photo = await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("No se pudo capturar la foto.")), "image/jpeg", 0.78));
             const formData = new FormData(); formData.append("tipo", type); formData.append("rut", rutInput.value.trim()); formData.append("foto", photo, "asistencia.jpg");
+            formData.append("qrToken", qrToken); formData.append("latitude", String(position.coords.latitude)); formData.append("longitude", String(position.coords.longitude)); formData.append("accuracy", String(position.coords.accuracy));
             const result = await uploadRequest("/api/asistencia/marcar", formData);
             feedback.textContent = `${type === "ENTRADA" ? "Entrada" : "Salida"} registrada a las ${result.hora}.`;
             await loadAttendanceReport(section, controls.period.value, controls.date.value, admin ? controls.employee.value : "", feedback);
@@ -582,9 +626,65 @@ async function renderAttendanceModule() {
     if (admin) {
         const adminActions = checkinNode("div", "attendance-admin-actions");
         adminActions.appendChild(checkinNode("p", "attendance-admin-label", "Administración"));
+        const qrPanel = checkinNode("section", "attendance-qr-admin");
+        qrPanel.appendChild(checkinNode("h4", "", "QR de asistencia del local"));
+        qrPanel.appendChild(checkinNode("p", "attendance-qr-help", "Muestra este código en el local. Se renueva automáticamente antes de vencer; el trabajador lo escanea al marcar entrada o salida."));
+        const qrSetup = checkinNode("div", "attendance-qr-setup");
+        const radiusLabel = checkinNode("label", "attendance-radius-label", "Radio permitido (metros)"), radiusInput = checkinNode("input", "attendance-rut");
+        radiusInput.type = "number"; radiusInput.min = "20"; radiusInput.max = "1000"; radiusInput.step = "10"; radiusInput.value = "100"; radiusInput.setAttribute("aria-label", "Radio permitido en metros"); radiusLabel.appendChild(radiusInput);
+        const locationStatus = checkinNode("p", "attendance-location-status", "Primero configura la ubicación del local desde aquí, estando físicamente en el local.");
+        const saveLocation = checkinButton("Usar mi ubicación actual como local", async () => {
+            saveLocation.disabled = true;
+            try {
+                const position = await getAttendancePosition();
+                if (position.coords.accuracy > 100) throw new Error("La ubicación no es suficientemente precisa. Activa el GPS y vuelve a intentar.");
+                const config = await apiRequest("/api/asistencia/qr/config", { method: "POST", body: JSON.stringify({ latitude: position.coords.latitude, longitude: position.coords.longitude, radiusMeters: Number(radiusInput.value) }) });
+                if (!config.gpsSchemaReady || !config.qrTableReady) throw new Error("Antes de activar asistencia con QR, ejecuta la migración 10_asistencia_qr_ubicacion.sql en Oracle.");
+                locationStatus.textContent = `Local configurado con un radio de ${config.radiusMeters} metros.`;
+                qrSetup.hidden = true; qrDisplay.hidden = false;
+                await refreshAttendanceQr();
+            } catch (error) { locationStatus.textContent = error.message || "No se pudo guardar la ubicación."; }
+            finally { saveLocation.disabled = false; }
+        }, "secondary-button");
+        qrSetup.append(radiusLabel, saveLocation);
+        const qrDisplay = checkinNode("div", "attendance-qr-display"); qrDisplay.hidden = true;
+        const qrCode = checkinNode("div", "attendance-qr-code"); qrCode.setAttribute("aria-label", "Código QR temporal para marcar asistencia");
+        const qrExpiry = checkinNode("p", "attendance-qr-expiry", "Preparando QR…");
+        const changeLocation = checkinButton("Cambiar ubicación o radio", () => { qrDisplay.hidden = true; qrSetup.hidden = false; }, "secondary-button");
+        qrDisplay.append(qrCode, qrExpiry, changeLocation);
+        qrPanel.append(qrSetup, qrDisplay, locationStatus);
+        adminActions.appendChild(qrPanel);
         const importButton = checkinButton("Importar personal", () => document.getElementById("importEmployeesButton")?.click());
         adminActions.appendChild(importButton);
         profileCard.appendChild(adminActions);
+        const refreshAttendanceQr = async () => {
+            if (qrDisplay.hidden || revision !== screenRevision) return;
+            try {
+                const qr = await apiRequest("/api/asistencia/qr/actual");
+                if (revision !== screenRevision) return;
+                qrCode.replaceChildren();
+                const generated = window.qrcode(0, "M"); generated.addData(qr.token); generated.make();
+                qrCode.innerHTML = generated.createSvgTag(6, 4);
+                const svg = qrCode.querySelector("svg"); svg?.setAttribute("role", "img"); svg?.setAttribute("aria-label", "QR temporal de asistencia");
+                const remaining = Math.max(0, Math.ceil((qr.expiresAt - Date.now()) / 1000));
+                qrExpiry.textContent = `Código vigente por ${remaining} segundos. Se actualizará automáticamente.`;
+                locationStatus.textContent = "Ubicación configurada. El QR está activo para el personal presente en el local.";
+            } catch (error) {
+                qrCode.replaceChildren(); qrExpiry.textContent = error.message || "No se pudo generar el QR.";
+            }
+        };
+        try {
+            const config = await apiRequest("/api/asistencia/qr/config");
+            if (revision !== screenRevision) return;
+            if (!config.gpsSchemaReady || !config.qrTableReady) {
+                qrSetup.hidden = true; qrDisplay.hidden = true;
+                locationStatus.textContent = "Para activar el QR y guardar la ubicación de cada marca, primero ejecuta la migración 10_asistencia_qr_ubicacion.sql en Oracle.";
+            } else if (config.configured) {
+                radiusInput.value = String(config.radiusMeters); qrSetup.hidden = true; qrDisplay.hidden = false;
+                await refreshAttendanceQr();
+                attendanceQrTimer = setInterval(() => void refreshAttendanceQr(), 15000);
+            }
+        } catch (error) { locationStatus.textContent = error.message || "No se pudo cargar la configuración del QR."; }
     }
     section.append(profileCard, feedback);
     const controls = { period: checkinNode("select", "attendance-filter"), date: checkinNode("input", "attendance-filter"), employee: checkinNode("select", "attendance-filter") };
@@ -606,7 +706,7 @@ async function renderAttendanceModule() {
     section.append(filterRow, download);
     const summary = checkinNode("div", "attendance-summary"); summary.dataset.attendanceSummary = "true"; section.appendChild(summary);
     const tableWrap = checkinNode("div", "table-container attendance-table-wrap"), table = checkinNode("table"), thead = checkinNode("thead"), head = checkinNode("tr");
-    ["Trabajador", "RUT", "Fecha", "Entrada", "Salida", "Fotos"].forEach(label => head.appendChild(checkinNode("th", "", label))); thead.appendChild(head); table.append(thead, checkinNode("tbody")); tableWrap.appendChild(table); section.appendChild(tableWrap);
+    ["Trabajador", "RUT", "Fecha", "Entrada", "Salida", ...(admin ? ["Ubicación"] : []), "Fotos"].forEach(label => head.appendChild(checkinNode("th", "", label))); thead.appendChild(head); table.append(thead, checkinNode("tbody")); tableWrap.appendChild(table); section.appendChild(tableWrap);
     otherModule.appendChild(section);
     await loadAttendanceReport(section, controls.period.value, controls.date.value, "", feedback);
     if (admin) {
@@ -628,6 +728,16 @@ async function loadAttendanceReport(section, period, date, employeeId, feedback)
         const tbody = section.querySelector(".attendance-table-wrap tbody"); tbody.replaceChildren();
         report.marcas.forEach(row => {
             const tr = checkinNode("tr"); [row.nombre, row.rut, row.fecha, row.entrada || "—", row.salida || "—"].forEach(value => tr.appendChild(checkinNode("td", "", value)));
+            if (isAdminRole()) {
+                const location = checkinNode("td", "attendance-location-cell");
+                [["Entrada", row.entradaLat, row.entradaLon, row.entradaDistancia, row.entradaPrecision], ["Salida", row.salidaLat, row.salidaLon, row.salidaDistancia, row.salidaPrecision]].forEach(([label, lat, lon, distance, accuracy]) => {
+                    if (lat == null || lon == null) return;
+                    const link = document.createElement("a"); link.href = `https://maps.google.com/?q=${encodeURIComponent(`${lat},${lon}`)}`; link.target = "_blank"; link.rel = "noopener noreferrer";
+                    link.textContent = `${label}: validada · ${Math.round(Number(distance))} m (±${Math.round(Number(accuracy))} m)`; location.append(link, document.createElement("br"));
+                });
+                if (!location.childElementCount) location.textContent = "Sin datos de ubicación";
+                tr.appendChild(location);
+            }
             const photos = checkinNode("td");
             if (row.entradaFoto) photos.appendChild(checkinButton("Entrada", () => window.open(`/api/asistencia/${row.id}/foto/entrada`, "_blank", "noopener")));
             if (row.salidaFoto) photos.appendChild(checkinButton("Salida", () => window.open(`/api/asistencia/${row.id}/foto/salida`, "_blank", "noopener")));
