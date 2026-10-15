@@ -277,7 +277,7 @@ public class AttendanceController {
 
     private boolean isAdmin(RoleAccessService.User user) { return Set.of("ADMIN", "EMPRESA").contains(user.role()); }
     private void requireAttendanceAdmin(HttpSession session) {
-        if (!"ADMIN".equals(access.current(session).role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el administrador puede mostrar o configurar el QR de asistencia.");
+        if (!isAdmin(access.current(session))) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo administración o el jefe de empresa puede mostrar o configurar el QR de asistencia.");
     }
     private QrSettings qrSettings() {
         List<QrSettings> settings = jdbc.query("SELECT LATITUD,LONGITUD,RADIO_METROS,QR_ACTUAL,QR_VENCE,QR_ANTERIOR,QR_ANTERIOR_VENCE FROM APP_ASISTENCIA_QR WHERE ID_CONFIG=1",
