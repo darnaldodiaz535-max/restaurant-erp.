@@ -1409,18 +1409,24 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 /* Startup overlays auth until its session decision is ready; no dashboard flash. */
 body.booting > :not(#marigexSplash) { visibility: hidden; }
 body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationMenu { visibility: hidden; }
-#marigexSplash { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; padding: 24px; color: white; background: linear-gradient(135deg,#111827,#1e3a5f); opacity:1; transition: opacity .25s; }
+#marigexSplash { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; overflow: hidden; isolation: isolate; padding: 24px; color: white; background: #101b2d; opacity:1; transition: opacity .35s ease; }
 #marigexSplash.splash-exit { opacity: 0; pointer-events: none; }
-.splash-content { text-align: center; }
-.splash-content > * { animation: splash-in .55s both; }
-.splash-content img { border-radius:22px; }
-.splash-content h1 { letter-spacing:.12em; font-size:clamp(28px,7vw,46px); margin:18px 0 8px; animation-delay:.1s; }
-.splash-content p { margin:10px 0; color:#dbeafe; animation-delay:.22s; }
-.splash-content p + p { color:#cbd5e1; animation-delay:.35s; }
-.splash-spinner { display:inline-block; margin-top:22px; width:24px; height:24px; border:2px solid #64748b; border-top-color:white; border-radius:50%; animation: splash-spin .85s linear infinite; }
+.splash-content { position:relative; z-index:1; width:min(100%, 440px); padding:42px 34px 36px; border:1px solid rgba(255,255,255,.16); border-radius:26px; background:rgba(12,24,40,.56); box-shadow:0 28px 90px rgba(0,0,0,.3); text-align:center; backdrop-filter:blur(12px); }
+.splash-content > * { animation: splash-in .65s both; }
+.splash-content img { width:112px; height:112px; border:1px solid rgba(255,255,255,.3); border-radius:25px; box-shadow:0 0 34px rgba(25,190,202,.3); animation-delay:.04s; }
+.splash-content h1 { letter-spacing:.025em; font-size:clamp(28px,6vw,42px); line-height:1.1; margin:20px 0 9px; text-shadow:0 4px 24px rgba(0,0,0,.25); animation-delay:.12s; }
+.splash-content p { margin:9px 0; color:#e7f1fb; font-size:1.05rem; animation-delay:.22s; }
+.splash-content p + p { color:#bcd0e4; font-size:.96rem; animation-delay:.3s; }
+.splash-spinner { display:inline-block; margin-top:22px; width:30px; height:30px; border:2px solid rgba(255,255,255,.3); border-top-color:#37d0d0; border-radius:50%; animation: splash-spin .85s linear infinite; }
+@keyframes splash-photo-drift { from { transform:scale(1.02); } to { transform:scale(1.09) translate3d(-.5%,-.35%,0); } }
+@keyframes splash-light { 0%,100% { opacity:.55; transform:translate3d(-8%,0,0); } 50% { opacity:.9; transform:translate3d(8%,2%,0); } }
+#marigexSplash::before, #marigexSplash::after { position:absolute; z-index:0; inset:-3%; content:""; pointer-events:none; }
+#marigexSplash::before { background:url("images/marigex-login-restaurant.png") center/cover no-repeat; filter:saturate(.82); animation:splash-photo-drift 18s ease-in-out infinite alternate; }
+#marigexSplash::after { background:linear-gradient(120deg,rgba(8,18,32,.82),rgba(12,35,52,.58) 52%,rgba(6,16,30,.82)),radial-gradient(ellipse at 50% 45%,rgba(24,169,187,.22),transparent 60%); animation:splash-light 9s ease-in-out infinite; }
 @keyframes splash-in { from { opacity:0; transform:translateY(7px); } to {opacity:1;transform:none;} }
 @keyframes splash-spin { to {transform:rotate(360deg);} }
-@media (prefers-reduced-motion: reduce) { .splash-content > * { animation:none; } #marigexSplash { transition:none; } }
+@media (max-width: 520px) { .splash-content { padding:34px 24px 30px; } .splash-content img { width:96px; height:96px; } }
+@media (prefers-reduced-motion: reduce) { .splash-content > *, #marigexSplash::before, #marigexSplash::after { animation:none !important; } #marigexSplash { transition:none; } }
 .evidence-camera { max-height:calc(100dvh - 24px); overflow:auto; width:min(600px,calc(100% - 24px)); }
 .evidence-camera video, .evidence-camera img { display:block; width:100%; max-height:45dvh; object-fit:contain; background:#111827; border-radius:8px; }
 .evidence-camera .module-controls { display:flex; flex-wrap:wrap; gap:8px; }
