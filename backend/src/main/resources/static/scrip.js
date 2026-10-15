@@ -1529,7 +1529,10 @@ if (slug === "inventario") {
     if (revision !== screenRevision) return;
     if (name === "Tareas diarias") await renderEvidenceReview(section, selectedArea);
     if (name === "Horarios") await renderSchedules(section);
-    if (name === "Configuración") await renderNotificationPreferences(section);
+    if (name === "Configuración") {
+        await renderNotificationPreferences(section);
+        await renderAccountSettings(section);
+    }
 }
 
 async function renderEvidenceReview(section, selectedArea) {
@@ -1599,6 +1602,7 @@ if (adminUser && adminMenu) {
     }));
 }
 if (localStorage.getItem("restaurant-erp-compact") === "true") document.body.classList.add("compact-view");
+if (localStorage.getItem("marigex-theme") === "dark") document.body.classList.add("theme-dark");
 
 const notificationBtn = document.getElementById("notificationBtn");
 const notificationMenu = document.getElementById("notificationMenu");
@@ -2192,15 +2196,65 @@ setupForm.addEventListener("submit", async (event) => {
 });
 async function openProfile() {
     if (!currentProfile) return;
+    const profileEmployeeId = currentProfile.employeeId;
     document.getElementById("profile-name").textContent = currentProfile.name;
     document.getElementById("profile-position").textContent = currentProfile.position;
     document.getElementById("profile-area").textContent = currentProfile.area;
+    document.getElementById("profile-area-detail").textContent = currentProfile.area || "Sin área asignada";
     document.getElementById("profile-username").textContent = currentProfile.username;
     const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
     document.getElementById("profile-role").textContent = roleLabels[currentProfile.role] || currentProfile.position;
+    const avatar = document.getElementById("profileAvatar");
+    const avatarKey = `marigex-profile-photo-${currentProfile.employeeId}`;
+    const initials = currentProfile.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+    const savedPhoto = localStorage.getItem(avatarKey);
+    avatar.textContent = savedPhoto ? "" : initials;
+    avatar.style.backgroundImage = savedPhoto ? `url("${savedPhoto}")` : "";
+    avatar.classList.toggle("has-photo", Boolean(savedPhoto));
+    const tenure = document.getElementById("profile-tenure");
+    const startDate = document.getElementById("profile-start-date");
+    const balance = document.getElementById("profile-vacation-balance");
+    const vacationNote = document.getElementById("profile-vacation-note");
+    tenure.textContent = "Cargando…"; balance.textContent = "Cargando…";
     profileDialog.showModal();
+    try {
+        const vacation = await apiRequest("/api/perfil/vacaciones");
+        if (!profileDialog.open || !currentProfile || currentProfile.employeeId !== profileEmployeeId) return;
+        tenure.textContent = formatServiceTime(vacation.serviceDays);
+        startDate.textContent = `Cuenta creada el ${new Date(`${vacation.startDate}T12:00:00`).toLocaleDateString("es-CL")}`;
+        balance.textContent = `${formatVacationDays(vacation.balanceDays)} días`;
+        vacationNote.textContent = `${formatVacationDays(vacation.accruedDays)} días generados · ${formatVacationDays(vacation.usedDays)} utilizados. Base: 15 días hábiles por cada año completado; no incluye feriado progresivo.`;
+    } catch (error) {
+        tenure.textContent = "No se pudo cargar"; balance.textContent = "No disponible";
+        startDate.textContent = error.message || "Revisa la conexión e inténtalo otra vez.";
+    }
+}
+function formatVacationDays(value) { return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(Number(value || 0)); }
+function formatServiceTime(days) {
+    const value = Math.max(0, Number(days) || 0); const years = Math.floor(value / 365.2425);
+    const months = Math.floor((value - years * 365.2425) / 30.4369); const remaining = Math.floor(value - years * 365.2425 - months * 30.4369);
+    return [years && `${years} ${years === 1 ? "año" : "años"}`, months && `${months} ${months === 1 ? "mes" : "meses"}`, !years && !months ? `${remaining} días` : null].filter(Boolean).join(" y ");
 }
 document.getElementById("closeProfile").addEventListener("click", () => profileDialog.close());
+document.getElementById("profilePhotoInput").addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (!file || !currentProfile) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+        alert("Elige una imagen JPG, PNG o WebP de hasta 5 MB."); event.target.value = ""; return;
+    }
+    try {
+        const source = await createImageBitmap(file);
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 320 / Math.max(source.width, source.height));
+        canvas.width = Math.round(source.width * scale); canvas.height = Math.round(source.height * scale);
+        canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height); source.close();
+        const photo = canvas.toDataURL("image/jpeg", .82);
+        localStorage.setItem(`marigex-profile-photo-${currentProfile.employeeId}`, photo);
+        const avatar = document.getElementById("profileAvatar"); avatar.textContent = "";
+        avatar.style.backgroundImage = `url("${photo}")`; avatar.classList.add("has-photo");
+    } catch { alert("No se pudo guardar la foto en este dispositivo."); }
+    finally { event.target.value = ""; }
+});
 async function closeSession() {
     if (!confirm("¿Quieres cerrar tu sesión?")) return;
     try { await disconnectPush(); } catch(error) { console.info('No se pudo desvincular Push:',error.message); }

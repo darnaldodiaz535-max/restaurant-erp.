@@ -719,6 +719,101 @@ async function renderNotificationPreferences(section) {
     }
 }
 
+async function renderAccountSettings(section) {
+    const panel = element('section', undefined, 'account-settings-grid');
+    const appearance = element('article', undefined, 'settings-card');
+    appearance.append(element('span', 'PREFERENCIAS', 'eyebrow'), element('h3', 'Apariencia'), element('p', 'Ajusta la vista de MariGex a tu espacio de trabajo.'));
+    const themeLabel = element('label', 'Tema de la aplicación', 'settings-control-label');
+    const theme = element('select', undefined, 'settings-select');
+    theme.setAttribute('aria-label', 'Tema de la aplicación');
+    [['light', 'Claro'], ['dark', 'Oscuro']].forEach(([value, label]) => { const option = element('option', label); option.value = value; theme.append(option); });
+    theme.value = localStorage.getItem('marigex-theme') === 'dark' ? 'dark' : 'light';
+    theme.addEventListener('change', () => {
+        document.body.classList.toggle('theme-dark', theme.value === 'dark');
+        localStorage.setItem('marigex-theme', theme.value);
+    });
+    themeLabel.append(theme);
+    const compactLabel = element('label', 'Reducir el tamaño de los paneles', 'settings-check-row');
+    const compact = element('input'); compact.type = 'checkbox'; compact.checked = localStorage.getItem('restaurant-erp-compact') === 'true';
+    compact.addEventListener('change', () => {
+        document.body.classList.toggle('compact-view', compact.checked);
+        localStorage.setItem('restaurant-erp-compact', String(compact.checked));
+    });
+    compactLabel.prepend(compact);
+    appearance.append(themeLabel, compactLabel);
+
+    const language = element('article', undefined, 'settings-card');
+    language.append(element('span', 'IDIOMA', 'eyebrow'), element('h3', 'Idioma'), element('p', 'La interfaz está disponible actualmente en español.'));
+    const languageSelect = element('select', undefined, 'settings-select'); languageSelect.disabled = true;
+    const spanish = element('option', 'Español'); spanish.value = 'es'; languageSelect.append(spanish);
+    const languageLabel = element('label', 'Idioma de la aplicación', 'settings-control-label'); languageLabel.append(languageSelect); language.append(languageLabel);
+
+    const vacation = element('article', undefined, 'settings-card settings-vacation');
+    vacation.append(element('span', 'PERSONAL', 'eyebrow'), element('h3', 'Mis vacaciones'));
+    const vacationSummary = element('p', 'Cargando saldo…'); vacationSummary.setAttribute('role', 'status'); vacation.append(vacationSummary);
+    const vacationList = element('div', undefined, 'vacation-history'); vacation.append(vacationList);
+    const showVacation = async () => {
+        try {
+            const data = await apiRequest('/api/perfil/vacaciones');
+            vacationSummary.textContent = `${formatVacationDays(data.balanceDays)} días disponibles · ${formatVacationDays(data.usedDays)} utilizados de ${formatVacationDays(data.accruedDays)} generados desde la creación de tu acceso.`;
+            vacationList.replaceChildren();
+            if (!data.uses.length) vacationList.append(element('small', 'Todavía no hay días de vacaciones registrados.'));
+            data.uses.forEach(use => {
+                const row = element('div', undefined, 'vacation-history-row');
+                row.append(element('span', `${new Date(`${use.date}T12:00:00`).toLocaleDateString('es-CL')} · ${formatVacationDays(use.days)} días${use.note ? ` · ${use.note}` : ''}`));
+                if (isOwnerRole()) {
+                    const remove = actionButton('Eliminar', async () => {
+                        if (!confirm('¿Eliminar este registro de vacaciones? El saldo se recalculará.')) return;
+                        try { await apiRequest(`/api/perfil/vacaciones/usos/${use.id}`, { method: 'DELETE' }); await showVacation(); }
+                        catch (error) { vacationSummary.textContent = error.message; }
+                    });
+                    row.append(remove);
+                }
+                vacationList.append(row);
+            });
+        } catch (error) { vacationSummary.textContent = error.message || 'No se pudo cargar el saldo.'; }
+    };
+    await showVacation();
+    if (isOwnerRole()) {
+        const form = element('form', undefined, 'vacation-register-form');
+        const employee = element('select'); employee.required = true;
+        employee.append(element('option', 'Selecciona trabajador…')); employee.options[0].value = '';
+        const date = element('input'); date.type = 'date'; date.required = true; date.max = new Date().toISOString().slice(0, 10); date.value = date.max;
+        const days = element('input'); days.type = 'number'; days.min = '0.01'; days.max = '30'; days.step = '0.5'; days.placeholder = 'Días'; days.required = true;
+        const note = element('input'); note.maxLength = 300; note.placeholder = 'Observación (opcional)';
+        try {
+            const employees = await apiRequest('/api/empleados');
+            employees.filter(item => item.active).forEach(item => { const option = element('option', item.name); option.value = item.id; employee.append(option); });
+        } catch { employee.disabled = true; }
+        const employeeLabel = element('label', 'Trabajador'); employeeLabel.append(employee);
+        const dateLabel = element('label', 'Fecha'); dateLabel.append(date);
+        const daysLabel = element('label', 'Días utilizados'); daysLabel.append(days);
+        const noteLabel = element('label', 'Observación'); noteLabel.append(note);
+        const save = actionButton('Registrar vacaciones', async () => {}, true); save.type = 'submit';
+        form.append(employeeLabel, dateLabel, daysLabel, noteLabel, save);
+        form.addEventListener('submit', async event => {
+            event.preventDefault(); if (!form.reportValidity()) return;
+            save.disabled = true;
+            try {
+                await apiRequest('/api/perfil/vacaciones/usos', { method: 'POST', body: JSON.stringify({ employeeId: Number(employee.value), date: date.value, days: Number(days.value), note: note.value.trim() }) });
+                form.reset(); date.value = date.max; await showVacation();
+            } catch (error) { vacationSummary.textContent = error.message || 'No se pudo registrar el feriado.'; }
+            finally { save.disabled = false; }
+        });
+        vacation.append(element('h4', 'Registrar días usados'), form);
+    }
+
+    const about = element('article', undefined, 'settings-card settings-about');
+    about.append(element('span', 'M A R I G E X  6 6', 'eyebrow'), element('h3', 'Todo tu restaurante, en orden.'), element('p', 'MariGex reúne en un solo lugar la gestión del personal, la asistencia y la operación diaria del restaurante. Su objetivo es ayudar al equipo a trabajar con información clara y coordinada.'));
+    const steps = element('div', undefined, 'about-flow');
+    ['Personal', 'Asistencia', 'Operación diaria'].forEach((label, index) => {
+        const item = element('div', undefined, 'about-flow-step'); item.append(element('span', `0${index + 1}`), element('strong', label)); steps.append(item);
+        if (index < 2) steps.append(element('span', '→', 'about-flow-arrow'));
+    });
+    about.append(steps, element('small', `MariGex 66 · Sistema de Gestión · © ${new Date().getFullYear()}`));
+    panel.append(appearance, language, vacation, about); section.append(panel);
+}
+
 /* PARA QUÉ SIRVE:
    Mantiene el panel de notificaciones dentro de la pantalla del teléfono.
    ARCHIVO: src/main/resources/static/experiencia.js

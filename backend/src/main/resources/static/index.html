@@ -13,7 +13,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MariGex 66 - Sistema de Gestión</title>
 
-<link rel="stylesheet" href="style.css?v=marigex-login-20261015-5">
+<link rel="stylesheet" href="style.css?v=perfil-config-20261015-1">
     <meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -124,12 +124,12 @@
     <div class="user-menu" id="adminMenu">
         <button type="button" id="changePasswordButton">Cambiar contraseña</button>
 
-        <button>
+        <button type="button" data-account-action="profile">
             <i class="fa-regular fa-user"></i>
             Mi perfil
         </button>
 
-        <button>
+        <button type="button" data-account-action="settings">
             <i class="fa-solid fa-gear"></i>
             Configuración
         </button>
@@ -835,16 +835,26 @@
          JAVASCRIPT
          ================================= -->
 
-    <dialog id="profileDialog" class="profile-dialog">
-        <h2>Mi perfil</h2>
-        <dl>
-            <dt>Nombre</dt><dd id="profile-name"></dd>
-            <dt>Cargo</dt><dd id="profile-position"></dd>
-            <dt>Área</dt><dd id="profile-area"></dd>
-            <dt>Usuario</dt><dd id="profile-username"></dd>
-            <dt>Tipo de acceso</dt><dd id="profile-role"></dd>
+    <dialog id="profileDialog" class="profile-dialog profile-dialog--wide" aria-labelledby="profileTitle">
+        <header class="profile-heading">
+            <div><span class="eyebrow">TU CUENTA</span><h2 id="profileTitle">Mi perfil</h2><p>Tu información personal y laboral.</p></div>
+            <button id="closeProfile" class="icon-button" type="button" aria-label="Cerrar perfil">×</button>
+        </header>
+        <section class="profile-identity">
+            <div class="profile-avatar" id="profileAvatar" aria-hidden="true">MG</div>
+            <div class="profile-identity-copy"><strong id="profile-name"></strong><span id="profile-role" class="profile-role-pill"></span><span id="profile-area"></span></div>
+            <label class="secondary-button profile-photo-button" for="profilePhotoInput">Cambiar foto</label>
+            <input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        </section>
+        <div class="profile-grid">
+            <article class="profile-info-card"><span class="profile-card-icon">◷</span><div><small>Antigüedad de la cuenta</small><strong id="profile-tenure">Cargando…</strong><p id="profile-start-date"></p></div></article>
+            <article class="profile-info-card"><span class="profile-card-icon">✦</span><div><small>Vacaciones disponibles</small><strong id="profile-vacation-balance">Cargando…</strong><p id="profile-vacation-note">Feriado legal básico calculado desde la creación del acceso; no incluye días progresivos.</p></div></article>
+        </div>
+        <dl class="profile-details">
+            <div><dt>Cargo</dt><dd id="profile-position"></dd></div>
+            <div><dt>Área</dt><dd id="profile-area-detail"></dd></div>
+            <div><dt>Usuario</dt><dd id="profile-username"></dd></div>
         </dl>
-        <button id="closeProfile" class="secondary-button" type="button">Cerrar</button>
     </dialog>
     <dialog id="employeeAccountDialog" class="profile-dialog" aria-labelledby="employeeAccountTitle">
         <h2 id="employeeAccountTitle">Crear acceso</h2>
@@ -970,9 +980,9 @@
     </dialog>
 <script src="vendor/qrcode-generator.js?v=1.4.4"></script>
 <script src="vendor/jsQR.js?v=1.4.0"></script>
-<script src="scrip.js?v=asistencia-plantillas-20261015-5"></script>
+<script src="scrip.js?v=perfil-config-20261015-1"></script>
 <script src="notificaciones-horarios.js?v=notificaciones-leer-quitar-20261009-2"></script>
-<script src="experiencia.js?v=notificaciones-20261004-1"></script>
+<script src="experiencia.js?v=perfil-config-20261015-1"></script>
 <script src="gestion.js?v=notificaciones-20261004-1"></script>
     <script>
   if ("serviceWorker" in navigator) {

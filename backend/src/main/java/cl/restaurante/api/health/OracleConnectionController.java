@@ -113,6 +113,7 @@ public ResponseEntity<Map<String, String>> update(@PathVariable long id, @Reques
         }
         jdbcTemplate.execute("ALTER SESSION DISABLE PARALLEL DML");
         jdbcTemplate.update("DELETE FROM APP_EVIDENCIA_TAREA WHERE ID_EMPLEADO=?", id);
+        jdbcTemplate.update("DELETE FROM APP_FERIADO_USO WHERE ID_EMPLEADO=?", id);
         int changed = jdbcTemplate.update("DELETE FROM APP_EMPLEADO WHERE ID_EMPLEADO = ?", id);
         if (changed > 0) activity.record(session, "ELIMINAR", "Personal", "Se eliminó un trabajador");
         return changed == 0 ? ResponseEntity.notFound().build() : ResponseEntity.noContent().build();

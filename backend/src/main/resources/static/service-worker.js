@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-asistencia-qr-20261014-2';
+const CACHE_NAME='marigex-shell-perfil-config-20261015-1';
 const DEVICE_CACHE='marigex-device';
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',event=>{
