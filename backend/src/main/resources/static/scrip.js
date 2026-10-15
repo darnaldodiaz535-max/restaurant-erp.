@@ -95,7 +95,7 @@ function readStore(key, fallback) {
 function accessRole() { return currentProfile?.role || ""; }
 function isOwnerRole() { return ["ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_LOCAL"].includes(accessRole()); }
 function isAdminRole() { return ["ADMIN", "EMPRESA"].includes(accessRole()); }
-function isAttendanceQrAdminRole() { return accessRole() === "ADMIN"; }
+function isAttendanceQrAdminRole() { return ["ADMIN", "EMPRESA"].includes(accessRole()); }
 function isSalonRole() { return accessRole() === "JEFE_SALON"; }
 function isKitchenRole() { return accessRole() === "JEFE_COCINA"; }
 function isWorkerRole() { return ["TRABAJADOR", "EMPLEADO"].includes(accessRole()); }
