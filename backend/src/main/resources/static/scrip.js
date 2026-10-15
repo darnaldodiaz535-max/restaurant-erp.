@@ -711,15 +711,15 @@ async function renderAttendanceModule() {
         scheduleHeading.appendChild(checkinNode("h4", "", "Planillas de turnos de asistencia"));
         const help = document.createElement("details"); help.className = "attendance-schedule-help";
         const helpTitle = document.createElement("summary"); helpTitle.textContent = "¿Cómo funciona?";
-        help.append(helpTitle, checkinNode("p", "attendance-qr-help", "Las plantillas son formatos para ordenar los turnos del personal y convertirlos en asistencia programada. Elige el formato que se parezca a la forma de trabajar de tu empresa: turnos semanales fijos, alternancia de dos semanas, ciclos rotativos (por ejemplo día/noche o 4x4) o un calendario con fechas específicas. Descarga el archivo, revisa los nombres, RUT y áreas precargados, completa los turnos sin cambiar los encabezados e incluye también los días LIBRE. En turnos que terminan después de medianoche, indica SIGUIENTE en DIA_SALIDA. Luego selecciona el mismo formato, elige el archivo completado y carga el horario. El sistema usa la programación para señalar días libres, turnos, atrasos y horas programadas. La vigencia comienza en la fecha elegida y dura dos meses. Esta sección y la programación detallada son solo para Administración."));
+        help.append(helpTitle, checkinNode("p", "attendance-qr-help", "Descarga la planilla vacía y escribe una fila por trabajador usando el nombre que figura en Personal. Todas las opciones conservan el mismo orden: Nombre, lunes y sus horas, martes y sus horas, hasta domingo y sus horas, más Total general. En el día escribe un turno como 10:00-22:00 o LIBRE; las horas del día y el total se calculan automáticamente. Semana fija repite una pestaña; rotación quincenal usa Semana 1 y Semana 2; ciclo rotativo usa cuatro semanas; calendario por fechas muestra las fechas de la vigencia. Completa todas las pestañas que incluya el formato, con las mismas personas y sus días LIBRE. No cambies los encabezados. Luego elige el mismo formato, selecciona el archivo y pulsa Cargar horario por dos meses. El sistema reconocerá nombres, turnos y días libres para comparar el horario con la asistencia. Esta sección es solo para Administración."));
         schedulePanel.append(scheduleHeading, help);
         const scheduleActions = checkinNode("div", "attendance-qr-setup");
         const templateSelect = checkinNode("select", "attendance-filter"); templateSelect.setAttribute("aria-label", "Formato de plantilla");
         const templateOptions = [
-            ["SEMANA_FIJA", "Horario semanal fijo"],
-            ["ROTACION_2_SEMANAS", "Rotación de dos semanas (plantilla estándar completa)"],
-            ["CICLO_DIAS", "Ciclo rotativo (día/noche, 4x4 u otro)"],
-            ["CALENDARIO_FECHAS", "Horario por fechas"],
+            ["SEMANA_FIJA", "Semana fija · 1 pestaña"],
+            ["ROTACION_2_SEMANAS", "Rotación de dos semanas · 2 pestañas"],
+            ["CICLO_DIAS", "Ciclo rotativo · 4 pestañas"],
+            ["CALENDARIO_FECHAS", "Calendario por fechas · semanas de la vigencia"],
         ];
         templateOptions.forEach(([value, label]) => templateSelect.add(new Option(label, value)));
         templateSelect.value = "ROTACION_2_SEMANAS";
@@ -729,7 +729,7 @@ async function renderAttendanceModule() {
                 const response = await fetch(`/api/asistencia/horarios/plantilla/${encodeURIComponent(templateSelect.value)}.xlsx?vigenteDesde=${encodeURIComponent(startDate.value)}`, { credentials: "same-origin" });
                 if (!response.ok) { const problem = await response.json().catch(() => ({})); throw new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`); }
                 const url = URL.createObjectURL(await response.blob()); const link = document.createElement("a"); link.href = url; link.download = templateOptions.find(([value]) => value === templateSelect.value)?.[1].toLowerCase().replaceAll(/[^a-z0-9]+/g, "-") + ".xlsx"; link.click(); URL.revokeObjectURL(url);
-                feedback.textContent = "Plantilla descargada. Complétala sin cambiar sus encabezados y luego carga ese archivo.";
+                feedback.textContent = "Plantilla vacía descargada. Escribe los nombres, turnos o LIBRE sin cambiar los encabezados y luego carga ese archivo.";
             } catch (error) { feedback.textContent = error.message || "No se pudo descargar la plantilla."; }
             finally { downloadTemplate.disabled = false; }
         }, "secondary-button");
