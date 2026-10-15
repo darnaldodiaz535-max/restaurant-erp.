@@ -1571,6 +1571,8 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     width: 42px;
     height: 38px;
     margin: 0 auto 20px;
+    filter: drop-shadow(0 3px 8px rgba(20, 166, 182, .24));
+    animation: auth-leaf-float 3.8s ease-in-out infinite;
 }
 .auth-leaf::before,
 .auth-leaf::after {
@@ -1582,8 +1584,11 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     background: #14a6b6;
     content: "";
 }
-.auth-leaf::before { left: 4px; transform: rotate(-39deg); }
-.auth-leaf::after { right: 4px; transform: rotate(39deg) scaleX(-1); }
+.auth-leaf::before { left: 4px; transform: rotate(-39deg); transform-origin: 90% 90%; animation: auth-leaf-left 3.8s ease-in-out infinite; }
+.auth-leaf::after { right: 4px; transform: rotate(39deg) scaleX(-1); transform-origin: 10% 90%; animation: auth-leaf-right 3.8s ease-in-out infinite; }
+@keyframes auth-leaf-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes auth-leaf-left { 0%,100% { transform: rotate(-39deg) scale(.98); } 50% { transform: rotate(-49deg) scale(1.04); } }
+@keyframes auth-leaf-right { 0%,100% { transform: rotate(39deg) scaleX(-1) scale(.98); } 50% { transform: rotate(49deg) scaleX(-1) scale(1.04); } }
 .auth-card h1 {
     margin: 0 0 9px;
     color: #10243b;
@@ -1668,7 +1673,7 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .auth-card { width: min(100%, 480px); padding: 28px 23px; border-radius: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .auth-wordmark, .auth-wordmark-number, .auth-tagline, .auth-brand-copy, .auth-card, .auth-brand::before { animation: none !important; }
+    .auth-wordmark, .auth-wordmark-number, .auth-tagline, .auth-brand-copy, .auth-card, .auth-brand::before, .auth-leaf, .auth-leaf::before, .auth-leaf::after { animation: none !important; }
     .auth-form input, .auth-form select, .auth-form .primary-button { transition: none !important; }
 }
 
