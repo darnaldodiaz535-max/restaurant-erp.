@@ -155,8 +155,8 @@ public class AttendanceController {
                 jdbc.update("INSERT INTO APP_ASISTENCIA (EMPLEADO_ID,FECHA,HORA_ENTRADA,ESTADO,ENTRADA_EN,FOTO_ENTRADA,TIPO_FOTO_ENTRADA,GPS_ENTRADA_LAT,GPS_ENTRADA_LON,GPS_ENTRADA_PRECISION,GPS_ENTRADA_DISTANCIA) VALUES (?,?,?,'PRESENTE',?,?,?,?,?,?,?)",
                         user.employeeId(), java.sql.Date.valueOf(today), now.format(HOUR), java.sql.Timestamp.valueOf(now), bytes, photo.getContentType(), latitude, longitude, accuracy, distance);
             } else {
-                List<Long> openRows = jdbc.query("SELECT ID_ASISTENCIA FROM APP_ASISTENCIA WHERE EMPLEADO_ID=? AND FECHA=? AND ENTRADA_EN IS NOT NULL AND SALIDA_EN IS NULL FOR UPDATE",
-                        (rs, n) -> rs.getLong(1), user.employeeId(), java.sql.Date.valueOf(today));
+                List<Long> openRows = jdbc.query("SELECT ID_ASISTENCIA FROM APP_ASISTENCIA WHERE EMPLEADO_ID=? AND FECHA BETWEEN ? AND ? AND ENTRADA_EN IS NOT NULL AND SALIDA_EN IS NULL ORDER BY FECHA DESC FOR UPDATE",
+                        (rs, n) -> rs.getLong(1), user.employeeId(), java.sql.Date.valueOf(today.minusDays(1)), java.sql.Date.valueOf(today));
                 Long open = openRows.isEmpty() ? null : openRows.getLast();
                 if (open == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "No hay una entrada abierta hoy. Registra Entrada antes de Salida.");
                 jdbc.update("UPDATE APP_ASISTENCIA SET HORA_SALIDA=?,SALIDA_EN=?,FOTO_SALIDA=?,TIPO_FOTO_SALIDA=?,GPS_SALIDA_LAT=?,GPS_SALIDA_LON=?,GPS_SALIDA_PRECISION=?,GPS_SALIDA_DISTANCIA=? WHERE ID_ASISTENCIA=?",

@@ -708,35 +708,44 @@ async function renderAttendanceModule() {
     if (qrAdmin) {
         const schedulePanel = checkinNode("section", "attendance-qr-admin attendance-schedule-admin");
         const scheduleHeading = checkinNode("div", "attendance-schedule-heading");
-        scheduleHeading.appendChild(checkinNode("h4", "", "Planilla de turnos de asistencia"));
+        scheduleHeading.appendChild(checkinNode("h4", "", "Planillas de turnos de asistencia"));
         const help = document.createElement("details"); help.className = "attendance-schedule-help";
         const helpTitle = document.createElement("summary"); helpTitle.textContent = "¿Cómo funciona?";
-        help.append(helpTitle, checkinNode("p", "attendance-qr-help", "Usa siempre la plantilla descargable. Tiene hojas para Cocina, Salón y Barra, con Semana 1 y Semana 2. La estructura no cambia; el personal y sus turnos, horas y días LIBRE sí pueden cambiar cada dos meses. Primero registra o actualiza al personal en MariGex. Completa cada turno como HH:mm-HH:mm, y escribe LIBRE con 0 horas cuando corresponda. La fecha de inicio debe ser lunes. El horario quedará vigente por dos meses. Solo el administrador puede consultar la planilla."));
+        help.append(helpTitle, checkinNode("p", "attendance-qr-help", "Las plantillas son formatos para ordenar los turnos del personal y convertirlos en asistencia programada. Elige el formato que se parezca a la forma de trabajar de tu empresa: turnos semanales fijos, alternancia de dos semanas, ciclos rotativos (por ejemplo día/noche o 4x4) o un calendario con fechas específicas. Descarga el archivo, revisa los nombres, RUT y áreas precargados, completa los turnos sin cambiar los encabezados e incluye también los días LIBRE. En turnos que terminan después de medianoche, indica SIGUIENTE en DIA_SALIDA. Luego selecciona el mismo formato, elige el archivo completado y carga el horario. El sistema usa la programación para señalar días libres, turnos, atrasos y horas programadas. La vigencia comienza en la fecha elegida y dura dos meses. Esta sección y la programación detallada son solo para Administración."));
         schedulePanel.append(scheduleHeading, help);
         const scheduleActions = checkinNode("div", "attendance-qr-setup");
-        const downloadTemplate = checkinButton("Descargar plantilla estándar", async () => {
+        const templateSelect = checkinNode("select", "attendance-filter"); templateSelect.setAttribute("aria-label", "Formato de plantilla");
+        const templateOptions = [
+            ["SEMANA_FIJA", "Horario semanal fijo"],
+            ["ROTACION_2_SEMANAS", "Rotación de dos semanas (plantilla estándar completa)"],
+            ["CICLO_DIAS", "Ciclo rotativo (día/noche, 4x4 u otro)"],
+            ["CALENDARIO_FECHAS", "Horario por fechas"],
+        ];
+        templateOptions.forEach(([value, label]) => templateSelect.add(new Option(label, value)));
+        templateSelect.value = "ROTACION_2_SEMANAS";
+        const downloadTemplate = checkinButton("Descargar plantilla elegida", async () => {
             downloadTemplate.disabled = true;
             try {
-                const response = await fetch("/api/asistencia/horarios/plantilla.xlsx", { credentials: "same-origin" });
+                const response = await fetch(`/api/asistencia/horarios/plantilla/${encodeURIComponent(templateSelect.value)}.xlsx?vigenteDesde=${encodeURIComponent(startDate.value)}`, { credentials: "same-origin" });
                 if (!response.ok) { const problem = await response.json().catch(() => ({})); throw new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`); }
-                const url = URL.createObjectURL(await response.blob()); const link = document.createElement("a"); link.href = url; link.download = "plantilla-horarios-asistencia.xlsx"; link.click(); URL.revokeObjectURL(url);
-                feedback.textContent = "Plantilla descargada. Completa las seis hojas sin cambiar sus nombres ni encabezados.";
+                const url = URL.createObjectURL(await response.blob()); const link = document.createElement("a"); link.href = url; link.download = templateOptions.find(([value]) => value === templateSelect.value)?.[1].toLowerCase().replaceAll(/[^a-z0-9]+/g, "-") + ".xlsx"; link.click(); URL.revokeObjectURL(url);
+                feedback.textContent = "Plantilla descargada. Complétala sin cambiar sus encabezados y luego carga ese archivo.";
             } catch (error) { feedback.textContent = error.message || "No se pudo descargar la plantilla."; }
             finally { downloadTemplate.disabled = false; }
         }, "secondary-button");
-        const startLabel = checkinNode("label", "attendance-radius-label", "Vigente desde (lunes)");
+        const startLabel = checkinNode("label", "attendance-radius-label", "Vigente desde");
         const startDate = checkinNode("input", "attendance-rut"); startDate.type = "date"; startDate.setAttribute("aria-label", "Fecha de inicio de vigencia del horario");
         const todayLocal = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Santiago" }));
         const daysUntilMonday = ((8 - todayLocal.getDay()) % 7) || 7; todayLocal.setDate(todayLocal.getDate() + daysUntilMonday);
         startDate.value = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, "0")}-${String(todayLocal.getDate()).padStart(2, "0")}`;
         startLabel.appendChild(startDate);
-        const fileLabel = checkinNode("label", "attendance-radius-label", "Planilla completada (.xlsx)");
+        const fileLabel = checkinNode("label", "attendance-radius-label", "Archivo de la plantilla seleccionada (.xlsx)");
         const fileInput = checkinNode("input", "attendance-schedule-file"); fileInput.type = "file"; fileInput.accept = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; fileInput.setAttribute("aria-label", "Seleccionar planilla estándar de horarios"); fileLabel.appendChild(fileInput);
         const importSchedule = checkinButton("Cargar horario por dos meses", async () => {
             const file = fileInput.files?.[0];
             if (!file) { feedback.textContent = "Selecciona la planilla estándar completada."; return; }
             if (!startDate.value) { feedback.textContent = "Selecciona la fecha de inicio del horario."; return; }
-            const body = new FormData(); body.append("planilla", file); body.append("vigenteDesde", startDate.value);
+            const body = new FormData(); body.append("planilla", file); body.append("formato", templateSelect.value); body.append("vigenteDesde", startDate.value);
             importSchedule.disabled = true;
             try {
                 const result = await uploadRequest("/api/asistencia/horarios/importar", body);
@@ -745,7 +754,7 @@ async function renderAttendanceModule() {
             } catch (error) { feedback.textContent = error.message || "No se pudo cargar el horario."; }
             finally { importSchedule.disabled = false; }
         }, "primary-button");
-        scheduleActions.append(downloadTemplate, startLabel, fileLabel, importSchedule); schedulePanel.appendChild(scheduleActions);
+        scheduleActions.append(templateSelect, downloadTemplate, startLabel, fileLabel, importSchedule); schedulePanel.appendChild(scheduleActions);
         profileCard.appendChild(schedulePanel);
     }
     section.append(profileCard, feedback);

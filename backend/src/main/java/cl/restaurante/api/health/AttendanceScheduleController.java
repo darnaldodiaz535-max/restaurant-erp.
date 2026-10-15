@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,21 +32,30 @@ public class AttendanceScheduleController {
         this.access = access;
     }
 
-    @GetMapping("/plantilla.xlsx")
-    public ResponseEntity<byte[]> template(HttpSession session) {
+    @GetMapping("/plantillas")
+    public List<Map<String, String>> templates(HttpSession session) {
         requireAdmin(session);
-        byte[] content = schedules.template();
+        return AttendanceScheduleService.templateOptions();
+    }
+
+    @GetMapping("/plantilla/{formato}.xlsx")
+    public ResponseEntity<byte[]> template(@PathVariable String formato,
+                                           @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate vigenteDesde,
+                                           HttpSession session) {
+        requireAdmin(session);
+        byte[] content = schedules.template(formato, vigenteDesde);
         return ResponseEntity.ok().contentType(XLSX)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=plantilla-horarios-asistencia.xlsx")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + schedules.templateFileName(formato))
                 .header(HttpHeaders.CACHE_CONTROL, "no-store").body(content);
     }
 
     @PostMapping(value = "/importar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> importSchedules(@RequestParam("planilla") MultipartFile workbook,
+                                               @RequestParam("formato") String formato,
                                                @RequestParam("vigenteDesde") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startsOn,
                                                HttpSession session) throws IOException {
         RoleAccessService.User user = requireAdmin(session);
-        return schedules.importWorkbook(workbook, startsOn, user.id());
+        return schedules.importWorkbook(workbook, formato, startsOn, user.id());
     }
 
     @GetMapping("/dia")
@@ -57,7 +67,7 @@ public class AttendanceScheduleController {
 
     private RoleAccessService.User requireAdmin(HttpSession session) {
         RoleAccessService.User user = access.current(session);
-        if (!"ADMIN".equals(user.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el administrador puede consultar o actualizar las planillas de asistencia.");
+        if (!List.of("ADMIN", "EMPRESA").contains(user.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el administrador o jefe de empresa puede consultar o actualizar las planillas de asistencia.");
         return user;
     }
 }
