@@ -40,9 +40,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AttendanceScheduleService {
-    private static final List<String> AREAS = List.of("COCINA", "SALON", "BARRA");
     private static final List<String> DAYS = List.of("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo");
-    private static final Pattern SHIFT = Pattern.compile("^([01]?\\d|2[0-3]):([0-5]\\d)\\s*[-–]\\s*([01]?\\d|2[0-3]):([0-5]\\d)$");
+    private static final Pattern SHIFT = Pattern.compile("^([01]?\\d|2[0-3])[:.]([0-5]\\d)\\s*[-–]\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)$");
     private final JdbcTemplate jdbc;
 
     public AttendanceScheduleService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
@@ -55,10 +54,13 @@ public class AttendanceScheduleService {
                 Map.of("id", "CALENDARIO_FECHAS", "label", "Horario definido por fechas", "file", "04_horario_por_fechas.xlsx"));
     }
 
-    public String templateFileName(String format) { return templateOption(format).get("file"); }
+    public String templateFileName(String format, String area) {
+        return templateOption(format).get("file").replace(".xlsx", "_" + normalizeAreaRequired(area).toLowerCase(Locale.ROOT) + ".xlsx");
+    }
 
-    public byte[] template(String format, LocalDate requestedStart) {
+    public byte[] template(String format, LocalDate requestedStart, String selectedArea) {
         requireSchema();
+        String area = normalizeAreaRequired(selectedArea);
         LocalDate startsOn = requestedStart == null ? LocalDate.now(java.time.ZoneId.of("America/Santiago")).with(java.time.temporal.TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY)) : requestedStart;
         LocalDate endsOn = startsOn.plusMonths(2).minusDays(1);
         int cycleDays = cycleDays(format, startsOn, endsOn);
@@ -66,7 +68,7 @@ public class AttendanceScheduleService {
             int sheetCount = (cycleDays + 6) / 7;
             for (int week = 1; week <= sheetCount; week++) {
                 Sheet sheet = workbook.createSheet("Semana " + week);
-                createWeekSheet(workbook, sheet, format, startsOn, week);
+                createWeekSheet(workbook, sheet, format, startsOn, week, area);
             }
             workbook.setForceFormulaRecalculation(true);
             workbook.write(output);
@@ -86,7 +88,7 @@ public class AttendanceScheduleService {
         };
     }
 
-    private void createWeekSheet(Workbook workbook, Sheet sheet, String format, LocalDate startsOn, int week) {
+    private void createWeekSheet(Workbook workbook, Sheet sheet, String format, LocalDate startsOn, int week, String area) {
         CellStyle titleStyle = workbook.createCellStyle();
         Font titleFont = workbook.createFont(); titleFont.setBold(true); titleFont.setFontHeightInPoints((short) 16); titleStyle.setFont(titleFont);
         CellStyle headerStyle = workbook.createCellStyle(); headerStyle.setFillForegroundColor(IndexedColors.DARK_TEAL.getIndex());
@@ -98,11 +100,12 @@ public class AttendanceScheduleService {
 
         Row title = sheet.createRow(0); title.createCell(0).setCellValue("PLANILLA DE HORARIO · " + sheet.getSheetName().toUpperCase(Locale.ROOT));
         title.getCell(0).setCellStyle(titleStyle); sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 15));
-        Row instructions = sheet.createRow(1); instructions.createCell(0).setCellValue("Escribe el nombre registrado de cada trabajador. En cada día indica HH:mm-HH:mm (ej. 10:00-22:00) o LIBRE. Las horas y el total se calculan automáticamente.");
+        Row instructions = sheet.createRow(1); instructions.createCell(0).setCellValue("Área: " + areaLabel(area) + ". Escribe el nombre y, en cada día, hora de entrada-hora de salida (ej. 11:00-22:30; también 11.00-22.30) o LIBRE. Las horas y el total se calculan automáticamente.");
         instructions.getCell(0).setCellStyle(noteStyle); sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(1, 1, 0, 15)); instructions.setHeightInPoints(30);
         Row info = sheet.createRow(2); info.createCell(0).setCellValue("Formato"); info.createCell(1).setCellValue(format);
         info.createCell(3).setCellValue("Vigente desde"); info.createCell(4).setCellValue(startsOn.toString());
         info.createCell(6).setCellValue("Semana del ciclo"); info.createCell(7).setCellValue(week);
+        info.createCell(9).setCellValue("Área"); info.createCell(10).setCellValue(area);
         if (format.equals("CALENDARIO_FECHAS")) {
             LocalDate endsOn = startsOn.plusMonths(2).minusDays(1);
             CellStyle dateStyle = workbook.createCellStyle(); dateStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
@@ -135,7 +138,7 @@ public class AttendanceScheduleService {
             for (int day = 0; day < 7; day++) {
                 int dayCol = 1 + day * 2, hoursCol = dayCol + 1;
                 String dayCell = new org.apache.poi.ss.util.CellReference(rowNum, dayCol).formatAsString();
-                row.getCell(hoursCol).setCellFormula("IF(" + dayCell + "=\"\",\"\",IF(UPPER(" + dayCell + ")=\"LIBRE\",0,IFERROR(MOD(TIMEVALUE(RIGHT(" + dayCell + ",5))-TIMEVALUE(LEFT(" + dayCell + ",5)),1)*24,0)))");
+                row.getCell(hoursCol).setCellFormula("IF(" + dayCell + "=\"\",\"\",IF(UPPER(" + dayCell + ")=\"LIBRE\",0,IFERROR(MOD(TIMEVALUE(SUBSTITUTE(RIGHT(" + dayCell + ",5),\".\",\":\"))-TIMEVALUE(SUBSTITUTE(LEFT(" + dayCell + ",5),\".\",\":\")),1)*24,0)))");
             }
             row.getCell(15).setCellFormula("SUM(C" + (rowNum + 1) + ",E" + (rowNum + 1) + ",G" + (rowNum + 1) + ",I" + (rowNum + 1) + ",K" + (rowNum + 1) + ",M" + (rowNum + 1) + ",O" + (rowNum + 1) + ")");
         }
@@ -150,15 +153,17 @@ public class AttendanceScheduleService {
     }
 
     @Transactional
-    public Map<String, Object> importWorkbook(MultipartFile file, String format, LocalDate startsOn, long importedBy) throws IOException {
+    public Map<String, Object> importWorkbook(MultipartFile file, String format, LocalDate startsOn, String selectedArea, long importedBy) throws IOException {
         requireSchema();
         templateOption(format);
+        String area = normalizeAreaRequired(selectedArea);
         if (file == null || file.isEmpty() || file.getSize() > 10 * 1024 * 1024) throw bad("Selecciona una planilla XLSX de hasta 10 MB.");
         if (file.getOriginalFilename() == null || !file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".xlsx")) throw bad("La planilla debe ser un archivo XLSX descargado desde Asistencia.");
         if (startsOn == null) throw bad("Selecciona la fecha de inicio del horario.");
         if (startsOn.getDayOfWeek() != DayOfWeek.MONDAY) throw bad("El horario debe comenzar un lunes para que las columnas coincidan con los días de la semana.");
         LocalDate endsOn = startsOn.plusMonths(2).minusDays(1);
-        List<Employee> active = activeEmployees();
+        List<Employee> active = activeEmployees().stream().filter(employee -> employee.area().equals(area)).toList();
+        if (active.isEmpty()) throw bad("No hay personal activo del área " + areaLabel(area) + " en Personal.");
         Map<String, List<Employee>> byName = new HashMap<>();
         for (Employee employee : active) {
             byName.computeIfAbsent(normalizeName(employee.name()), ignored -> new ArrayList<>()).add(employee);
@@ -176,7 +181,8 @@ public class AttendanceScheduleService {
             for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
                 Sheet sheet = workbook.getSheetAt(sheetIndex);
                 Row info = sheet.getRow(2);
-                if (info == null || !format.equals(text(info.getCell(1), formatter, evaluator))) throw bad("El archivo no corresponde al formato seleccionado. Descarga nuevamente esa plantilla.");
+                if (info == null || !format.equals(text(info.getCell(1), formatter, evaluator))
+                        || !area.equals(normalizeArea(text(info.getCell(10), formatter, evaluator)))) throw bad("El archivo no corresponde al formato o área seleccionada. Descarga la plantilla de esa área.");
                 int week = (int) number(info.getCell(7), formatter, evaluator);
                 if (week != sheetIndex + 1) throw bad("Las pestañas de semana deben conservar su orden original.");
                 Row header = sheet.getRow(4);
@@ -210,7 +216,7 @@ public class AttendanceScheduleService {
                             if (!shift.isBlank()) throw bad("La fecha de la pestaña " + sheet.getSheetName() + " queda fuera de los dos meses seleccionados.");
                             continue;
                         }
-                        if (shift.isBlank()) throw bad("Pestaña " + sheet.getSheetName() + ", " + DAYS.get(day) + ": escribe LIBRE o un turno HH:mm-HH:mm.");
+                        if (shift.isBlank()) throw bad("Pestaña " + sheet.getSheetName() + ", " + DAYS.get(day) + ": escribe LIBRE o entrada-salida, por ejemplo 11:00-22:30.");
                         int index = format.equals("SEMANA_FIJA") ? day + 1 : (week - 1) * 7 + day + 1;
                         if (index < 1 || index > cycleDays) continue;
                         if (!seen.add(employee.id() + "|" + index)) throw bad("Hay un día repetido para " + employee.name() + " en " + sheet.getSheetName() + ".");
@@ -219,7 +225,7 @@ public class AttendanceScheduleService {
                         double hours = 0;
                         if (!off) {
                             Matcher matcher = SHIFT.matcher(shift);
-                            if (!matcher.matches()) throw bad("Pestaña " + sheet.getSheetName() + ", " + DAYS.get(day) + ": usa HH:mm-HH:mm o LIBRE.");
+                            if (!matcher.matches()) throw bad("Pestaña " + sheet.getSheetName() + ", " + DAYS.get(day) + ": usa hora de entrada-hora de salida (11:00-22:30; se acepta punto) o LIBRE.");
                             startTime = parseClock(matcher.group(1) + ":" + matcher.group(2));
                             endTime = parseClock(matcher.group(3) + ":" + matcher.group(4));
                             if (startTime.equals(endTime)) throw bad("El turno de " + employee.name() + " no puede durar 0 o 24 horas; revisa entrada y salida.");
@@ -228,7 +234,7 @@ public class AttendanceScheduleService {
                             hours = minutes / 60.0;
                             if (hours <= 0 || hours > 24) throw bad("Revisa la entrada y salida de " + employee.name() + ".");
                         }
-                        imported.add(new ShiftRow(employee, employee.area(), index, 1, startTime, endTime, off ? "LIBRE" : "TRABAJA", hours));
+                        imported.add(new ShiftRow(employee, area, index, 1, startTime, endTime, off ? "LIBRE" : "TRABAJA", hours));
                     }
                 }
             }
@@ -241,10 +247,10 @@ public class AttendanceScheduleService {
         } catch(ResponseStatusException ex) { throw ex; }
         catch(Exception ex) { throw bad("No se pudo leer la plantilla. Comprueba el formato de horas HH:mm y conserva los encabezados originales."); }
 
-        jdbc.update("DELETE FROM APP_ASISTENCIA_PLANILLA WHERE VIGENTE_DESDE>=?", java.sql.Date.valueOf(startsOn));
-        jdbc.update("UPDATE APP_ASISTENCIA_PLANILLA SET VIGENTE_HASTA=? WHERE VIGENTE_DESDE<? AND VIGENTE_HASTA>=?", java.sql.Date.valueOf(startsOn.minusDays(1)), java.sql.Date.valueOf(startsOn), java.sql.Date.valueOf(startsOn));
+        jdbc.update("DELETE FROM APP_ASISTENCIA_PLANILLA WHERE AREA=? AND VIGENTE_DESDE>=?", area, java.sql.Date.valueOf(startsOn));
+        jdbc.update("UPDATE APP_ASISTENCIA_PLANILLA SET VIGENTE_HASTA=? WHERE AREA=? AND VIGENTE_DESDE<? AND VIGENTE_HASTA>=?", java.sql.Date.valueOf(startsOn.minusDays(1)), area, java.sql.Date.valueOf(startsOn), java.sql.Date.valueOf(startsOn));
         Map<String,Long> planIds=new HashMap<>();
-        for(String area:AREAS) {
+        {
             KeyHolder key=new GeneratedKeyHolder(); final int finalCycleDays=cycleDays;
             jdbc.update(connection->{ var ps=connection.prepareStatement("INSERT INTO APP_ASISTENCIA_PLANILLA(AREA,VIGENTE_DESDE,VIGENTE_HASTA,CREADO_POR,TIPO_CICLO,CICLO_DIAS) VALUES(?,?,?,?,?,?)",new String[]{"ID_PLANILLA"});
                 ps.setString(1,area); ps.setDate(2,java.sql.Date.valueOf(startsOn)); ps.setDate(3,java.sql.Date.valueOf(endsOn)); ps.setLong(4,importedBy); ps.setString(5,format); ps.setInt(6,finalCycleDays); return ps; },key);
@@ -385,6 +391,11 @@ public class AttendanceScheduleService {
         if (area.contains("SALON") || area.contains("SALA")) return "SALON";
         if (area.contains("BARRA")) return "BARRA";
         return null;
+    }
+    private static String normalizeAreaRequired(String value) {
+        String area = normalizeArea(value);
+        if (area == null) throw bad("Selecciona Cocina, Salón o Barra.");
+        return area;
     }
     private static String normalizeName(String value) { return Normalizer.normalize(value == null ? "" : value.trim(), Normalizer.Form.NFD).replaceAll("\\p{M}+", "").replaceAll("\\s+", " ").toUpperCase(Locale.ROOT); }
     private static String text(Cell cell, DataFormatter formatter, org.apache.poi.ss.usermodel.FormulaEvaluator evaluator) { return cell == null ? "" : formatter.formatCellValue(cell, evaluator).trim(); }

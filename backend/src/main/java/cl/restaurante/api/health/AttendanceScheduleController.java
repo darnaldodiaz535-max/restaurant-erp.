@@ -41,11 +41,12 @@ public class AttendanceScheduleController {
     @GetMapping("/plantilla/{formato}.xlsx")
     public ResponseEntity<byte[]> template(@PathVariable String formato,
                                            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate vigenteDesde,
+                                           @RequestParam String area,
                                            HttpSession session) {
         requireAdmin(session);
-        byte[] content = schedules.template(formato, vigenteDesde);
+        byte[] content = schedules.template(formato, vigenteDesde, area);
         return ResponseEntity.ok().contentType(XLSX)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + schedules.templateFileName(formato))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + schedules.templateFileName(formato, area))
                 .header(HttpHeaders.CACHE_CONTROL, "no-store").body(content);
     }
 
@@ -53,9 +54,10 @@ public class AttendanceScheduleController {
     public Map<String, Object> importSchedules(@RequestParam("planilla") MultipartFile workbook,
                                                @RequestParam("formato") String formato,
                                                @RequestParam("vigenteDesde") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startsOn,
+                                               @RequestParam("area") String area,
                                                HttpSession session) throws IOException {
         RoleAccessService.User user = requireAdmin(session);
-        return schedules.importWorkbook(workbook, formato, startsOn, user.id());
+        return schedules.importWorkbook(workbook, formato, startsOn, area, user.id());
     }
 
     @GetMapping("/dia")
