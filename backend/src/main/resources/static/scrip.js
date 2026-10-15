@@ -2142,7 +2142,7 @@ function showLogin(error = "") {
     authScreen.hidden = false;
     loginForm.hidden = false;
     setupForm.hidden = true;
-    document.getElementById("auth-title").textContent = "MariGex";
+    document.getElementById("auth-title").textContent = "Bienvenido a MariGex 66";
     document.getElementById("auth-description").textContent = "Inicia sesión para continuar.";
     setAuthError(error);
 }

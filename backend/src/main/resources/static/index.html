@@ -11,9 +11,9 @@
     <meta charset="UTF-8">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MariGex - Sistema de Gestión</title>
+<title>MariGex 66 - Sistema de Gestión</title>
 
-<link rel="stylesheet" href="style.css?v=asistencia-planillas-20261014-1">
+<link rel="stylesheet" href="style.css?v=marigex-login-20261015-1">
     <meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -22,25 +22,38 @@
 
 
 <body class="booting logged-out">
-<section id="marigexSplash" role="status" aria-label="Cargando MariGex"><div class="splash-content"><img src="icons/icon-192.png" alt="" width="96" height="96"><h1>MariGex</h1><p>Sistema de Gestión</p><p>Todo tu negocio, en un solo lugar.</p><span class="splash-spinner" aria-hidden="true"></span></div></section>
+<section id="marigexSplash" role="status" aria-label="Cargando MariGex 66"><div class="splash-content"><img src="icons/icon-192.png" alt="" width="96" height="96"><h1>MariGex 66</h1><p>Sistema de Gestión</p><p>Todo tu restaurante, en orden.</p><span class="splash-spinner" aria-hidden="true"></span></div></section>
 
     <section id="auth-screen" class="auth-screen" aria-labelledby="auth-title">
-        <div class="auth-card">
-        <h1 id="auth-title">MariGex</h1>
-            <p id="auth-description">Inicia sesión para continuar.</p>
-            <form id="login-form" class="auth-form">
-                <label>Usuario<input id="login-username" autocomplete="username" required></label>
-                <label>Contraseña<input id="login-password" type="password" autocomplete="current-password" required></label>
-                <button class="primary-button" type="submit">Iniciar sesión</button>
-            </form>
-            <form id="setup-form" class="auth-form" hidden>
-                <label>Tu trabajador<select id="setup-employee" required></select></label>
-                <label>Usuario nuevo<input id="setup-username" autocomplete="username" minlength="3" required></label>
-                <label>Contraseña nueva<input id="setup-password" type="password" autocomplete="new-password" minlength="10" required></label>
-                <small>La primera cuenta será administradora. Usa una contraseña de al menos 10 caracteres.</small>
-                <button class="primary-button" type="submit">Crear administrador</button>
-            </form>
-            <p id="auth-error" class="auth-error" role="alert" hidden></p>
+        <div class="auth-shell">
+            <aside class="auth-brand" aria-label="MariGex 66, gestión de restaurantes">
+                <div class="auth-brand-content">
+                    <div class="auth-wordmark" aria-label="MariGex 66"><span class="auth-wordmark-mari">Mari</span><span class="auth-wordmark-gex">Gex</span><span class="auth-wordmark-number">66</span></div>
+                    <h2 class="auth-tagline">Todo tu restaurante,<br>en orden.</h2>
+                    <p class="auth-brand-copy">Personal, asistencia y operación diaria<br>en un solo lugar.</p>
+                    <p class="auth-copyright">© 2026 MariGex 66 · Todos los derechos reservados.</p>
+                </div>
+            </aside>
+            <div class="auth-panel">
+                <div class="auth-card">
+                    <span class="auth-leaf" aria-hidden="true"></span>
+                    <h1 id="auth-title">Bienvenido a MariGex 66</h1>
+                    <p id="auth-description">Inicia sesión para continuar.</p>
+                    <form id="login-form" class="auth-form">
+                        <label>Usuario<input id="login-username" autocomplete="username" required></label>
+                        <label>Contraseña<input id="login-password" type="password" autocomplete="current-password" required></label>
+                        <button class="primary-button" type="submit">Iniciar sesión</button>
+                    </form>
+                    <form id="setup-form" class="auth-form" hidden>
+                        <label>Tu trabajador<select id="setup-employee" required></select></label>
+                        <label>Usuario nuevo<input id="setup-username" autocomplete="username" minlength="3" required></label>
+                        <label>Contraseña nueva<input id="setup-password" type="password" autocomplete="new-password" minlength="10" required></label>
+                        <small>La primera cuenta será administradora. Usa una contraseña de al menos 10 caracteres.</small>
+                        <button class="primary-button" type="submit">Crear administrador</button>
+                    </form>
+                    <p id="auth-error" class="auth-error" role="alert" hidden></p>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -957,7 +970,7 @@
     </dialog>
 <script src="vendor/qrcode-generator.js?v=1.4.4"></script>
 <script src="vendor/jsQR.js?v=1.4.0"></script>
-<script src="scrip.js?v=asistencia-plantillas-20261015-4"></script>
+<script src="scrip.js?v=asistencia-plantillas-20261015-5"></script>
 <script src="notificaciones-horarios.js?v=notificaciones-leer-quitar-20261009-2"></script>
 <script src="experiencia.js?v=notificaciones-20261004-1"></script>
 <script src="gestion.js?v=notificaciones-20261004-1"></script>
