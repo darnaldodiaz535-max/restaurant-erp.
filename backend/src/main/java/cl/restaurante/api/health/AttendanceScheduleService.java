@@ -252,7 +252,7 @@ public class AttendanceScheduleService {
     }
 
     public boolean schemaReady() {
-        return Boolean.TRUE.equals(jdbc.execute(connection -> {
+        return Boolean.TRUE.equals(jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Boolean>) connection -> {
             try (var tables = connection.getMetaData().getTables(connection.getCatalog(), null, "APP_ASISTENCIA_PLANILLA", new String[]{"TABLE"})) { return tables.next(); }
         }));
     }

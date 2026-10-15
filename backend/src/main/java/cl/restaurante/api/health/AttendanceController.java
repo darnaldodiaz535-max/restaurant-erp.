@@ -241,10 +241,10 @@ public class AttendanceController {
             Map<Long, long[]> totals = new LinkedHashMap<>();
             for (Map<String, Object> row : rows) {
                 if (row.get("turnoProgramado") == null || "LIBRE".equals(row.get("turnoProgramado"))) continue;
-                if (LocalDate.parse(safe(row.get("fecha"))).isAfter(LocalDate.now(CHILE))) continue;
+                if (LocalDate.parse(safeObject(row.get("fecha"))).isAfter(LocalDate.now(CHILE))) continue;
                 long employeeId = ((Number) row.get("empleadoId")).longValue();
                 long[] counts = totals.computeIfAbsent(employeeId, ignored -> new long[2]); counts[0]++;
-                if (!safe(row.get("entrada")).isBlank() && !safe(row.get("salida")).isBlank()) counts[1]++;
+                if (!safeObject(row.get("entrada")).isBlank() && !safeObject(row.get("salida")).isBlank()) counts[1]++;
             }
             List<Map<String, Object>> scheduleSummaries = new java.util.ArrayList<>();
             for (Map<String, Object> summary : summaries) {
@@ -336,6 +336,7 @@ public class AttendanceController {
     private static Object safeNumber(Object value) { return value instanceof Number number ? number.doubleValue() : null; }
     private static String normalizeRut(String value) { return value == null ? "" : value.toUpperCase().replaceAll("[.\\-\\s]", ""); }
     private static String safe(String value) { return value == null ? "" : value; }
+    private static String safeObject(Object value) { return value == null ? "" : String.valueOf(value); }
     private static String workedHours(String entry, String exit, java.sql.Timestamp entryAt, java.sql.Timestamp exitAt) {
         if (exit.isBlank()) return "Pendiente";
         try {
