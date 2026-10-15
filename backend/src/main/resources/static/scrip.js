@@ -88,7 +88,6 @@ document.querySelectorAll(".notification-item").forEach((item) => {
             : '<path d="M3 3h2l2.4 12.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="10" cy="21" r="1"/><circle cx="18" cy="21" r="1"/>';
     const icon = item.querySelector("i"); if (icon) icon.replaceChildren(makeIcon(glyph, "notification-icon-svg"));
 });
-
 function readStore(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
     catch { return fallback; }
@@ -706,6 +705,49 @@ async function renderAttendanceModule() {
         } catch (error) { locationStatus.textContent = error.message || "No se pudo cargar la configuración del QR."; }
         }
     }
+    if (qrAdmin) {
+        const schedulePanel = checkinNode("section", "attendance-qr-admin attendance-schedule-admin");
+        const scheduleHeading = checkinNode("div", "attendance-schedule-heading");
+        scheduleHeading.appendChild(checkinNode("h4", "", "Planilla de turnos de asistencia"));
+        const help = document.createElement("details"); help.className = "attendance-schedule-help";
+        const helpTitle = document.createElement("summary"); helpTitle.textContent = "¿Cómo funciona?";
+        help.append(helpTitle, checkinNode("p", "attendance-qr-help", "Usa siempre la plantilla descargable. Tiene hojas para Cocina, Salón y Barra, con Semana 1 y Semana 2. La estructura no cambia; el personal y sus turnos, horas y días LIBRE sí pueden cambiar cada dos meses. Primero registra o actualiza al personal en MariGex. Completa cada turno como HH:mm-HH:mm, y escribe LIBRE con 0 horas cuando corresponda. La fecha de inicio debe ser lunes. El horario quedará vigente por dos meses. Solo el administrador puede consultar la planilla."));
+        schedulePanel.append(scheduleHeading, help);
+        const scheduleActions = checkinNode("div", "attendance-qr-setup");
+        const downloadTemplate = checkinButton("Descargar plantilla estándar", async () => {
+            downloadTemplate.disabled = true;
+            try {
+                const response = await fetch("/api/asistencia/horarios/plantilla.xlsx", { credentials: "same-origin" });
+                if (!response.ok) { const problem = await response.json().catch(() => ({})); throw new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`); }
+                const url = URL.createObjectURL(await response.blob()); const link = document.createElement("a"); link.href = url; link.download = "plantilla-horarios-asistencia.xlsx"; link.click(); URL.revokeObjectURL(url);
+                feedback.textContent = "Plantilla descargada. Completa las seis hojas sin cambiar sus nombres ni encabezados.";
+            } catch (error) { feedback.textContent = error.message || "No se pudo descargar la plantilla."; }
+            finally { downloadTemplate.disabled = false; }
+        }, "secondary-button");
+        const startLabel = checkinNode("label", "attendance-radius-label", "Vigente desde (lunes)");
+        const startDate = checkinNode("input", "attendance-rut"); startDate.type = "date"; startDate.setAttribute("aria-label", "Fecha de inicio de vigencia del horario");
+        const todayLocal = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Santiago" }));
+        const daysUntilMonday = ((8 - todayLocal.getDay()) % 7) || 7; todayLocal.setDate(todayLocal.getDate() + daysUntilMonday);
+        startDate.value = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, "0")}-${String(todayLocal.getDate()).padStart(2, "0")}`;
+        startLabel.appendChild(startDate);
+        const fileLabel = checkinNode("label", "attendance-radius-label", "Planilla completada (.xlsx)");
+        const fileInput = checkinNode("input", "attendance-schedule-file"); fileInput.type = "file"; fileInput.accept = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; fileInput.setAttribute("aria-label", "Seleccionar planilla estándar de horarios"); fileLabel.appendChild(fileInput);
+        const importSchedule = checkinButton("Cargar horario por dos meses", async () => {
+            const file = fileInput.files?.[0];
+            if (!file) { feedback.textContent = "Selecciona la planilla estándar completada."; return; }
+            if (!startDate.value) { feedback.textContent = "Selecciona la fecha de inicio del horario."; return; }
+            const body = new FormData(); body.append("planilla", file); body.append("vigenteDesde", startDate.value);
+            importSchedule.disabled = true;
+            try {
+                const result = await uploadRequest("/api/asistencia/horarios/importar", body);
+                feedback.textContent = `Horario cargado para ${result.personas} personas. Vigente del ${result.vigenteDesde} al ${result.vigenteHasta}.`;
+                await loadAttendanceReport(section, controls.period.value, controls.date.value, "", feedback);
+            } catch (error) { feedback.textContent = error.message || "No se pudo cargar el horario."; }
+            finally { importSchedule.disabled = false; }
+        }, "primary-button");
+        scheduleActions.append(downloadTemplate, startLabel, fileLabel, importSchedule); schedulePanel.appendChild(scheduleActions);
+        profileCard.appendChild(schedulePanel);
+    }
     section.append(profileCard, feedback);
     const controls = { period: checkinNode("select", "attendance-filter"), date: checkinNode("input", "attendance-filter"), employee: checkinNode("select", "attendance-filter") };
     controls.period.add(new Option("Día", "dia")); controls.period.add(new Option("Semana", "semana")); controls.period.add(new Option("Mes", "mes")); controls.period.value = "mes";
@@ -717,16 +759,26 @@ async function renderAttendanceModule() {
     const download = checkinButton("Descargar CSV", async () => {
         try {
             const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&fecha=${encodeURIComponent(controls.date.value)}${admin && controls.employee.value ? `&empleadoId=${encodeURIComponent(controls.employee.value)}` : ""}`);
-            const lines = [["Nombre", "RUT", "Fecha", "Hora de entrada", "Hora de salida", "Horas trabajadas"],
-                ...(report.marcas || []).map(row => [row.nombre, row.rut, row.fecha, row.entrada, row.salida, row.horasTrabajadas || "Pendiente"])];
+            const csvHeaders = qrAdmin
+                ? ["Nombre", "RUT", "Fecha", "Área", "Turno programado", "Estado del horario", "Hora de entrada", "Diferencia de entrada (min)", "Hora de salida", "Diferencia de salida (min)", "Horas previstas", "Horas trabajadas"]
+                : ["Nombre", "RUT", "Fecha", "Hora de entrada", "Hora de salida", "Horas trabajadas"];
+            const lines = [csvHeaders, ...(report.marcas || []).map(row => qrAdmin
+                ? [row.nombre, row.rut, row.fecha, row.area, row.turnoProgramado, row.estadoHorario, row.entrada, row.minutosEntrada, row.salida, row.minutosSalida, row.horasProgramadas, row.horasTrabajadas || "Pendiente"]
+                : [row.nombre, row.rut, row.fecha, row.entrada, row.salida, row.horasTrabajadas || "Pendiente"])];
             const csv = lines.map(line => line.map(value => { const text = String(value ?? ""); const safe = /^[=+@\-]/.test(text) ? "'" + text : text; return `"${safe.replaceAll('"', '""')}"`; }).join(";")).join("\r\n");
             const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = `asistencia-${report.desde}-${report.hasta}.csv`; link.click(); URL.revokeObjectURL(url);
         } catch (error) { feedback.textContent = error.message; }
     });
     section.append(filterRow, download);
     const summary = checkinNode("div", "attendance-summary"); summary.dataset.attendanceSummary = "true"; section.appendChild(summary);
-    const tableWrap = checkinNode("div", "table-container attendance-table-wrap"), table = checkinNode("table"), thead = checkinNode("thead"), head = checkinNode("tr");
-    ["Trabajador", "RUT", "Fecha", "Entrada", "Salida", ...(admin ? ["Ubicación"] : []), "Fotos"].forEach(label => head.appendChild(checkinNode("th", "", label))); thead.appendChild(head); table.append(thead, checkinNode("tbody")); tableWrap.appendChild(table); section.appendChild(tableWrap);
+    const tableWrap = checkinNode("div", `table-container attendance-table-wrap${qrAdmin ? " attendance-schedule-report" : ""}`), table = checkinNode("table"), thead = checkinNode("thead"), head = checkinNode("tr");
+    const tableHeaders = ["Trabajador", "RUT", "Fecha"];
+    if (qrAdmin) tableHeaders.push("Área", "Turno programado", "Estado horario");
+    tableHeaders.push("Entrada", "Salida");
+    if (qrAdmin) tableHeaders.push("Horas previstas", "Horas trabajadas", "Dif. entrada (min)", "Dif. salida (min)");
+    if (admin) tableHeaders.push("Ubicación");
+    tableHeaders.push("Fotos");
+    tableHeaders.forEach(label => head.appendChild(checkinNode("th", "", label))); thead.appendChild(head); table.append(thead, checkinNode("tbody")); tableWrap.appendChild(table); section.appendChild(tableWrap);
     otherModule.appendChild(section);
     await loadAttendanceReport(section, controls.period.value, controls.date.value, "", feedback);
     if (admin) {
@@ -747,7 +799,12 @@ async function loadAttendanceReport(section, period, date, employeeId, feedback)
         });
         const tbody = section.querySelector(".attendance-table-wrap tbody"); tbody.replaceChildren();
         report.marcas.forEach(row => {
-            const tr = checkinNode("tr"); [row.nombre, row.rut, row.fecha, row.entrada || "—", row.salida || "—"].forEach(value => tr.appendChild(checkinNode("td", "", value)));
+            const tr = checkinNode("tr");
+            const cells = [row.nombre, row.rut, row.fecha];
+            if (isAttendanceQrAdminRole()) cells.push(row.area || "—", row.turnoProgramado || "—", row.estadoHorario || "—");
+            cells.push(row.entrada || "—", row.salida || "—");
+            if (isAttendanceQrAdminRole()) cells.push(row.horasProgramadas == null ? "—" : row.horasProgramadas, row.horasTrabajadas || "—", row.minutosEntrada == null ? "—" : row.minutosEntrada, row.minutosSalida == null ? "—" : row.minutosSalida);
+            cells.forEach(value => tr.appendChild(checkinNode("td", "", value)));
             if (isAdminRole()) {
                 const location = checkinNode("td", "attendance-location-cell");
                 [["Entrada", row.entradaLat, row.entradaLon, row.entradaDistancia, row.entradaPrecision], ["Salida", row.salidaLat, row.salidaLon, row.salidaDistancia, row.salidaPrecision]].forEach(([label, lat, lon, distance, accuracy]) => {

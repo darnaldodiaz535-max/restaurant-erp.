@@ -51,11 +51,13 @@ public class AttendanceController {
     private final JdbcTemplate jdbc;
     private final RoleAccessService access;
     private final ActivityService activity;
+    private final AttendanceScheduleService schedules;
 
-    public AttendanceController(JdbcTemplate jdbc, RoleAccessService access, ActivityService activity) {
+    public AttendanceController(JdbcTemplate jdbc, RoleAccessService access, ActivityService activity, AttendanceScheduleService schedules) {
         this.jdbc = jdbc;
         this.access = access;
         this.activity = activity;
+        this.schedules = schedules;
     }
 
     @GetMapping("/me")
@@ -218,6 +220,8 @@ public class AttendanceController {
                     return row;
                 }, rowArgs);
 
+        if ("ADMIN".equals(user.role())) schedules.addScheduleDetails(rows, from, to, selectedEmployee);
+
         List<Map<String, Object>> employees = admin ? jdbc.query("SELECT ID_EMPLEADO,NOMBRE,RUT FROM APP_EMPLEADO WHERE ESTADO='ACTIVO' ORDER BY NOMBRE",
                 (rs, n) -> Map.of("id", rs.getLong(1), "nombre", rs.getString(2), "rut", rs.getString(3) == null ? "" : rs.getString(3))) : List.of();
         String summaryFilter = selectedEmployee == null ? "" : " AND E.ID_EMPLEADO=?";
@@ -233,6 +237,25 @@ public class AttendanceController {
                 }, selectedEmployee == null
                         ? new Object[]{java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1)),java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1))}
                         : new Object[]{java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1)),java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1)),selectedEmployee});
+        if ("ADMIN".equals(user.role()) && schedules.schemaReady()) {
+            Map<Long, long[]> totals = new LinkedHashMap<>();
+            for (Map<String, Object> row : rows) {
+                if (row.get("turnoProgramado") == null || "LIBRE".equals(row.get("turnoProgramado"))) continue;
+                if (LocalDate.parse(safe(row.get("fecha"))).isAfter(LocalDate.now(CHILE))) continue;
+                long employeeId = ((Number) row.get("empleadoId")).longValue();
+                long[] counts = totals.computeIfAbsent(employeeId, ignored -> new long[2]); counts[0]++;
+                if (!safe(row.get("entrada")).isBlank() && !safe(row.get("salida")).isBlank()) counts[1]++;
+            }
+            List<Map<String, Object>> scheduleSummaries = new java.util.ArrayList<>();
+            for (Map<String, Object> summary : summaries) {
+                long employeeId = ((Number) summary.get("empleadoId")).longValue(); long[] counts = totals.getOrDefault(employeeId, new long[2]);
+                Map<String, Object> updated = new LinkedHashMap<>(summary);
+                updated.put("turnosProgramados", counts[0]); updated.put("turnosCompletos", counts[1]);
+                updated.put("porcentaje", counts[0] == 0 ? "—" : String.format(java.util.Locale.ROOT, "%.1f%%", 100.0 * counts[1] / counts[0]));
+                scheduleSummaries.add(updated);
+            }
+            summaries = scheduleSummaries;
+        }
         return Map.of("periodo", periodo, "desde", from.toString(), "hasta", to.toString(), "marcas", rows, "resumen", summaries, "personas", employees);
     }
 

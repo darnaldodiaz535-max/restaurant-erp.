@@ -1752,6 +1752,14 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .attendance-admin-actions { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
 .attendance-admin-label { margin: 0 0 8px; color: #6b7280; font-size: 13px; font-weight: 700; }
 .attendance-qr-admin { display: grid; justify-items: start; gap: 10px; margin: 10px 0 14px; padding: 16px; border: 1px solid #bae6fd; border-radius: 12px; background: #f0f9ff; }
+.attendance-schedule-admin { width: 100%; box-sizing: border-box; background: #f8fafc; border-color: #cbd5e1; }
+.attendance-schedule-heading { display: flex; align-items: center; gap: 10px; }
+.attendance-schedule-heading h4 { margin: 0; }
+.attendance-schedule-help { color: #334155; }
+.attendance-schedule-help summary { cursor: pointer; color: #0369a1; font-weight: 700; }
+.attendance-schedule-help p { max-width: 900px; margin: 8px 0 0; }
+.attendance-schedule-file { min-width: 240px; max-width: min(420px, 80vw); padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; }
+.attendance-schedule-admin .attendance-radius-label { min-width: 220px; }
 .attendance-qr-admin h4, .attendance-qr-help, .attendance-location-status, .attendance-qr-expiry { margin: 0; }
 .attendance-qr-admin h4 { color: #0c4a6e; }
 .attendance-qr-help, .attendance-location-status, .attendance-qr-expiry { color: #475569; font-size: 14px; }
@@ -1772,3 +1780,4 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .attendance-summary-item span { color: #4b5563; font-size: 14px; }
 .attendance-table-wrap { overflow-x: auto; }
 .attendance-table-wrap table { min-width: 680px; }
+.attendance-schedule-report table { min-width: 1180px; }
