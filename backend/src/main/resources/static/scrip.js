@@ -191,6 +191,99 @@ async function loadDashboardMetrics() {
         metricCards.forEach(card => { const number = card.querySelector("strong"); if (number) number.textContent = "—"; card.setAttribute("aria-busy", "false"); });
     }
     await loadDashboardOverview();
+    void loadDashboardCharts();
+}
+
+function chileDateISO(date = new Date()) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function renderAttendanceChart(marks, today) {
+    const root = document.getElementById("attendance-chart");
+    if (!root) return;
+    root.replaceChildren();
+    const anchor = new Date(`${today}T12:00:00Z`);
+    const mondayOffset = (anchor.getUTCDay() + 6) % 7;
+    const monday = new Date(anchor); monday.setUTCDate(anchor.getUTCDate() - mondayOffset);
+    const days = ["L", "M", "X", "J", "V", "S", "D"].map((label, index) => {
+        const date = new Date(monday); date.setUTCDate(monday.getUTCDate() + index);
+        const iso = date.toISOString().slice(0, 10);
+        const people = new Set((marks || []).filter(mark => mark.fecha === iso && (mark.entrada || mark.salida)).map(mark => mark.empleadoId));
+        return { label, date: iso, count: people.size };
+    });
+    const max = Math.max(1, ...days.map(day => day.count));
+    const chart = document.createElement("div"); chart.className = "attendance-bars";
+    days.forEach(day => {
+        const column = document.createElement("div"); column.className = "attendance-bar-column";
+        const count = document.createElement("strong"); count.textContent = String(day.count);
+        const track = document.createElement("div"); track.className = "attendance-bar-track";
+        const bar = document.createElement("span"); bar.className = "attendance-bar";
+        bar.style.height = `${day.count ? Math.max(8, day.count / max * 100) : 2}%`;
+        bar.title = `${day.date}: ${day.count} ${day.count === 1 ? "persona" : "personas"}`;
+        track.appendChild(bar);
+        const label = document.createElement("small"); label.textContent = day.label;
+        column.append(count, track, label); chart.appendChild(column);
+    });
+    root.appendChild(chart);
+    const legend = document.createElement("p"); legend.className = "chart-legend";
+    legend.innerHTML = '<span aria-hidden="true"></span> Asistencias registradas'; root.appendChild(legend);
+}
+
+async function renderTasksAreaChart(today) {
+    const root = document.getElementById("tasks-area-chart");
+    if (!root) return;
+    const areas = [
+        ["COCINA", "Cocina", "#12aeb1"], ["SALON", "Salón", "#367df0"],
+        ["BARRA", "Barra", "#70aef2"], ["COPERIA", "Copería", "#b8d9f5"], ["SIN_AREA", "Sin área", "#cbd5e1"]
+    ];
+    const results = await Promise.all(areas.map(async ([key]) => {
+        const rows = await apiRequest(`/api/modulos/tareas-diarias?area=${encodeURIComponent(key)}`);
+        return rows.filter(row => row.values?.[2] === today && !["COMPLETADA", "COMPLETADO", "FINALIZADA", "FINALIZADO"].includes(String(row.values?.[3] || "").trim().toUpperCase())).length;
+    }));
+    root.replaceChildren();
+    const total = results.reduce((sum, value) => sum + value, 0);
+    if (!total) {
+        const empty = document.createElement("p"); empty.className = "chart-empty"; empty.textContent = "No hay tareas pendientes para hoy."; root.appendChild(empty); return;
+    }
+    const stopList = []; let cursor = 0;
+    areas.forEach((area, index) => {
+        const end = cursor + results[index] / total * 100;
+        stopList.push(`${area[2]} ${cursor}% ${end}%`); cursor = end;
+    });
+    const donut = document.createElement("div"); donut.className = "tasks-donut";
+    donut.style.setProperty("--donut-stops", stopList.join(", "));
+    const center = document.createElement("div"); center.className = "tasks-donut-center";
+    const totalValue = document.createElement("strong"); totalValue.textContent = String(total);
+    const totalLabel = document.createElement("span"); totalLabel.textContent = "pendientes"; center.append(totalValue, totalLabel); donut.appendChild(center);
+    const legend = document.createElement("ul"); legend.className = "tasks-area-legend";
+    areas.forEach((area, index) => {
+        if (!results[index]) return;
+        const item = document.createElement("li"); const swatch = document.createElement("span"); swatch.style.backgroundColor = area[2];
+        const label = document.createElement("span"); label.textContent = area[1];
+        const count = document.createElement("strong"); count.textContent = String(results[index]);
+        item.append(swatch, label, count); legend.appendChild(item);
+    });
+    root.classList.add("has-task-data"); root.append(donut, legend);
+}
+
+async function loadDashboardCharts() {
+    const section = document.querySelector(".dashboard-insights");
+    if (!["ADMIN", "EMPRESA"].includes(accessRole())) { if (section) section.hidden = true; return; }
+    const today = chileDateISO();
+    const attendanceRoot = document.getElementById("attendance-chart");
+    const taskRoot = document.getElementById("tasks-area-chart");
+    try {
+        const report = await apiRequest(`/api/asistencia/reporte?periodo=semana&fecha=${encodeURIComponent(today)}`);
+        renderAttendanceChart(report.marcas || [], today);
+    } catch (error) {
+        console.error("No se pudo cargar el gráfico de asistencia:", error);
+        if (attendanceRoot) attendanceRoot.innerHTML = '<p class="chart-error">No se pudo cargar la asistencia.</p>';
+    }
+    try { await renderTasksAreaChart(today); }
+    catch (error) {
+        console.error("No se pudo cargar el gráfico de tareas:", error);
+        if (taskRoot) taskRoot.innerHTML = '<p class="chart-error">No se pudieron cargar las tareas.</p>';
+    }
 }
 
 async function loadDashboardOverview() {
@@ -212,7 +305,7 @@ async function loadDashboardOverview() {
                 empty.textContent = "Aún no hay actividad registrada.";
                 activityList.appendChild(empty);
             } else {
-                activities.forEach((activity) => {
+                activities.slice(0, 3).forEach((activity) => {
                     const swipe = document.createElement("div");
                     swipe.className = "activity-swipe";
 
@@ -258,67 +351,6 @@ async function loadDashboardOverview() {
                     time.textContent = activity.createdAt;
                     content.append(title, detail, time);
                     item.append(icon, content);
-
-                    if (isOwnerRole()) {
-                        const remove = document.createElement("button");
-                        remove.type = "button";
-                        remove.className = "activity-delete";
-                        remove.textContent = "Eliminar";
-                        remove.setAttribute(
-                            "aria-label",
-                            `Eliminar actividad: ${title.textContent}`);
-
-                     remove.addEventListener("click", async () => {
-    swipe.remove();
-
-    try {
-        await apiRequest(
-            `/api/dashboard/activity/${activity.id}`,
-            { method: "DELETE" });
-        await loadDashboardMetrics();
-    } catch (error) {
-        await loadDashboardMetrics();
-        window.alert(
-            `No se pudo eliminar la actividad: ${error.message}`);
-    }
-});
-
-                        let startX = 0;
-                        let startY = 0;
-
-                        item.addEventListener(
-                            "touchstart",
-                            (event) => {
-                                const touch = event.changedTouches[0];
-                                startX = touch.clientX;
-                                startY = touch.clientY;
-                            },
-                            { passive: true });
-
-                        item.addEventListener(
-                            "touchend",
-                            (event) => {
-                                const touch = event.changedTouches[0];
-                                const dx = touch.clientX - startX;
-                                const dy = touch.clientY - startY;
-
-                                if (Math.abs(dx) < 45
-                                        || Math.abs(dx) < Math.abs(dy)) {
-                                    return;
-                                }
-
-                                if (dx < 0) {
-                                    swipe.classList.add(
-                                        "activity-swipe--open");
-                                } else {
-                                    swipe.classList.remove(
-                                        "activity-swipe--open");
-                                }
-                            },
-                            { passive: true });
-
-                        swipe.append(remove);
-                    }
 
                     swipe.append(item);
                     activityList.append(swipe);

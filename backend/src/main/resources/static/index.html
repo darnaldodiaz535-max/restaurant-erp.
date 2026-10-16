@@ -13,7 +13,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MariGex 66 - Sistema de Gestión</title>
 
-<link rel="stylesheet" href="style.css?v=santiago-costanera-dashboard-notifs-20261016-1">
+<link rel="stylesheet" href="style.css?v=dashboard-charts-mobile-20261016-2">
     <meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -554,6 +554,27 @@
 
             </section>
 
+            <section class="dashboard-insights" aria-label="Indicadores gráficos">
+                <article class="dashboard-chart-card">
+                    <div class="dashboard-chart-heading">
+                        <div><h2>Asistencia de la semana</h2><p>Personas que registraron asistencia cada día</p></div>
+                        <span class="chart-period">Esta semana</span>
+                    </div>
+                    <div id="attendance-chart" class="dashboard-chart" role="img" aria-label="Gráfico semanal de asistencia">
+                        <p class="chart-loading">Cargando asistencia…</p>
+                    </div>
+                </article>
+                <article class="dashboard-chart-card">
+                    <div class="dashboard-chart-heading">
+                        <div><h2>Tareas pendientes por área</h2><p>Tareas de hoy que todavía no se completan</p></div>
+                        <span class="chart-period">Hoy</span>
+                    </div>
+                    <div id="tasks-area-chart" class="dashboard-chart dashboard-chart--areas" role="img" aria-label="Tareas pendientes por área">
+                        <p class="chart-loading">Cargando tareas…</p>
+                    </div>
+                </article>
+            </section>
+
 
 
             <!-- =================================
@@ -1014,9 +1035,9 @@
     </dialog>
 <script src="vendor/qrcode-generator.js?v=1.4.4"></script>
 <script src="vendor/jsQR.js?v=1.4.0"></script>
-<script src="scrip.js?v=santiago-costanera-dashboard-notifs-20261016-1"></script>
+<script src="scrip.js?v=dashboard-charts-mobile-20261016-2"></script>
 <script src="notificaciones-horarios.js?v=notificaciones-leer-quitar-20261009-2"></script>
-<script src="experiencia.js?v=santiago-costanera-dashboard-notifs-20261016-1"></script>
+<script src="experiencia.js?v=dashboard-charts-mobile-20261016-2"></script>
 <script src="gestion.js?v=notificaciones-20261004-1"></script>
     <script>
   if ("serviceWorker" in navigator) {
