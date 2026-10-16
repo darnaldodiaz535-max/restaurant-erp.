@@ -54,7 +54,7 @@ const iconPaths = {
     Barra: '<path d="M3 3h18l-9 10L3 3ZM12 13v8M7 21h10M7 7h10"/>',
     Copería: '<path d="M3 12h18l-3 8H6l-3-8ZM9 12V5a3 3 0 0 1 6 0M13 6h4M6 9h2M18 9h2"/>',
     Producción: '<path d="M4 20h16M6 20V9l6-5 6 5v11M9 20v-6h6v6"/>',
-    "Mise en place": '<path d="m14 6 4-4 4 4-4 4M3 21l11-11M8 8l8 8M4 4l4 4"/>',
+    "Recetas": '<path d="M6 3h12a2 2 0 0 1 2 2v16H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
     Reservas: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3"/>',
     Limpieza: '<path d="M4 20h16M7 16l2-8h6l2 8M10 8V4h4v4M12 2v2"/>',
     Incidencias: '<path d="M10 3 2 18a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3L14 3a2 2 0 0 0-4 0Z"/><path d="M12 9v4M12 17h.01"/>',
@@ -100,7 +100,7 @@ function isAttendanceQrAdminRole() { return ["ADMIN", "EMPRESA"].includes(access
 function isSalonRole() { return accessRole() === "JEFE_SALON"; }
 function isKitchenRole() { return accessRole() === "JEFE_COCINA"; }
 function isWorkerRole() { return ["TRABAJADOR", "EMPLEADO"].includes(accessRole()); }
-const kitchenModuleKeys = new Set(["tareas-diarias", "inventario", "cocina", "produccion", "mise-en-place", "limpieza", "control-sanitario", "compras", "mermas", "incidencias", "asistencia", "turnos"]);
+const kitchenModuleKeys = new Set(["tareas-diarias", "inventario", "cocina", "produccion", "recetas", "limpieza", "control-sanitario", "compras", "mermas", "incidencias", "asistencia", "turnos"]);
 function canManageModule(key) {
     if (["personal", "turnos", "configuracion"].includes(key)) return isOwnerRole();
     return isOwnerRole() || isSalonRole() || (isKitchenRole() && kitchenModuleKeys.has(key));
@@ -145,6 +145,7 @@ async function loadEmployees() {
     try {
         const employees = await apiRequest(employeesApi);
         employeeBody.replaceChildren(...employees.map(buildEmployeeRow));
+        filterEmployees();
         const counts = document.querySelectorAll(".personal-summary .summary-card strong");
         if (counts.length >= 3) {
             counts[0].textContent = employees.length;
@@ -174,7 +175,7 @@ async function loadDashboardMetrics() {
     if (!currentProfile) return;
     const metricCards = [...document.querySelectorAll(".dashboard-cards .card")].filter(card => {
         const label = card.querySelector("h3")?.textContent.trim();
-        return !["Check-in Diario", "Cierre de turno", "Configuración"].includes(label);
+        return !["Check-in Diario", "Cierre de turno", "Recetas", "Configuración"].includes(label);
     });
     metricCards.forEach(card => { const number = card.querySelector("strong"); if (number) number.textContent = "…"; card.setAttribute("aria-busy", "true"); });
     try {
@@ -449,6 +450,7 @@ function showScreen(link) {
     else if (label === "Tareas diarias") renderTaskAreas();
     else if (label === "Check-in Diario") void renderCheckinModule();
     else if (label === "Cierre de turno") renderCloseShiftPlaceholder();
+    else if (label === "Recetas") renderRecipesPlaceholder();
     else if (label === "Asistencia") void renderAttendanceModule();
     else if (["Cocina", "Salón", "Barra", "Copería"].includes(label)) void renderArea(normalizeArea(label));
     else void renderModule(label);
@@ -462,6 +464,15 @@ function renderCloseShiftPlaceholder() {
     const section = document.createElement("section"); section.className = "module-screen checkin-section";
     section.append(checkinNode("h2", "module-title", "Cierre de turno"));
     section.append(checkinNode("p", "empty-state", "Este apartado ya está agregado. La función para registrar el cierre se incorporará más adelante."));
+    otherModule.append(section);
+}
+
+function renderRecipesPlaceholder() {
+    otherModule.hidden = false;
+    otherModule.replaceChildren();
+    const section = document.createElement("section"); section.className = "module-screen checkin-section";
+    section.append(checkinNode("h2", "module-title", "Recetas"));
+    section.append(checkinNode("p", "empty-state", "Aquí cada restaurante podrá registrar los productos que vende y los ingredientes de sus recetas. Después conectaremos esos datos con el inventario y el cierre de turno."));
     otherModule.append(section);
 }
 
@@ -906,7 +917,6 @@ Inventario: [
 ],
     Cocina: ["Preparación", "Responsable", "Hora", "Estado"],
     "Producción": ["Preparación", "Cantidad", "Unidad", "Responsable", "Fecha"],
-    "Mise en place": ["Preparación", "Cantidad", "Responsable", "Hora límite", "Estado"],
     Reservas: ["Cliente", "Fecha", "Hora", "Personas", "Contacto", "Estado"],
     Limpieza: ["Área", "Tarea", "Responsable", "Frecuencia", "Estado"],
     Incidencias: ["Tipo", "Área", "Descripción", "Responsable", "Estado"],
@@ -986,14 +996,14 @@ async function renderModule(name, selectedArea = null) {
     otherModule.className = `module-screen module-screen--${slug}`;
     const accents = {
         asistencia: "#0891b2", turnos: "#7c3aed", "tareas-diarias": "#2563eb", inventario: "#059669",
-        cocina: "#ea580c", produccion: "#d97706", "mise-en-place": "#0d9488", reservas: "#db2777",
+        cocina: "#ea580c", produccion: "#d97706", recetas: "#0d9488", reservas: "#db2777",
         limpieza: "#0284c7", incidencias: "#dc2626", compras: "#4f46e5", mermas: "#64748b",
         "control-sanitario": "#16a34a", reportes: "#9333ea", configuracion: "#475569"
     };
     otherModule.style.setProperty("--module-accent", accents[slug] || "#2563eb");
     const icons = {
         asistencia: "🕒", turnos: "📅", "tareas-diarias": "✅", inventario: "📦", cocina: "👨‍🍳",
-        produccion: "🍳", "mise-en-place": "🔪", reservas: "🗓️", limpieza: "🧹", incidencias: "⚠️",
+        produccion: "🍳", recetas: "📖", reservas: "🗓️", limpieza: "🧹", incidencias: "⚠️",
         compras: "🛒", mermas: "♻️", "control-sanitario": "🌡️", reportes: "📊", configuracion: "⚙️"
     };
     const header = document.createElement("div"); header.className = "module-header";
@@ -1005,7 +1015,7 @@ async function renderModule(name, selectedArea = null) {
         Inventario: "Controla existencias y niveles mínimos de insumos.",
         Cocina: "Da seguimiento a las preparaciones activas.",
         Producción: "Registra cantidades preparadas y responsables.",
-        "Mise en place": "Planifica las preparaciones previas al servicio.",
+        Recetas: "Registra las recetas de los productos para vincularlas con el inventario y el cierre de turno.",
         Reservas: "Administra clientes, horarios y cantidad de personas.",
         Limpieza: "Organiza las tareas de limpieza por área.",
         Incidencias: "Registra problemas y su estado de resolución.",
@@ -1694,10 +1704,18 @@ globalSearch?.addEventListener("input", () => {
 });
 
 const employeeSearch = document.getElementById("employeeSearch");
-employeeSearch?.addEventListener("input", () => {
+const employeeAreaFilter = document.getElementById("employeeAreaFilter");
+function filterEmployees() {
     const query = employeeSearch.value.trim().toLocaleLowerCase("es");
-    [...employeeBody.rows].forEach((row) => { row.hidden = !row.textContent.toLocaleLowerCase("es").includes(query); });
-});
+    const area = employeeAreaFilter.value;
+    [...employeeBody.rows].forEach((row) => {
+        const rowArea = normalizeArea(row.cells[2]?.textContent);
+        const matchesArea = !area || (area === "SIN_AREA" ? !rowArea || rowArea === "PENDIENTES DE CLASIFICAR" : rowArea === area);
+        row.hidden = !matchesArea || !row.textContent.toLocaleLowerCase("es").includes(query);
+    });
+}
+employeeSearch?.addEventListener("input", filterEmployees);
+employeeAreaFilter?.addEventListener("change", filterEmployees);
 const importDialog = document.getElementById("employeeImportDialog");
 const pasteArea = document.getElementById("employeeImportPasteArea");
 const pasteText = document.getElementById("employeeImportText");
@@ -2180,8 +2198,6 @@ async function enterApplication(profile) {
     }).catch(error => console.warn('El acceso continúa sin Push:', error.message));
     document.getElementById("addEmployeeButton").disabled = !isOwnerRole();
     document.getElementById("importEmployeesButton").hidden = !isAdminRole();
-    document.getElementById("managePlazasButton").hidden = false;
-    document.getElementById("managePlazasButton").textContent = isOwnerRole() ? "Agregar plaza / Gestionar plazas" : "Ver plazas";
     adminMenu?.querySelectorAll("button").forEach((button) => { if (button.textContent.includes("Configuración")) button.disabled = false; });
     menuItems.forEach(link => { link.hidden = false; });
     document.querySelectorAll(".dashboard-cards .card").forEach((card) => { const label = card.querySelector("h3")?.textContent.trim() || ""; card.hidden = !canSeeModule(slugifyLabel(label)); });

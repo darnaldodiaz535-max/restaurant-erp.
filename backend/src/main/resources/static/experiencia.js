@@ -365,7 +365,7 @@ async function renderNotificationPreferences(section) {
         moduleSave.type = 'button';
         try {
             const moduleData = await apiRequest('/api/notificaciones/preferencias/modulos');
-            (moduleData.available || []).forEach(name => {
+            (moduleData.available || []).filter(name => name !== 'Mise en place').forEach(name => {
                 const input = element('input'); input.type = 'checkbox'; input.value = name;
                 input.checked = (moduleData.modules || []).includes(name);
                 const label = element('label', name, 'notification-module-option'); label.prepend(input);

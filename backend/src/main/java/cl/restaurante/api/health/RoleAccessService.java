@@ -12,7 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class RoleAccessService {
     private static final Set<String> KITCHEN_MODULES = Set.of(
-            "tareas-diarias", "inventario", "cocina", "produccion", "mise-en-place",
+            "tareas-diarias", "inventario", "cocina", "produccion", "recetas",
             "limpieza", "control-sanitario", "compras", "mermas", "incidencias", "asistencia", "turnos");
     private final JdbcTemplate jdbc;
 

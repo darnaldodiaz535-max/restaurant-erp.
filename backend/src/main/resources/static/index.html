@@ -13,7 +13,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MariGex 66 - Sistema de Gestión</title>
 
-<link rel="stylesheet" href="style.css?v=dashboard-charts-mobile-20261016-3">
+<link rel="stylesheet" href="style.css?v=marigex-recetas-personal-20261016-1">
     <meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -183,7 +183,7 @@
 
                 <a href="#">🍳 Producción</a>
 
-                <a href="#">🔪 Mise en place</a>
+                <a href="#">📖 Recetas</a>
 
                 <a href="#">🗓️ Reservas</a>
 
@@ -381,19 +381,19 @@
                 </div>
 
 
-                <!-- MISE EN PLACE -->
+                <!-- RECETAS -->
 
                 <div class="card">
 
-                    <div class="card-icon">🔪</div>
+                    <div class="card-icon">📖</div>
 
                     <div class="card-content">
 
-                        <h3>Mise en place</h3>
+                        <h3>Recetas</h3>
 
-                        <strong>—</strong>
+                        <strong>→</strong>
 
-                        <p>Preparaciones pendientes</p>
+                        <p>Configurar recetas de productos</p>
 
                     </div>
 
@@ -730,6 +730,14 @@
                 id="employeeSearch"
                 placeholder="Buscar trabajador..."
             >
+            <select id="employeeAreaFilter" aria-label="Filtrar trabajadores por área">
+                <option value="">Todas las áreas</option>
+                <option value="COCINA">Cocina</option>
+                <option value="SALON">Salón</option>
+                <option value="BARRA">Barra</option>
+                <option value="COPERIA">Copería</option>
+                <option value="SIN_AREA">Sin área</option>
+            </select>
 
         </div>
 
@@ -1035,9 +1043,9 @@
     </dialog>
 <script src="vendor/qrcode-generator.js?v=1.4.4"></script>
 <script src="vendor/jsQR.js?v=1.4.0"></script>
-<script src="scrip.js?v=dashboard-charts-mobile-20261016-2"></script>
+<script src="scrip.js?v=marigex-recetas-personal-20261016-1"></script>
 <script src="notificaciones-horarios.js?v=notificaciones-leer-quitar-20261009-2"></script>
-<script src="experiencia.js?v=dashboard-charts-mobile-20261016-2"></script>
+<script src="experiencia.js?v=marigex-recetas-personal-20261016-1"></script>
 <script src="gestion.js?v=notificaciones-20261004-1"></script>
     <script>
   if ("serviceWorker" in navigator) {

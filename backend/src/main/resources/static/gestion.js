@@ -169,9 +169,6 @@ async function renderPlazas() {
     });
     await load();
 }
-const managePlazasButton = actionButton("Agregar plaza / Gestionar plazas", () => void renderPlazas());
-managePlazasButton.id = "managePlazasButton"; managePlazasButton.hidden = true;
-document.getElementById("addEmployeeButton").after(managePlazasButton);
 setInterval(() => { if (!document.hidden && currentProfile) void loadDashboardOverview(); }, 60000);
 void (async () => {
     try { await ensureExperienceLoaded(); }

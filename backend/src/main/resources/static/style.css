@@ -989,7 +989,8 @@ main > p {
    BUSCADOR DE TRABAJADORES
    ========================================= */
 
-#personal-module .data-section-header input {
+#personal-module .data-section-header input,
+#personal-module .data-section-header select {
     width: 240px;
     padding: 9px 12px;
     border: 1px solid #d1d5db;
@@ -998,7 +999,8 @@ main > p {
     font-size: 13px;
 }
 
-#personal-module .data-section-header input:focus {
+#personal-module .data-section-header input:focus,
+#personal-module .data-section-header select:focus {
     border-color: #2563eb;
 }
 
@@ -1434,7 +1436,8 @@ body.compact-view main, body.compact-view #personal-module, body.compact-view #o
     #personal-module .module-header, #personal-module .data-section-header { align-items: stretch; flex-direction: column; }
     #personal-module .personal-summary { grid-template-columns: 1fr; }
     #personal-module .data-section { padding: 15px; overflow-x: auto; }
-    #personal-module .data-section-header input { width: 100%; }
+    #personal-module .data-section-header input,
+    #personal-module .data-section-header select { width: 100%; }
     .record-form-fields { grid-template-columns: 1fr; }
     #other-module .module-header { align-items: stretch; flex-direction: column; padding: 18px; }
     .generic-data { padding: 14px; }

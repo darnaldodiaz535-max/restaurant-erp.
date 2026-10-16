@@ -11,7 +11,7 @@ public class NotificationPreferences {
     public static final List<String> MODULES = List.of(
         "Personal", "Asistencia", "Horarios", "Tareas diarias", "Check-in Diario", "Cierre de turno",
         "Inventario", "Cocina", "Salón", "Barra", "Copería", "Producción",
-        "Mise en place", "Reservas", "Limpieza", "Incidencias", "Compras", "Mermas",
+        "Recetas", "Reservas", "Limpieza", "Incidencias", "Compras", "Mermas",
         "Control sanitario", "Reportes"
     );
     private final JdbcTemplate jdbc;
