@@ -1603,6 +1603,7 @@ if (adminUser && adminMenu) {
 }
 if (localStorage.getItem("restaurant-erp-compact") === "true") document.body.classList.add("compact-view");
 if (localStorage.getItem("marigex-theme") === "dark") document.body.classList.add("theme-dark");
+if (localStorage.getItem("marigex-data-saver") === "true") document.body.classList.add("data-saver");
 
 const notificationBtn = document.getElementById("notificationBtn");
 const notificationMenu = document.getElementById("notificationMenu");
@@ -2216,17 +2217,43 @@ async function openProfile() {
     const balance = document.getElementById("profile-vacation-balance");
     const vacationNote = document.getElementById("profile-vacation-note");
     tenure.textContent = "Cargando…"; balance.textContent = "Cargando…";
+    document.getElementById("profileVacationList").replaceChildren();
     profileDialog.showModal();
+    await loadProfileVacationAdmin();
+    await loadProfileVacation();
+}
+async function loadProfileVacation() {
+    const profileEmployeeId = currentProfile?.employeeId;
     try {
         const vacation = await apiRequest("/api/perfil/vacaciones");
         if (!profileDialog.open || !currentProfile || currentProfile.employeeId !== profileEmployeeId) return;
-        tenure.textContent = formatServiceTime(vacation.serviceDays);
-        startDate.textContent = `Cuenta creada el ${new Date(`${vacation.startDate}T12:00:00`).toLocaleDateString("es-CL")}`;
-        balance.textContent = `${formatVacationDays(vacation.balanceDays)} días`;
-        vacationNote.textContent = `${formatVacationDays(vacation.accruedDays)} días generados · ${formatVacationDays(vacation.usedDays)} utilizados. Base: 15 días hábiles por cada año completado; no incluye feriado progresivo.`;
+        document.getElementById("profile-tenure").textContent = formatServiceTime(vacation.serviceDays);
+        document.getElementById("profile-start-date").textContent = `Cuenta creada el ${new Date(`${vacation.startDate}T12:00:00`).toLocaleDateString("es-CL")}`;
+        document.getElementById("profile-vacation-balance").textContent = `${formatVacationDays(vacation.balanceDays)} días`;
+        document.getElementById("profile-vacation-note").textContent = `${formatVacationDays(vacation.accruedDays)} días generados · ${formatVacationDays(vacation.usedDays)} utilizados. Base: 15 días hábiles por cada año completado; no incluye feriado progresivo.`;
+        const list = document.getElementById("profileVacationList");
+        list.replaceChildren();
+        if (!vacation.uses.length) list.append(document.createTextNode("Todavía no tienes días de vacaciones registrados."));
+        vacation.uses.forEach(use => {
+            const row = document.createElement("div"); row.className = "vacation-history-row";
+            const label = document.createElement("span"); label.textContent = `${new Date(`${use.date}T12:00:00`).toLocaleDateString("es-CL")} · ${formatVacationDays(use.days)} días${use.note ? ` · ${use.note}` : ""}`;
+            row.append(label);
+            if (isOwnerRole()) {
+                const remove = document.createElement("button"); remove.type = "button"; remove.className = "table-button"; remove.textContent = "Eliminar";
+                remove.addEventListener("click", async () => {
+                    if (!confirm("¿Eliminar este registro? El saldo se recalculará.")) return;
+                    try { await apiRequest(`/api/perfil/vacaciones/usos/${use.id}`, { method: "DELETE" }); await loadProfileVacation(); }
+                    catch (error) { label.textContent = error.message; }
+                });
+                row.append(remove);
+            }
+            list.append(row);
+        });
     } catch (error) {
-        tenure.textContent = "No se pudo cargar"; balance.textContent = "No disponible";
-        startDate.textContent = error.message || "Revisa la conexión e inténtalo otra vez.";
+        document.getElementById("profile-tenure").textContent = "No se pudo cargar";
+        document.getElementById("profile-vacation-balance").textContent = "No disponible";
+        document.getElementById("profile-start-date").textContent = error.message || "Revisa la conexión e inténtalo otra vez.";
+        document.getElementById("profileVacationList").textContent = error.message || "No se pudo cargar el historial.";
     }
 }
 function formatVacationDays(value) { return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(Number(value || 0)); }
@@ -2236,6 +2263,39 @@ function formatServiceTime(days) {
     return [years && `${years} ${years === 1 ? "año" : "años"}`, months && `${months} ${months === 1 ? "mes" : "meses"}`, !years && !months ? `${remaining} días` : null].filter(Boolean).join(" y ");
 }
 document.getElementById("closeProfile").addEventListener("click", () => profileDialog.close());
+const profileVacationAdmin = document.getElementById("profileVacationAdmin");
+const profileVacationForm = document.getElementById("profileVacationForm");
+profileVacationForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const save = profileVacationForm.querySelector("button[type=submit]");
+    const status = document.getElementById("profileVacationStatus");
+    save.disabled = true; status.textContent = "Guardando…";
+    try {
+        await apiRequest("/api/perfil/vacaciones/usos", { method: "POST", body: JSON.stringify({
+            employeeId: Number(document.getElementById("profileVacationEmployee").value),
+            date: document.getElementById("profileVacationDate").value,
+            days: Number(document.getElementById("profileVacationDays").value),
+            note: document.getElementById("profileVacationNote").value.trim()
+        }) });
+        profileVacationForm.reset();
+        document.getElementById("profileVacationDate").value = new Date().toLocaleDateString("en-CA");
+        status.textContent = "Vacaciones registradas.";
+        await loadProfileVacation();
+    } catch (error) { status.textContent = error.message || "No se pudo registrar el uso."; }
+    finally { save.disabled = false; }
+});
+async function loadProfileVacationAdmin() {
+    if (!isOwnerRole()) { profileVacationAdmin.hidden = true; return; }
+    profileVacationAdmin.hidden = false;
+    const select = document.getElementById("profileVacationEmployee");
+    select.replaceChildren(new Option("Selecciona trabajador…", ""));
+    const date = document.getElementById("profileVacationDate");
+    date.max = new Date().toLocaleDateString("en-CA"); date.value = date.max;
+    try {
+        const employees = await apiRequest("/api/empleados");
+        employees.filter(item => item.active).forEach(item => select.add(new Option(item.name, String(item.id))));
+    } catch (error) { document.getElementById("profileVacationStatus").textContent = error.message || "No se pudo cargar Personal."; }
+}
 document.getElementById("profilePhotoInput").addEventListener("change", async event => {
     const file = event.target.files?.[0];
     if (!file || !currentProfile) return;

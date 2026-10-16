@@ -358,6 +358,38 @@ async function renderNotificationPreferences(section) {
 
         applyPreferences(initial);
 
+        const modulePanel = element('fieldset', undefined, 'notification-modules');
+        modulePanel.append(element('legend', 'Apartados que pueden enviarte avisos'));
+        const moduleChoices = new Map();
+        const moduleSave = element('button', 'Guardar apartados', 'secondary-button');
+        moduleSave.type = 'button';
+        try {
+            const moduleData = await apiRequest('/api/notificaciones/preferencias/modulos');
+            (moduleData.available || []).forEach(name => {
+                const input = element('input'); input.type = 'checkbox'; input.value = name;
+                input.checked = (moduleData.modules || []).includes(name);
+                const label = element('label', name, 'notification-module-option'); label.prepend(input);
+                moduleChoices.set(name, input); modulePanel.append(label);
+            });
+            moduleSave.addEventListener('click', async () => {
+                if (busy) return;
+                const selected = [...moduleChoices].filter(([, input]) => input.checked).map(([name]) => name);
+                moduleSave.disabled = true; showMessage('Guardando apartados…');
+                try {
+                    await apiRequest('/api/notificaciones/preferencias/modulos', {
+                        method: 'PUT', body: JSON.stringify({ modules: selected })
+                    });
+                    showMessage('Apartados de notificación guardados.', false, true);
+                } catch (error) {
+                    showMessage(error.message || 'No se pudieron guardar los apartados.', true, true);
+                } finally { moduleSave.disabled = false; }
+            });
+            modulePanel.append(moduleSave);
+        } catch (error) {
+            modulePanel.append(element('p', error.message || 'No se pudieron cargar los apartados de notificación.'));
+        }
+        box.append(modulePanel);
+
         const userId = String(currentProfile?.id ?? '');
         let busy = false;
         let enable;
@@ -748,61 +780,6 @@ async function renderAccountSettings(section) {
     const spanish = element('option', 'Español'); spanish.value = 'es'; languageSelect.append(spanish);
     const languageLabel = element('label', 'Idioma de la aplicación', 'settings-control-label'); languageLabel.append(languageSelect); language.append(languageLabel);
 
-    const vacation = element('article', undefined, 'settings-card settings-vacation');
-    vacation.append(element('span', 'PERSONAL', 'eyebrow'), element('h3', 'Mis vacaciones'));
-    const vacationSummary = element('p', 'Cargando saldo…'); vacationSummary.setAttribute('role', 'status'); vacation.append(vacationSummary);
-    const vacationList = element('div', undefined, 'vacation-history'); vacation.append(vacationList);
-    const showVacation = async () => {
-        try {
-            const data = await apiRequest('/api/perfil/vacaciones');
-            vacationSummary.textContent = `${formatVacationDays(data.balanceDays)} días disponibles · ${formatVacationDays(data.usedDays)} utilizados de ${formatVacationDays(data.accruedDays)} generados desde la creación de tu acceso.`;
-            vacationList.replaceChildren();
-            if (!data.uses.length) vacationList.append(element('small', 'Todavía no hay días de vacaciones registrados.'));
-            data.uses.forEach(use => {
-                const row = element('div', undefined, 'vacation-history-row');
-                row.append(element('span', `${new Date(`${use.date}T12:00:00`).toLocaleDateString('es-CL')} · ${formatVacationDays(use.days)} días${use.note ? ` · ${use.note}` : ''}`));
-                if (isOwnerRole()) {
-                    const remove = actionButton('Eliminar', async () => {
-                        if (!confirm('¿Eliminar este registro de vacaciones? El saldo se recalculará.')) return;
-                        try { await apiRequest(`/api/perfil/vacaciones/usos/${use.id}`, { method: 'DELETE' }); await showVacation(); }
-                        catch (error) { vacationSummary.textContent = error.message; }
-                    });
-                    row.append(remove);
-                }
-                vacationList.append(row);
-            });
-        } catch (error) { vacationSummary.textContent = error.message || 'No se pudo cargar el saldo.'; }
-    };
-    await showVacation();
-    if (isOwnerRole()) {
-        const form = element('form', undefined, 'vacation-register-form');
-        const employee = element('select'); employee.required = true;
-        employee.append(element('option', 'Selecciona trabajador…')); employee.options[0].value = '';
-        const date = element('input'); date.type = 'date'; date.required = true; date.max = new Date().toISOString().slice(0, 10); date.value = date.max;
-        const days = element('input'); days.type = 'number'; days.min = '0.01'; days.max = '30'; days.step = '0.5'; days.placeholder = 'Días'; days.required = true;
-        const note = element('input'); note.maxLength = 300; note.placeholder = 'Observación (opcional)';
-        try {
-            const employees = await apiRequest('/api/empleados');
-            employees.filter(item => item.active).forEach(item => { const option = element('option', item.name); option.value = item.id; employee.append(option); });
-        } catch { employee.disabled = true; }
-        const employeeLabel = element('label', 'Trabajador'); employeeLabel.append(employee);
-        const dateLabel = element('label', 'Fecha'); dateLabel.append(date);
-        const daysLabel = element('label', 'Días utilizados'); daysLabel.append(days);
-        const noteLabel = element('label', 'Observación'); noteLabel.append(note);
-        const save = actionButton('Registrar vacaciones', async () => {}, true); save.type = 'submit';
-        form.append(employeeLabel, dateLabel, daysLabel, noteLabel, save);
-        form.addEventListener('submit', async event => {
-            event.preventDefault(); if (!form.reportValidity()) return;
-            save.disabled = true;
-            try {
-                await apiRequest('/api/perfil/vacaciones/usos', { method: 'POST', body: JSON.stringify({ employeeId: Number(employee.value), date: date.value, days: Number(days.value), note: note.value.trim() }) });
-                form.reset(); date.value = date.max; await showVacation();
-            } catch (error) { vacationSummary.textContent = error.message || 'No se pudo registrar el feriado.'; }
-            finally { save.disabled = false; }
-        });
-        vacation.append(element('h4', 'Registrar días usados'), form);
-    }
-
     const about = element('article', undefined, 'settings-card settings-about');
     about.append(element('span', 'M A R I G E X  6 6', 'eyebrow'), element('h3', 'Todo tu restaurante, en orden.'), element('p', 'MariGex reúne en un solo lugar la gestión del personal, la asistencia y la operación diaria del restaurante. Su objetivo es ayudar al equipo a trabajar con información clara y coordinada.'));
     const steps = element('div', undefined, 'about-flow');
@@ -811,7 +788,45 @@ async function renderAccountSettings(section) {
         if (index < 2) steps.append(element('span', '→', 'about-flow-arrow'));
     });
     about.append(steps, element('small', `MariGex 66 · Sistema de Gestión · © ${new Date().getFullYear()}`));
-    panel.append(appearance, language, vacation, about); section.append(panel);
+
+    const communications = element('article', undefined, 'settings-card');
+    communications.append(element('span', 'COMUNICACIONES', 'eyebrow'), element('h3', 'Ayuda y contacto'), element('p', 'Para resolver dudas de acceso, datos o funcionamiento, contacta a la persona administradora de tu restaurante.'));
+    const contactTip = element('p', 'Al pedir ayuda, indica el apartado, qué estabas haciendo y el mensaje de error. No compartas tu contraseña.');
+    contactTip.className = 'settings-callout'; communications.append(contactTip);
+
+    const help = element('article', undefined, 'settings-card');
+    help.append(element('span', 'ASISTENCIA', 'eyebrow'), element('h3', 'Solución de problemas'), element('p', 'Prueba estos pasos antes de reportar una falla.'));
+    const troubleshooting = [
+        ['La pantalla no actualiza', 'Recarga la aplicación. Si sigue igual, cierra sesión y vuelve a entrar.'],
+        ['No puedo guardar', 'Comprueba tu conexión y que tu cuenta tenga permiso para esa acción.'],
+        ['No llegan avisos', 'Revisa tus canales en “Mis notificaciones” y los permisos del navegador.']
+    ];
+    troubleshooting.forEach(([title, copy]) => {
+        const details = element('details', undefined, 'settings-disclosure');
+        details.append(element('summary', title), element('p', copy)); help.append(details);
+    });
+
+    const legal = element('article', undefined, 'settings-card');
+    legal.append(element('span', 'INFORMACIÓN', 'eyebrow'), element('h3', 'Legal y privacidad'));
+    const terms = element('details', undefined, 'settings-disclosure');
+    terms.append(element('summary', 'Términos de uso'), element('p', 'El acceso es para personas autorizadas por el restaurante. Cada usuario debe mantener sus credenciales privadas y usar la información de acuerdo con sus responsabilidades.'));
+    const privacy = element('details', undefined, 'settings-disclosure');
+    privacy.append(element('summary', 'Privacidad'), element('p', 'MariGex utiliza la información de personal, asistencia y operación que registra el restaurante para entregar sus funciones. El perfil y sus permisos dependen de la cuenta asignada. La foto de perfil se guarda en el navegador de este dispositivo. Para solicitar revisión o corrección de datos, contacta a la administración del restaurante.'));
+    legal.append(terms, privacy);
+
+    const dataCard = element('article', undefined, 'settings-card');
+    dataCard.append(element('span', 'PREFERENCIAS', 'eyebrow'), element('h3', 'Ahorro de datos'), element('p', 'Reduce efectos visuales y recursos decorativos mientras usas MariGex.'));
+    const dataLabel = element('label', 'Activar ahorro de datos', 'settings-check-row');
+    const dataToggle = element('input'); dataToggle.type = 'checkbox';
+    dataToggle.checked = localStorage.getItem('marigex-data-saver') === 'true';
+    document.body.classList.toggle('data-saver', dataToggle.checked);
+    dataToggle.addEventListener('change', () => {
+        localStorage.setItem('marigex-data-saver', String(dataToggle.checked));
+        document.body.classList.toggle('data-saver', dataToggle.checked);
+    });
+    dataLabel.prepend(dataToggle); dataCard.append(dataLabel);
+
+    panel.append(appearance, language, about, communications, help, legal, dataCard); section.append(panel);
 }
 
 /* PARA QUÉ SIRVE:

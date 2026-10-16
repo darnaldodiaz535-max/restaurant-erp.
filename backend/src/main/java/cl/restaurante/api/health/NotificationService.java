@@ -75,6 +75,7 @@ private void notifyWithDetail(
         String module,
         String pushPreview,
         String fullDetail) {
+    if (!preferences.isModuleEnabled(user, module)) return;
     var preferencesForUser = preferences.get(user);
     var keys = new org.springframework.jdbc.support.GeneratedKeyHolder();
 
@@ -99,6 +100,7 @@ private void notifyWithDetail(
     delivery.enqueue(keys.getKey().longValue(), user, preferencesForUser);
 }
     private void notify(long user,String module,String message) {
+        if (!preferences.isModuleEnabled(user, module)) return;
         var p=preferences.get(user);
         String safe=message.substring(0,Math.min(message.length(),900));
         var keys=new org.springframework.jdbc.support.GeneratedKeyHolder();

@@ -122,7 +122,7 @@ NotificationText.readClob(rs, "DETALLE")),
     private void send(Delivery d) throws Exception {
         var names=jdbc.query("SELECT E.NOMBRE FROM APP_USUARIO U JOIN APP_EMPLEADO E ON E.ID_EMPLEADO=U.ID_EMPLEADO WHERE U.ID_USUARIO=? AND U.ACTIVO='S'",(rs,n)->rs.getString(1),d.user());
         var p=preferences.get(d.user());
-        if(names.isEmpty() || (d.channel().equals("PUSH")&&!p.push()) || (d.channel().equals("EMAIL")&&(!p.mail()||!d.target().equals(p.email())))) { finish(d,"OMITIDO");return; }
+        if(names.isEmpty() || !preferences.isModuleEnabled(d.user(), d.module()) || (d.channel().equals("PUSH")&&!p.push()) || (d.channel().equals("EMAIL")&&(!p.mail()||!d.target().equals(p.email())))) { finish(d,"OMITIDO");return; }
        if (d.channel().equals("PUSH")) {
     var subscriptions = jdbc.query(
             "SELECT ENDPOINT,P256DH,AUTH "

@@ -1,6 +1,7 @@
 package cl.restaurante.api.health;
 
 import java.util.Map;
+import java.util.List;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +27,14 @@ public class NotificationSettingsController {
     public NotificationPreferences.Preferences get(HttpSession session) { return preferences.get(access.current(session).id()); }
     @PutMapping("/preferencias")
     public NotificationPreferences.Preferences save(@RequestBody NotificationPreferences.Preferences p,HttpSession session) { return preferences.save(access.current(session).id(),p); }
+    @GetMapping("/preferencias/modulos")
+    public Map<String, List<String>> getModules(HttpSession session) {
+        return Map.of("modules", preferences.getModules(access.current(session).id()), "available", NotificationPreferences.MODULES);
+    }
+    @PutMapping("/preferencias/modulos")
+    public Map<String, List<String>> saveModules(@RequestBody ModulePreferences body,HttpSession session) {
+        return Map.of("modules", preferences.saveModules(access.current(session).id(), body == null ? null : body.modules()));
+    }
     @GetMapping("/push/config")
     public Map<String,Object> config(HttpSession session) {
         access.current(session);
@@ -67,4 +76,5 @@ public NotificationPreferences.Preferences activate(
                     current.mail(),
                     current.email()));
 }
+public record ModulePreferences(List<String> modules) {}
 }
