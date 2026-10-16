@@ -153,6 +153,7 @@ async function loadEmployees() {
         }
     } catch (error) {
         console.error("No se pudieron cargar los empleados desde Oracle:", error);
+        document.querySelectorAll(".personal-summary .summary-card strong").forEach(count => { count.textContent = "—"; });
         employeeBody.replaceChildren();
         const row = document.createElement("tr");
         const cell = document.createElement("td"); cell.colSpan = 5;
@@ -171,15 +172,24 @@ function activateNav(selected) {
 }
 async function loadDashboardMetrics() {
     if (!currentProfile) return;
+    const metricCards = [...document.querySelectorAll(".dashboard-cards .card")].filter(card => {
+        const label = card.querySelector("h3")?.textContent.trim();
+        return !["Check-in Diario", "Cierre de turno", "Configuración"].includes(label);
+    });
+    metricCards.forEach(card => { const number = card.querySelector("strong"); if (number) number.textContent = "…"; card.setAttribute("aria-busy", "true"); });
     try {
         const metrics = await apiRequest("/api/dashboard");
-        document.querySelectorAll(".dashboard-cards .card").forEach((card) => {
+        metricCards.forEach((card) => {
             const label = card.querySelector("h3")?.textContent.trim();
             const value = metrics[label];
             const number = card.querySelector("strong");
-            if (number && value !== undefined) number.textContent = String(value);
+            if (number) number.textContent = value !== undefined ? String(value) : "—";
+            card.setAttribute("aria-busy", "false");
         });
-    } catch (error) { console.error("No se pudieron actualizar los indicadores:", error); }
+    } catch (error) {
+        console.error("No se pudieron actualizar los indicadores:", error);
+        metricCards.forEach(card => { const number = card.querySelector("strong"); if (number) number.textContent = "—"; card.setAttribute("aria-busy", "false"); });
+    }
     await loadDashboardOverview();
 }
 

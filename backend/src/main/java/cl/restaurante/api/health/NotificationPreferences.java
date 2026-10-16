@@ -9,7 +9,7 @@ import java.util.List;
 @Service
 public class NotificationPreferences {
     public static final List<String> MODULES = List.of(
-        "Personal", "Asistencia", "Horarios", "Tareas diarias", "Check-in Diario",
+        "Personal", "Asistencia", "Horarios", "Tareas diarias", "Check-in Diario", "Cierre de turno",
         "Inventario", "Cocina", "Salón", "Barra", "Copería", "Producción",
         "Mise en place", "Reservas", "Limpieza", "Incidencias", "Compras", "Mermas",
         "Control sanitario", "Reportes"
@@ -24,9 +24,9 @@ public class NotificationPreferences {
     public List<String> getModules(long user) {
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_MODULO_PREF WHERE ID_USUARIO=?", Integer.class, user);
         if (count == null || count == 0) return MODULES;
-        var saved = jdbc.query("SELECT MODULO FROM APP_NOTIF_MODULO_PREF WHERE ID_USUARIO=? AND HABILITADA='S'",
+        var disabled = jdbc.query("SELECT MODULO FROM APP_NOTIF_MODULO_PREF WHERE ID_USUARIO=? AND HABILITADA='N'",
             (rs,n)->rs.getString(1), user);
-        return saved;
+        return MODULES.stream().filter(module -> !disabled.contains(module)).toList();
     }
     public boolean isModuleEnabled(long user, String module) {
         String canonical = canonicalModule(module);
