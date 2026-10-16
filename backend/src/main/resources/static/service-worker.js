@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-dashboard-charts-mobile-20261016-2';
+const CACHE_NAME='marigex-shell-dashboard-charts-mobile-20261016-3';
 const DEVICE_CACHE='marigex-device';
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png','/images/santiago-costanera-loading.png'];
 self.addEventListener('install',event=>{

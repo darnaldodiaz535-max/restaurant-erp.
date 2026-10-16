@@ -1496,8 +1496,7 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 @keyframes splash-in { from { opacity:0; transform:translateY(7px); } to {opacity:1;transform:none;} }
 @keyframes splash-spin { to {transform:rotate(360deg);} }
 @media (max-width: 520px) {
-    #marigexSplash::before { inset:0 0 auto; height:min(60vw, 34vh); background-size:100% 100%; background-position:center top; animation:none; }
-    #marigexSplash::after { background:linear-gradient(180deg,rgba(7,14,25,.08) 0%,rgba(7,14,25,.08) 15%,#101827 35%,#101827 100%); }
+    #marigexSplash::before { background-position:58% center; }
     .splash-content { padding:34px 24px 30px; }
     .splash-content img { width:100px; height:100px; }
 }
