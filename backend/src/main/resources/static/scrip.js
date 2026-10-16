@@ -47,6 +47,7 @@ const iconPaths = {
     Horarios: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
     "Tareas diarias": '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 10 2 2 5-5M8 16h8"/>',
     "Check-in Diario": '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18m-13 5 2 2 4-4"/>',
+    "Cierre de turno": '<path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h5"/><path d="m15 16 2 2 4-4"/>',
     Inventario: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="M3 8v9l9 5 9-5V8M12 13v9"/>',
     Cocina: '<path d="M6 13h12l-1 8H7l-1-8ZM5 13a3 3 0 0 1 0-6 4 4 0 0 1 8-1 4 4 0 0 1 7 2 3 3 0 0 1-1 5"/>',
     Salón: '<circle cx="12" cy="12" r="7"/><path d="M2 3v6M5 3v6M2 6h3M3.5 9v12M21 3v18"/>',
@@ -405,11 +406,21 @@ function showScreen(link) {
     else if (label === "Personal") personal.hidden = false;
     else if (label === "Tareas diarias") renderTaskAreas();
     else if (label === "Check-in Diario") void renderCheckinModule();
+    else if (label === "Cierre de turno") renderCloseShiftPlaceholder();
     else if (label === "Asistencia") void renderAttendanceModule();
     else if (["Cocina", "Salón", "Barra", "Copería"].includes(label)) void renderArea(normalizeArea(label));
     else void renderModule(label);
     activateNav(link);
     if (label === "Dashboard") void loadDashboardMetrics();
+}
+
+function renderCloseShiftPlaceholder() {
+    otherModule.hidden = false;
+    otherModule.replaceChildren();
+    const section = document.createElement("section"); section.className = "module-screen checkin-section";
+    section.append(checkinNode("h2", "module-title", "Cierre de turno"));
+    section.append(checkinNode("p", "empty-state", "Este apartado ya está agregado. La función para registrar el cierre se incorporará más adelante."));
+    otherModule.append(section);
 }
 
 const checkinAreas = ["SALON", "COPERIA", "COCINA", "BARRA"];

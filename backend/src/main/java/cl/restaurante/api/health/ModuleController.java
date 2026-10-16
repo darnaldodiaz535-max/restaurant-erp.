@@ -94,6 +94,7 @@ public class ModuleController {
         String insert="INSERT INTO " + d.table + " (" + columns + ") VALUES (" + marks + ")";
   jdbc.update(insert, values);
         notifyChange(module,d,values,"Se te asignó un registro");
+        notifyAdministrativeRecordChange(module, "Se creó un registro de " + label(module) + ".");
         activity.record(session, "CREAR", module, "Se guardó un registro");
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("status", "guardado"));
     }
@@ -160,6 +161,7 @@ public class ModuleController {
             if (access.isManager(user)) jdbc.update("UPDATE APP_TAREA_DIARIA SET ESTADO='PENDIENTE' WHERE ID_TAREA=? AND UPPER(ESTADO)='EN_REVISION'", id);
         }
         notifyChange(module,d,values,"Se actualizó un registro asignado a ti");
+        notifyAdministrativeRecordChange(module, "Se actualizó un registro de " + label(module) + ".");
         if(previous!=null && Set.of("tareas-diarias","turnos","incidencias").contains(module) && !previous.equals(recipient(d,id))) notifications.employee(previous,label(module),"Se retiró o reasignó un registro que tenías asignado.");
         activity.record(session, "ACTUALIZAR", module, "Se actualizaron los datos");
         return ResponseEntity.ok(Map.of("status", "actualizado"));
@@ -175,12 +177,13 @@ public class ModuleController {
         if ("tareas-diarias".equals(module)) jdbc.update("DELETE FROM APP_EVIDENCIA_TAREA WHERE ID_TAREA=?", id);
         int changed = jdbc.update("DELETE FROM " + d.table + " WHERE " + d.id + " = ?", id);
         if (changed == 0) return ResponseEntity.notFound().build();
+        notifyAdministrativeRecordChange(module, "Se eliminó un registro de " + label(module) + ".");
         if(previous!=null && Set.of("tareas-diarias","turnos","incidencias").contains(module)) notifications.employee(previous,label(module),"Se eliminó un registro que tenías asignado.");
         activity.record(session, "ELIMINAR", module, "Se eliminó un registro");
         return ResponseEntity.noContent().build();
     }
 
-    private String label(String module) { return switch(module) { case "turnos" -> "Horarios"; case "tareas-diarias" -> "Tareas diarias"; case "incidencias" -> "Incidencias"; default -> module; }; }
+    private String label(String module) { return switch(module) { case "turnos" -> "Horarios"; case "tareas-diarias" -> "Tareas diarias"; case "incidencias" -> "Incidencias"; case "compras" -> "Compras"; case "reservas" -> "Reservas"; default -> module; }; }
     private void rejectGenericAttendanceWrite(String module) {
         if ("asistencia".equalsIgnoreCase(module)) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Usa los botones Entrada y Salida para registrar asistencia.");
     }
@@ -196,6 +199,9 @@ public class ModuleController {
         for(int i=0;i<d.fields.size();i++) if(d.fields.get(i).kind==Kind.EMPLOYEE) notifications.employee(((Number)values[i]).longValue(),label(module),message+" en "+label(module)+". "+detail);
         if("incidencias".equals(module)) notifications.administrators("Incidencias","Se registró o actualizó una incidencia.");
         if("tareas-diarias".equals(module) && "COMPLETADA".equalsIgnoreCase(String.valueOf(values[3]))) notifications.administrators("Tareas diarias","Se completó una tarea.");
+    }
+    private void notifyAdministrativeRecordChange(String module, String message) {
+        if (Set.of("compras", "reservas").contains(module)) notifications.administrators(label(module), message);
     }
 
     private void validateArea(String module, Object[] values, HttpSession session) {

@@ -775,9 +775,10 @@ async function renderAccountSettings(section) {
     appearance.append(themeLabel, compactLabel);
 
     const language = element('article', undefined, 'settings-card');
-    language.append(element('span', 'IDIOMA', 'eyebrow'), element('h3', 'Idioma'), element('p', 'La interfaz está disponible actualmente en español.'));
-    const languageSelect = element('select', undefined, 'settings-select'); languageSelect.disabled = true;
-    const spanish = element('option', 'Español'); spanish.value = 'es'; languageSelect.append(spanish);
+    language.append(element('span', 'IDIOMA', 'eyebrow'), element('h3', 'Idioma'), element('p', 'Selecciona el idioma de esta sección.'));
+    const languageSelect = element('select', undefined, 'settings-select');
+    [['es', 'Español'], ['en', 'English']].forEach(([value, label]) => { const option = element('option', label); option.value = value; languageSelect.append(option); });
+    languageSelect.value = localStorage.getItem('marigex-language') === 'en' ? 'en' : 'es';
     const languageLabel = element('label', 'Idioma de la aplicación', 'settings-control-label'); languageLabel.append(languageSelect); language.append(languageLabel);
 
     const about = element('article', undefined, 'settings-card settings-about');
@@ -827,6 +828,39 @@ async function renderAccountSettings(section) {
     dataLabel.prepend(dataToggle); dataCard.append(dataLabel);
 
     panel.append(appearance, language, about, communications, help, legal, dataCard); section.append(panel);
+    const englishSettings = new Map(Object.entries({
+        'PREFERENCIAS':'PREFERENCES','Apariencia':'Appearance','Ajusta la vista de MariGex a tu espacio de trabajo.':'Adjust the MariGex view to your workspace.',
+        'Tema de la aplicación':'Application theme','Claro':'Light','Oscuro':'Dark','Reducir el tamaño de los paneles':'Reduce panel size',
+        'IDIOMA':'LANGUAGE','Idioma':'Language','Selecciona el idioma de esta sección.':'Choose the language for this section.','Idioma de la aplicación':'Application language',
+        'M A R I G E X  6 6':'M A R I G E X  6 6','Todo tu restaurante, en orden.':'Your whole restaurant, in order.',
+        'MariGex reúne en un solo lugar la gestión del personal, la asistencia y la operación diaria del restaurante. Su objetivo es ayudar al equipo a trabajar con información clara y coordinada.':'MariGex brings staff management, attendance, and daily restaurant operations together. It helps teams work with clear, coordinated information.',
+        'Personal':'Staff','Asistencia':'Attendance','Operación diaria':'Daily operations','COMUNICACIONES':'COMMUNICATIONS','Ayuda y contacto':'Help and contact',
+        'Para resolver dudas de acceso, datos o funcionamiento, contacta a la persona administradora de tu restaurante.':'For help with access, data, or app behavior, contact your restaurant administrator.',
+        'Al pedir ayuda, indica el apartado, qué estabas haciendo y el mensaje de error. No compartas tu contraseña.':'When asking for help, include the section, what you were doing, and the error message. Never share your password.',
+        'ASISTENCIA':'SUPPORT','Solución de problemas':'Troubleshooting','Prueba estos pasos antes de reportar una falla.':'Try these steps before reporting a problem.',
+        'La pantalla no actualiza':'The screen does not update','Recarga la aplicación. Si sigue igual, cierra sesión y vuelve a entrar.':'Refresh the app. If the issue remains, sign out and sign in again.',
+        'No puedo guardar':'I cannot save','Comprueba tu conexión y que tu cuenta tenga permiso para esa acción.':'Check your connection and make sure your account has permission for that action.',
+        'No llegan avisos':'I am not receiving notifications','Revisa tus canales en “Mis notificaciones” y los permisos del navegador.':'Check your channels in “My notifications” and your browser permissions.',
+        'INFORMACIÓN':'INFORMATION','Legal y privacidad':'Legal and privacy','Términos de uso':'Terms of use',
+        'El acceso es para personas autorizadas por el restaurante. Cada usuario debe mantener sus credenciales privadas y usar la información de acuerdo con sus responsabilidades.':'Access is for people authorized by the restaurant. Keep your sign-in details private and use information according to your responsibilities.',
+        'Privacidad':'Privacy','MariGex utiliza la información de personal, asistencia y operación que registra el restaurante para entregar sus funciones. El perfil y sus permisos dependen de la cuenta asignada. La foto de perfil se guarda en el navegador de este dispositivo. Para solicitar revisión o corrección de datos, contacta a la administración del restaurante.':'MariGex uses staff, attendance, and operations information entered by the restaurant to provide its features. Your profile and permissions depend on your assigned account. Your profile photo is stored in this device browser. Contact restaurant management to review or correct data.',
+        'Ahorro de datos':'Data saver','Reduce efectos visuales y recursos decorativos mientras usas MariGex.':'Reduce visual effects and decorative resources while using MariGex.','Activar ahorro de datos':'Turn on data saver',
+        'Guardar preferencias':'Save preferences','Guardar apartados':'Save sections','Apartados que pueden enviarte avisos':'Sections that can send you notifications'
+    }));
+    const originalSettingsText = new WeakMap();
+    const translateSettings = () => {
+        const toEnglish = languageSelect.value === 'en';
+        const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const text = walker.currentNode;
+            if (!originalSettingsText.has(text)) originalSettingsText.set(text, text.nodeValue);
+            const original = originalSettingsText.get(text);
+            text.nodeValue = toEnglish ? (englishSettings.get(original.trim()) || original) : original;
+        }
+        languageSelect.closest('.settings-card').querySelector('p').textContent = toEnglish ? 'Choose the language for this section.' : 'Selecciona el idioma de esta sección.';
+    };
+    languageSelect.addEventListener('change', () => { localStorage.setItem('marigex-language', languageSelect.value); translateSettings(); });
+    translateSettings();
 }
 
 /* PARA QUÉ SIRVE:
