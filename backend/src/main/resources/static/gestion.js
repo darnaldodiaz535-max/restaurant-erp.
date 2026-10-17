@@ -70,15 +70,25 @@ async function renderMyAttendanceSchedule(recordsSection) {
     const heading = element("div", undefined, "module-header");
     heading.append(element("h3", "Mi horario asignado")); box.append(heading);
     box.append(element("p", "Aquí puedes consultar los turnos que administración o la jefatura de tu área publicó para ti."));
+    const todayStatus = element("div", "Consultando tu turno de hoy…", "schedule-today-status");
+    todayStatus.setAttribute("role", "status"); box.append(todayStatus);
     const controls = element("div", undefined, "module-controls");
-    let start = new Date(); start.setHours(12, 0, 0, 0);
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const todayIso = () => { const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map(part => [part.type, part.value])); return parts.year + "-" + parts.month + "-" + parts.day; };
+    const todayDate = new Date(todayIso() + "T12:00:00");
     const toIso = date => String(date.getFullYear()).padStart(4, "0") + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
-    const range = element("strong");
-    const formatDate = value => new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short" }).format(new Date(value + "T12:00:00"));
-    const previous = actionButton("← 14 días", () => { start.setDate(start.getDate() - 14); void load(); });
-    const next = actionButton("14 días →", () => { start.setDate(start.getDate() + 14); void load(); });
-    controls.append(previous, range, next); box.append(controls);
+    const fromInput = element("input"); fromInput.type = "date"; fromInput.value = toIso(todayDate); fromInput.setAttribute("aria-label", "Fecha inicial");
+    const defaultEnd = new Date(todayDate); defaultEnd.setDate(defaultEnd.getDate() + 13);
+    const toInput = element("input"); toInput.type = "date"; toInput.value = toIso(defaultEnd); toInput.setAttribute("aria-label", "Fecha final");
+    const fromLabel = element("label", "Desde "); fromLabel.append(fromInput);
+    const toLabel = element("label", "Hasta "); toLabel.append(toInput);
+    const formatDate = value => new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value + "T12:00:00"));
+    const showRange = actionButton("Consultar fechas", () => { void load(); }, true);
+    const todayButton = actionButton("Ir a hoy", () => {
+        const now = new Date(todayIso() + "T12:00:00");
+        fromInput.value = toIso(now); now.setDate(now.getDate() + 13); toInput.value = toIso(now); void load();
+    });
+    controls.append(fromLabel, toLabel, showRange, todayButton); box.append(controls);
+    const range = element("p", undefined, "schedule-date-range"); box.append(range);
     const feedback = element("p", "Cargando tu horario…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
     const tableWrap = element("div", undefined, "table-container");
     const table = element("table"), head = element("tr"), body = element("tbody");
@@ -86,31 +96,50 @@ async function renderMyAttendanceSchedule(recordsSection) {
     const thead = element("thead"); thead.append(head); table.append(thead, body); tableWrap.append(table); box.append(tableWrap);
     recordsSection.before(box);
     async function load() {
-        previous.disabled = next.disabled = true; feedback.textContent = "Cargando tu horario…";
-        body.replaceChildren();
-        const from = toIso(start);
-        const endDate = new Date(start); endDate.setDate(endDate.getDate() + 13);
-        range.textContent = formatDate(from) + " – " + formatDate(toIso(endDate));
+        showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…"; body.replaceChildren();
+        const from = fromInput.value, until = toInput.value;
+        if (!from || !until || until < from) {
+            feedback.textContent = "Elige un rango de fechas válido."; showRange.disabled = todayButton.disabled = false; return;
+        }
+        const daysCount = Math.round((new Date(until + "T12:00:00") - new Date(from + "T12:00:00")) / 86400000) + 1;
+        if (daysCount > 366) {
+            feedback.textContent = "El rango puede ser de hasta un año. Ajusta la fecha final."; showRange.disabled = todayButton.disabled = false; return;
+        }
+        range.textContent = "Período consultado: " + formatDate(from) + " – " + formatDate(until);
         try {
-            const result = await apiRequest("/api/asistencia/horarios/mi-horario?desde=" + encodeURIComponent(from) + "&dias=14");
+            const result = await apiRequest("/api/asistencia/horarios/mi-horario?desde=" + encodeURIComponent(from) + "&dias=" + daysCount);
             const days = result.dias || [];
-            const published = days.some(day => day.estado !== "SIN_HORARIO");
-            if (!published) { feedback.textContent = "No hay un horario publicado para este período."; return; }
+            let today = days.find(day => day.fecha === todayIso());
+            if (!today) {
+                const currentChileDate = todayIso();
+                const todayResult = await apiRequest("/api/asistencia/horarios/mi-horario?desde=" + encodeURIComponent(currentChileDate) + "&dias=1");
+                today = (todayResult.dias || [])[0];
+            }
+            todayStatus.className = "schedule-today-status";
+            if (!today || today.estado === "SIN_HORARIO") {
+                todayStatus.textContent = "Hoy no tienes un turno publicado."; todayStatus.classList.add("schedule-today-none");
+            } else if (today.estado === "LIBRE") {
+                todayStatus.textContent = "Hoy estás libre."; todayStatus.classList.add("schedule-today-off");
+            } else if (today.estado === "TRABAJA") {
+                todayStatus.textContent = "Tienes turno hoy · " + (today.entrada || "—") + " – " + (today.salida || "—"); todayStatus.classList.add("schedule-today-work");
+            } else {
+                todayStatus.textContent = "Hoy tienes un turno por confirmar."; todayStatus.classList.add("schedule-today-pending");
+            }
+            if (!days.some(day => day.estado !== "SIN_HORARIO")) { feedback.textContent = "No hay un horario publicado para este período."; return; }
             feedback.textContent = (result.vigencias || []).map(plan => plan.area + " · vigente " + formatDate(plan.vigenteDesde) + " a " + formatDate(plan.vigenteHasta)).join("  |  ");
             days.forEach(day => {
-                const row = element("tr");
+                const isToday = day.fecha === todayIso();
+                const row = element("tr", undefined, isToday ? "schedule-today-row" : "");
                 const label = day.estado === "LIBRE" ? "Libre" : day.estado === "TRABAJA" ? (day.entrada || "—") + " – " + (day.salida || "—") : day.estado === "SIN_HORARIO" ? "Sin horario vigente" : "Turno por confirmar";
                 const hours = day.estado === "TRABAJA" ? Number(day.horas || 0).toLocaleString("es-CL") + " h" : "—";
                 const dayLabel = day.dia ? day.dia.charAt(0).toLocaleUpperCase("es-CL") + day.dia.slice(1) : "—";
-                row.append(element("td", dayLabel), element("td", formatDate(day.fecha)), element("td", label), element("td", hours));
-                body.append(row);
+                row.append(element("td", dayLabel), element("td", formatDate(day.fecha)), element("td", label), element("td", hours)); body.append(row);
             });
         } catch (error) { feedback.textContent = error.message || "No se pudo cargar tu horario."; }
-        finally { previous.disabled = next.disabled = false; }
+        finally { showRange.disabled = todayButton.disabled = false; }
     }
     await load();
 }
-
 async function renderSchedules(recordsSection) {
     const box = element("section", undefined, "data-section schedule-section");
     const head = element("div", undefined, "module-header");
@@ -228,3 +257,8 @@ void (async () => {
     }
     await startMarigex();
 })();
+
+
+
+
+\n

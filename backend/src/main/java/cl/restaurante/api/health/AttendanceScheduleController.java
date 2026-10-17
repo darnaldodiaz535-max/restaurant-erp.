@@ -87,7 +87,7 @@ public class AttendanceScheduleController {
         LocalDate start = desde == null
                 ? LocalDate.now(java.time.ZoneId.of("America/Santiago")).with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
                 : desde;
-        if (dias < 1 || dias > 31) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El período debe incluir entre 1 y 31 días.");
+        if (dias < 1 || dias > 366) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El período debe incluir entre 1 y 366 días.");
         return schedules.scheduleForEmployee(user.employeeId(), start, dias);
     }
 
@@ -117,3 +117,5 @@ public class AttendanceScheduleController {
         return user;
     }
 }
+
+\n
