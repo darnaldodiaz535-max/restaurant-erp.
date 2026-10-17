@@ -78,6 +78,19 @@ public class AttendanceScheduleController {
         return schedules.confirmPreview(request, user.id());
     }
 
+    @GetMapping("/mi-horario")
+    public Map<String, Object> mySchedule(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(defaultValue = "14") int dias,
+            HttpSession session) {
+        RoleAccessService.User user = access.current(session);
+        LocalDate start = desde == null
+                ? LocalDate.now(java.time.ZoneId.of("America/Santiago")).with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                : desde;
+        if (dias < 1 || dias > 31) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El período debe incluir entre 1 y 31 días.");
+        return schedules.scheduleForEmployee(user.employeeId(), start, dias);
+    }
+
     @GetMapping("/dia")
     public List<Map<String, Object>> scheduleForDay(@RequestParam(required = false) String fecha, HttpSession session) {
         requireAdmin(session);

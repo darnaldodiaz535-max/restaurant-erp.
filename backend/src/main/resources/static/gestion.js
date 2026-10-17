@@ -65,6 +65,52 @@ async function renderArea(area) {
     } catch (error) { message.textContent = error.message; }
 }
 
+async function renderMyAttendanceSchedule(recordsSection) {
+    const box = element("section", undefined, "data-section personal-schedule");
+    const heading = element("div", undefined, "module-header");
+    heading.append(element("h3", "Mi horario asignado")); box.append(heading);
+    box.append(element("p", "Aquí puedes consultar los turnos que administración o la jefatura de tu área publicó para ti."));
+    const controls = element("div", undefined, "module-controls");
+    let start = new Date(); start.setHours(12, 0, 0, 0);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const toIso = date => String(date.getFullYear()).padStart(4, "0") + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+    const range = element("strong");
+    const formatDate = value => new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short" }).format(new Date(value + "T12:00:00"));
+    const previous = actionButton("← 14 días", () => { start.setDate(start.getDate() - 14); void load(); });
+    const next = actionButton("14 días →", () => { start.setDate(start.getDate() + 14); void load(); });
+    controls.append(previous, range, next); box.append(controls);
+    const feedback = element("p", "Cargando tu horario…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
+    const tableWrap = element("div", undefined, "table-container");
+    const table = element("table"), head = element("tr"), body = element("tbody");
+    ["Día", "Fecha", "Turno", "Horas"].forEach(label => head.append(element("th", label)));
+    const thead = element("thead"); thead.append(head); table.append(thead, body); tableWrap.append(table); box.append(tableWrap);
+    recordsSection.before(box);
+    async function load() {
+        previous.disabled = next.disabled = true; feedback.textContent = "Cargando tu horario…";
+        body.replaceChildren();
+        const from = toIso(start);
+        const endDate = new Date(start); endDate.setDate(endDate.getDate() + 13);
+        range.textContent = formatDate(from) + " – " + formatDate(toIso(endDate));
+        try {
+            const result = await apiRequest("/api/asistencia/horarios/mi-horario?desde=" + encodeURIComponent(from) + "&dias=14");
+            const days = result.dias || [];
+            const published = days.some(day => day.estado !== "SIN_HORARIO");
+            if (!published) { feedback.textContent = "No hay un horario publicado para este período."; return; }
+            feedback.textContent = (result.vigencias || []).map(plan => plan.area + " · vigente " + formatDate(plan.vigenteDesde) + " a " + formatDate(plan.vigenteHasta)).join("  |  ");
+            days.forEach(day => {
+                const row = element("tr");
+                const label = day.estado === "LIBRE" ? "Libre" : day.estado === "TRABAJA" ? (day.entrada || "—") + " – " + (day.salida || "—") : day.estado === "SIN_HORARIO" ? "Sin horario vigente" : "Turno por confirmar";
+                const hours = day.estado === "TRABAJA" ? Number(day.horas || 0).toLocaleString("es-CL") + " h" : "—";
+                const dayLabel = day.dia ? day.dia.charAt(0).toLocaleUpperCase("es-CL") + day.dia.slice(1) : "—";
+                row.append(element("td", dayLabel), element("td", formatDate(day.fecha)), element("td", label), element("td", hours));
+                body.append(row);
+            });
+        } catch (error) { feedback.textContent = error.message || "No se pudo cargar tu horario."; }
+        finally { previous.disabled = next.disabled = false; }
+    }
+    await load();
+}
+
 async function renderSchedules(recordsSection) {
     const box = element("section", undefined, "data-section schedule-section");
     const head = element("div", undefined, "module-header");
@@ -88,6 +134,7 @@ async function renderSchedules(recordsSection) {
     const feedback = element("p", "Cargando horarios…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
     const gallery = element("div", undefined, "schedule-gallery"); box.append(gallery);
     recordsSection.before(box);
+    await renderMyAttendanceSchedule(box);
     if(isOwnerRole()) renderAiSchedules(box);
     const load = async () => {
         try {

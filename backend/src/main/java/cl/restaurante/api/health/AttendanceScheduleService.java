@@ -610,6 +610,67 @@ public class AttendanceScheduleService {
         });
     }
 
+    public Map<String, Object> scheduleForEmployee(long employeeId, LocalDate from, int days) {
+        requireSchema();
+        LocalDate to = from.plusDays(days - 1L);
+        List<ScheduleRow> definitions = jdbc.query(
+                "SELECT P.AREA,P.VIGENTE_DESDE,P.VIGENTE_HASTA,D.EMPLEADO_ID,D.RUT_SNAPSHOT,D.NOMBRE_SNAPSHOT,D.SEMANA_CICLO,D.DIA_SEMANA,D.HORA_INICIO,D.HORA_FIN,D.ESTADO_DIA,D.HORAS_PROGRAMADAS,P.TIPO_CICLO,P.CICLO_DIAS " +
+                        "FROM APP_ASISTENCIA_PLANILLA P JOIN APP_ASISTENCIA_HORARIO D ON D.ID_PLANILLA=P.ID_PLANILLA " +
+                        "WHERE D.EMPLEADO_ID=? AND P.VIGENTE_DESDE<=? AND P.VIGENTE_HASTA>=? ORDER BY P.VIGENTE_DESDE",
+                (rs, n) -> new ScheduleRow(rs.getString(1), rs.getDate(2).toLocalDate(), rs.getDate(3).toLocalDate(), rs.getLong(4),
+                        rs.getString(5), rs.getString(6), rs.getInt(7), rs.getInt(8), rs.getString(9), rs.getString(10),
+                        rs.getString(11), rs.getDouble(12), rs.getString(13), rs.getInt(14)),
+                employeeId, java.sql.Date.valueOf(to), java.sql.Date.valueOf(from));
+
+        Map<String, List<ScheduleRow>> plans = new LinkedHashMap<>();
+        for (ScheduleRow row : definitions) {
+            String key = row.area() + "|" + row.from() + "|" + row.to() + "|" + row.type() + "|" + row.cycleDays();
+            plans.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+        }
+        List<Map<String, Object>> validity = new ArrayList<>();
+        for (List<ScheduleRow> planRows : plans.values()) {
+            ScheduleRow plan = planRows.getFirst();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("area", areaLabel(plan.area())); item.put("vigenteDesde", plan.from().toString());
+            item.put("vigenteHasta", plan.to().toString()); item.put("tipoCiclo", plan.type());
+            item.put("diasCiclo", plan.cycleDays()); validity.add(item);
+        }
+
+        List<Map<String, Object>> daysOut = new ArrayList<>();
+        java.time.format.TextStyle full = java.time.format.TextStyle.FULL;
+        Locale spanish = Locale.forLanguageTag("es-CL");
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            LocalDate currentDate = date;
+            List<ScheduleRow> activePlanRows = plans.values().stream()
+                    .filter(rows -> !currentDate.isBefore(rows.getFirst().from()) && !currentDate.isAfter(rows.getFirst().to()))
+                    .max(java.util.Comparator.comparing(rows -> rows.getFirst().from())).orElse(null);
+            ScheduleRow activePlan = activePlanRows == null ? null : activePlanRows.getFirst();
+            Map<String, Object> day = new LinkedHashMap<>();
+            day.put("fecha", date.toString()); day.put("dia", date.getDayOfWeek().getDisplayName(full, spanish));
+            if (activePlan == null) {
+                day.put("estado", "SIN_HORARIO"); day.put("entrada", ""); day.put("salida", ""); day.put("horas", 0);
+            } else {
+                day.put("area", areaLabel(activePlan.area()));
+                int offset = (int) ChronoUnit.DAYS.between(activePlan.from(), date);
+                int cycleDays = Math.max(1, activePlan.cycleDays());
+                int cycleIndex = "CALENDARIO_FECHAS".equals(activePlan.type()) ? offset + 1 : offset % cycleDays + 1;
+                ScheduleRow shift = activePlanRows.stream()
+                        .filter(row -> storedCycleIndex(row) == cycleIndex).findFirst().orElse(null);
+                if (shift == null) {
+                    day.put("estado", "SIN_DEFINIR"); day.put("entrada", ""); day.put("salida", ""); day.put("horas", 0);
+                } else {
+                    day.put("estado", shift.state()); day.put("entrada", safe(shift.start()));
+                    day.put("salida", safe(shift.end())); day.put("horas", shift.hours());
+                }
+            }
+            daysOut.add(day);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("desde", from.toString()); result.put("hasta", to.toString());
+        result.put("vigencias", validity); result.put("dias", daysOut);
+        return result;
+    }
+
     public List<Map<String, Object>> scheduleForDate(LocalDate date) {
         if (!schemaReady()) return List.of();
         List<Map<String, Object>> rows = new ArrayList<>();
