@@ -35,7 +35,7 @@ public class AttendanceScheduleController {
 
     @GetMapping("/plantillas")
     public List<Map<String, String>> templates(HttpSession session) {
-        requireAdmin(session);
+        requireScheduleManager(session, null);
         return AttendanceScheduleService.templateOptions();
     }
 
@@ -44,7 +44,7 @@ public class AttendanceScheduleController {
                                            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate vigenteDesde,
                                            @RequestParam String area,
                                            HttpSession session) {
-        requireAdmin(session);
+        requireScheduleManager(session, area);
         byte[] content = schedules.template(formato, vigenteDesde, area);
         return ResponseEntity.ok().contentType(XLSX)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + schedules.templateFileName(formato, area))
@@ -57,7 +57,7 @@ public class AttendanceScheduleController {
                                                @RequestParam("vigenteDesde") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startsOn,
                                                @RequestParam("area") String area,
                                                HttpSession session) throws IOException {
-        RoleAccessService.User user = requireAdmin(session);
+        RoleAccessService.User user = requireScheduleManager(session, area);
         return schedules.importWorkbook(workbook, formato, startsOn, area, user.id());
     }
 
@@ -67,13 +67,14 @@ public class AttendanceScheduleController {
                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate vigenteDesde,
                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate vigenteHasta,
                                        HttpSession session) throws IOException {
-        requireAdmin(session);
+        requireScheduleManager(session, area);
         return schedules.previewWorkbook(workbook, area, vigenteDesde, vigenteHasta);
     }
 
     @PostMapping(value = "/confirmar", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> confirm(@RequestBody Map<String, Object> request, HttpSession session) {
-        RoleAccessService.User user = requireAdmin(session);
+        String area = String.valueOf(request == null ? "" : request.getOrDefault("area", ""));
+        RoleAccessService.User user = requireScheduleManager(session, area);
         return schedules.confirmPreview(request, user.id());
     }
 
@@ -86,7 +87,20 @@ public class AttendanceScheduleController {
 
     private RoleAccessService.User requireAdmin(HttpSession session) {
         RoleAccessService.User user = access.current(session);
-        if (!List.of("ADMIN", "EMPRESA").contains(user.role())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el administrador o jefe de empresa puede consultar o actualizar las planillas de asistencia.");
+        if (!access.isScheduleAdmin(user)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo administración puede consultar el calendario completo de asistencia.");
+        return user;
+    }
+
+    private RoleAccessService.User requireScheduleManager(HttpSession session, String requestedArea) {
+        RoleAccessService.User user = access.current(session);
+        if (!access.canManageAttendanceSchedule(user)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes permiso para cargar horarios de asistencia.");
+        String assignedArea = access.scheduleArea(user);
+        if (assignedArea != null && requestedArea != null && !requestedArea.isBlank()
+                && !assignedArea.equals(RoleAccessService.normalizeScheduleArea(requestedArea))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes cargar horarios del área " + assignedArea + ".");
+        }
+        if (assignedArea != null && requestedArea != null && requestedArea.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecciona el área asignada a tu jefatura.");
         return user;
     }
 }

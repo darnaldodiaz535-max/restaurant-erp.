@@ -97,6 +97,8 @@ function accessRole() { return currentProfile?.role || ""; }
 function isOwnerRole() { return ["ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_LOCAL"].includes(accessRole()); }
 function isAdminRole() { return ["ADMIN", "EMPRESA"].includes(accessRole()); }
 function isAttendanceQrAdminRole() { return ["ADMIN", "EMPRESA"].includes(accessRole()); }
+function attendanceScheduleAreaForRole() { return ({ JEFE_SALON: "SALON", JEFE_COCINA: "COCINA", JEFE_BARRA: "BARRA", JEFE_COPERIA: "COPERIA" })[accessRole()] || ""; }
+function canManageAttendanceScheduleRole() { return isAttendanceQrAdminRole() || Boolean(attendanceScheduleAreaForRole()); }
 function isSalonRole() { return accessRole() === "JEFE_SALON"; }
 function isKitchenRole() { return accessRole() === "JEFE_COCINA"; }
 function isWorkerRole() { return ["TRABAJADOR", "EMPLEADO"].includes(accessRole()); }
@@ -769,7 +771,7 @@ async function renderAttendanceModule() {
         } catch (error) { locationStatus.textContent = error.message || "No se pudo cargar la configuración del QR."; }
         }
     }
-    if (qrAdmin) {
+    if (canManageAttendanceScheduleRole()) {
         const schedulePanel = checkinNode("section", "attendance-qr-admin attendance-schedule-admin");
         const scheduleHeading = checkinNode("div", "attendance-schedule-heading");
         scheduleHeading.appendChild(checkinNode("h4", "", "Cargar horario de asistencia"));
@@ -779,7 +781,9 @@ async function renderAttendanceModule() {
         schedulePanel.append(scheduleHeading, help);
         const scheduleActions = checkinNode("div", "attendance-qr-setup");
         const areaSelect = checkinNode("select", "attendance-filter"); areaSelect.setAttribute("aria-label", "Área del horario");
-        [["COCINA", "Cocina"], ["SALON", "Salón"], ["BARRA", "Barra"]].forEach(([value, label]) => areaSelect.add(new Option(label, value)));
+        [["COCINA", "Cocina"], ["SALON", "Salón"], ["BARRA", "Barra"], ["COPERIA", "Copería"]].forEach(([value, label]) => areaSelect.add(new Option(label, value)));
+        const assignedScheduleArea = attendanceScheduleAreaForRole();
+        if (assignedScheduleArea) { areaSelect.value = assignedScheduleArea; areaSelect.disabled = true; }
         const startLabel = checkinNode("label", "attendance-radius-label", "Vigente desde");
         const startDate = checkinNode("input", "attendance-rut"); startDate.type = "date"; startDate.setAttribute("aria-label", "Fecha de inicio de vigencia del horario");
         const todayLocal = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" });
@@ -2213,7 +2217,7 @@ function setAuthError(message) {
 function fillProfile(profile) {
     currentProfile = profile;
     document.getElementById("currentUserName").textContent = profile.name;
-    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
+    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
     document.getElementById("currentUserRole").textContent = roleLabels[profile.role] || profile.position;
 }
 async function enterApplication(profile) {
@@ -2298,7 +2302,7 @@ async function openProfile() {
     document.getElementById("profile-area").textContent = currentProfile.area;
     document.getElementById("profile-area-detail").textContent = currentProfile.area || "Sin área asignada";
     document.getElementById("profile-username").textContent = currentProfile.username;
-    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
+    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
     document.getElementById("profile-role").textContent = roleLabels[currentProfile.role] || currentProfile.position;
     const avatar = document.getElementById("profileAvatar");
     const avatarKey = `marigex-profile-photo-${currentProfile.employeeId}`;

@@ -668,17 +668,18 @@ public class AttendanceScheduleService {
             throw bad("Los encabezados o el orden de columnas fueron cambiados. Descarga la plantilla estándar.");
     }
     private static String sheetName(String area, int week) { return area.equals("SALON") ? "Salon Semana " + week : areaLabel(area) + " Semana " + week; }
-    private static String areaLabel(String area) { return switch (area) { case "SALON" -> "Salón"; case "COCINA" -> "Cocina"; case "BARRA" -> "Barra"; default -> area; }; }
+    private static String areaLabel(String area) { return switch (area) { case "SALON" -> "Salón"; case "COCINA" -> "Cocina"; case "BARRA" -> "Barra"; case "COPERIA" -> "Copería"; default -> area; }; }
     private static String normalizeArea(String value) {
         String area = normalizeName(value);
         if (area.contains("COCINA")) return "COCINA";
         if (area.contains("SALON") || area.contains("SALA")) return "SALON";
         if (area.contains("BARRA")) return "BARRA";
+        if (area.contains("COPER")) return "COPERIA";
         return null;
     }
     private static String normalizeAreaRequired(String value) {
         String area = normalizeArea(value);
-        if (area == null) throw bad("Selecciona Cocina, Salón o Barra.");
+        if (area == null) throw bad("Selecciona Cocina, Salón, Barra o Copería.");
         return area;
     }
     private static String normalizeName(String value) { return Normalizer.normalize(value == null ? "" : value.trim(), Normalizer.Form.NFD).replaceAll("\\p{M}+", "").replaceAll("\\s+", " ").toUpperCase(Locale.ROOT); }

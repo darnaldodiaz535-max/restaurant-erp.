@@ -99,7 +99,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "Completa usuario y contraseña (mínimo 10 caracteres)."));
         }
         String requestedRole = request.role() == null ? "TRABAJADOR" : request.role().trim().toUpperCase(java.util.Locale.ROOT);
-        if (!java.util.Set.of("ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO").contains(requestedRole)) {
+        if (!java.util.Set.of("ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO").contains(requestedRole)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Selecciona un rol válido."));
         }
         String role = RoleAccessService.normalize(requestedRole);

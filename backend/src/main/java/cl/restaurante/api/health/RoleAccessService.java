@@ -29,6 +29,22 @@ public class RoleAccessService {
     }
 
     public boolean isOwner(User user) { return Set.of("ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_LOCAL").contains(user.role()); }
+    public boolean canManageAttendanceSchedule(User user) { return isScheduleAdmin(user) || scheduleArea(user.role()) != null; }
+    public boolean isScheduleAdmin(User user) { return Set.of("ADMIN", "EMPRESA").contains(user.role()); }
+    public String scheduleArea(User user) { return scheduleArea(user.role()); }
+    private static String scheduleArea(String role) { return switch (role) {
+        case "JEFE_SALON" -> "SALON"; case "JEFE_COCINA" -> "COCINA";
+        case "JEFE_BARRA" -> "BARRA"; case "JEFE_COPERIA" -> "COPERIA"; default -> null;
+    }; }
+    public static String normalizeScheduleArea(String value) {
+        String area = java.text.Normalizer.normalize(value == null ? "" : value.trim(), java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "").toUpperCase(Locale.ROOT);
+        if (area.contains("COCINA")) return "COCINA";
+        if (area.contains("SALON") || area.contains("SALA")) return "SALON";
+        if (area.contains("BARRA")) return "BARRA";
+        if (area.contains("COPER")) return "COPERIA";
+        return null;
+    }
     public boolean isSalon(User user) { return "JEFE_SALON".equals(user.role()); }
     public boolean isKitchen(User user) { return "JEFE_COCINA".equals(user.role()); }
     public boolean isWorker(User user) { return Set.of("TRABAJADOR", "EMPLEADO").contains(user.role()); }
@@ -51,7 +67,7 @@ public class RoleAccessService {
         if (role == null) return "TRABAJADOR";
         String value = role.trim().toUpperCase(Locale.ROOT);
         return switch (value) {
-            case "ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO" -> value;
+            case "ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO" -> value;
             default -> "TRABAJADOR";
         };
     }
