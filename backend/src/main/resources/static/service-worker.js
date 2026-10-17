@@ -1,6 +1,6 @@
-const CACHE_NAME='marigex-shell-horario-semanas-lunes-20261017-2';
+const CACHE_NAME='marigex-shell-imagenes-inicio-20261017-1';
 const DEVICE_CACHE='marigex-device';
-const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png','/images/santiago-costanera-loading.png'];
+const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png','/images/santiago-costanera-loading.png','/images/marigex-login-restaurant.png'];
 self.addEventListener('install',event=>{
     event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)));
     self.skipWaiting();
