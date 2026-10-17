@@ -642,17 +642,20 @@ async function scanAttendanceQr(feedback) {
 async function renderAttendanceModule() {
     if (attendanceQrTimer) { clearInterval(attendanceQrTimer); attendanceQrTimer = null; }
     const revision = ++screenRevision;
+    const admin = isAdminRole();
+    const qrAdmin = isAttendanceQrAdminRole();
     dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
     otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--asistencia";
     otherModule.style.setProperty("--module-accent", "#0891b2");
-    const header = checkinHeader("Asistencia", "Registra tu entrada y salida. Administración puede revisar y descargar los reportes del personal.");
+    const header = checkinHeader("Asistencia", admin ? "Consulta las marcas del personal, revisa el cumplimiento de turnos y administra el QR del local." : "Registra tu entrada y salida y consulta tu historial de asistencia.");
     otherModule.appendChild(header);
     const section = checkinNode("section", "generic-data attendance-panel");
     const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "status"); feedback.setAttribute("aria-live", "polite");
     const profileCard = checkinNode("div", "attendance-clock");
     let identity = { nombre: currentProfile?.name || "", rut: "" };
-    try { identity = await apiRequest("/api/asistencia/me"); } catch (error) { feedback.textContent = error.message; }
-    if (revision !== screenRevision) return;
+    if (!admin) {
+        try { identity = await apiRequest("/api/asistencia/me"); } catch (error) { feedback.textContent = error.message; }
+        if (revision !== screenRevision) return;
     profileCard.appendChild(checkinNode("h3", "", "Marcar asistencia · " + (identity.nombre || currentProfile?.name || "")));
     const rutLabel = checkinNode("label", "attendance-rut-label", "RUT registrado en tu cuenta");
     const rutInput = checkinNode("input", "attendance-rut"); rutInput.type = "text"; rutInput.value = identity.rut || ""; rutInput.autocomplete = "off"; rutInput.maxLength = 20; rutInput.placeholder = "Escribe tu RUT"; rutInput.setAttribute("aria-label", "RUT registrado en tu cuenta"); rutLabel.appendChild(rutInput);
@@ -681,15 +684,13 @@ async function renderAttendanceModule() {
             formData.append("qrToken", qrToken); formData.append("latitude", String(position.coords.latitude)); formData.append("longitude", String(position.coords.longitude)); formData.append("accuracy", String(position.coords.accuracy));
             const result = await uploadRequest("/api/asistencia/marcar", formData);
             feedback.textContent = `${type === "ENTRADA" ? "Entrada" : "Salida"} registrada a las ${result.hora}.`;
-            await loadAttendanceReport(section, controls.period.value, controls.date.value, admin ? controls.employee.value : "", feedback);
+            await loadAttendanceReport(section, controls.period.value, controls.from.value, controls.to.value, admin ? controls.employee.value : "", admin ? controls.area.value : "", feedback);
         } catch (error) { feedback.textContent = error.message || "No se pudo registrar la asistencia."; }
         finally { stream?.getTracks().forEach(track => track.stop()); }
     };
     actions.append(checkinButton("Entrada", () => void mark("ENTRADA"), "primary-button attendance-mark-button"), checkinButton("Salida", () => void mark("SALIDA"), "primary-button attendance-mark-button"));
     profileCard.appendChild(actions);
-
-    const admin = isAdminRole();
-    const qrAdmin = isAttendanceQrAdminRole();
+    }
     if (!qrAdmin) {
         const locationHelp = checkinNode("div", "attendance-location-help");
         const locationStatus = checkinNode("p", "attendance-location-status", "Activa la ubicación de este dispositivo antes de marcar. Al escanear el QR, la aplicación comprobará que estás en el local.");
@@ -709,8 +710,6 @@ async function renderAttendanceModule() {
     if (admin) {
         const adminActions = checkinNode("div", "attendance-admin-actions");
         adminActions.appendChild(checkinNode("p", "attendance-admin-label", "Administración"));
-        const importButton = checkinButton("Importar personal", () => document.getElementById("importEmployeesButton")?.click());
-        adminActions.appendChild(importButton);
         profileCard.appendChild(adminActions);
         if (qrAdmin) {
         const qrPanel = checkinNode("section", "attendance-qr-admin");
@@ -840,7 +839,7 @@ async function renderAttendanceModule() {
                     try {
                         const saved = await apiRequest("/api/asistencia/horarios/confirmar", { method: "POST", body: JSON.stringify(payload) });
                         feedback.textContent = `Horario guardado: ${saved.personas} personas y ${saved.turnos} turnos. Vigencia ${saved.vigenteDesde} a ${saved.vigenteHasta}.`;
-                        previewWrap.replaceChildren(); await loadAttendanceReport(section, controls.period.value, controls.date.value, "", feedback);
+                        previewWrap.replaceChildren(); await loadAttendanceReport(section, controls.period.value, controls.from.value, controls.to.value, "", controls.area.value, feedback);
                     } catch (error) { feedback.textContent = error.message || "No se pudo guardar el horario."; }
                     finally { confirmSchedule.disabled = false; }
                 }, "primary-button");
@@ -856,20 +855,50 @@ async function renderAttendanceModule() {
         profileCard.appendChild(schedulePanel);
     }
     section.append(profileCard, feedback);
-    const controls = { period: checkinNode("select", "attendance-filter"), date: checkinNode("input", "attendance-filter"), employee: checkinNode("select", "attendance-filter") };
+    const controls = { period: checkinNode("select", "attendance-filter"), from: checkinNode("input", "attendance-filter"), to: checkinNode("input", "attendance-filter"), area: checkinNode("select", "attendance-filter"), employee: checkinNode("select", "attendance-filter") };
     controls.period.add(new Option("Día", "dia")); controls.period.add(new Option("Semana", "semana")); controls.period.add(new Option("Mes", "mes")); controls.period.value = "mes";
-    controls.date.type = "date"; controls.date.value = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" }); controls.date.setAttribute("aria-label", "Fecha del período");
-    const filterRow = checkinNode("div", "attendance-filters"); filterRow.append(checkinNode("label", "", "Período"), controls.period, checkinNode("label", "", "Fecha"), controls.date);
-    if (admin) { controls.employee.add(new Option("Todo el personal", "")); controls.employee.setAttribute("aria-label", "Filtrar por trabajador"); filterRow.append(checkinNode("label", "", "Trabajador"), controls.employee); }
-    const reload = async () => loadAttendanceReport(section, controls.period.value, controls.date.value, admin ? controls.employee.value : "", feedback);
-    controls.period.addEventListener("change", () => void reload()); controls.date.addEventListener("change", () => void reload()); controls.employee.addEventListener("change", () => void reload());
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" });
+    controls.from.type = controls.to.type = "date";
+    controls.from.setAttribute("aria-label", "Fecha desde"); controls.to.setAttribute("aria-label", "Fecha hasta");
+    const isoDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const setPeriodDates = (period, anchorText) => {
+        const anchor = new Date(`${anchorText || today}T12:00:00`);
+        let start = new Date(anchor), end = new Date(anchor);
+        if (period === "semana") { start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); end = new Date(start); end.setDate(end.getDate() + 6); }
+        else if (period === "mes") { start.setDate(1); end = new Date(start.getFullYear(), start.getMonth() + 1, 0); }
+        controls.from.value = isoDate(start); controls.to.value = isoDate(end);
+    };
+    setPeriodDates("mes", today);
+    const filterRow = checkinNode("div", "attendance-filters"); filterRow.append(checkinNode("label", "", "Período"), controls.period, checkinNode("label", "", "Desde"), controls.from, checkinNode("label", "", "Hasta"), controls.to);
+    if (admin) {
+        controls.area.add(new Option("Todas las áreas", ""));
+        [["COCINA", "Cocina"], ["SALON", "Salón"], ["BARRA", "Barra"], ["COPERIA", "Copería"]].forEach(([value, label]) => controls.area.add(new Option(label, value)));
+        controls.employee.add(new Option("Todo el personal", ""));
+        controls.area.setAttribute("aria-label", "Filtrar por área"); controls.employee.setAttribute("aria-label", "Filtrar por trabajador");
+        filterRow.append(checkinNode("label", "", "Área"), controls.area, checkinNode("label", "", "Trabajador"), controls.employee);
+    }
+    let attendancePeople = [];
+    const populateAttendancePeople = () => {
+        if (!admin) return;
+        const selected = controls.employee.value, area = controls.area.value;
+        controls.employee.replaceChildren(new Option("Todo el personal", ""));
+        attendancePeople.filter(person => !area || String(person.area || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().includes(area))
+            .forEach(person => controls.employee.add(new Option(person.nombre, person.id)));
+        controls.employee.value = [...controls.employee.options].some(option => option.value === selected) ? selected : "";
+    };
+    const reload = async () => loadAttendanceReport(section, controls.period.value, controls.from.value, controls.to.value, admin ? controls.employee.value : "", admin ? controls.area.value : "", feedback);
+    controls.period.addEventListener("change", () => { setPeriodDates(controls.period.value, controls.from.value || today); void reload(); });
+    controls.from.addEventListener("change", () => void reload()); controls.to.addEventListener("change", () => void reload());
+    controls.area.addEventListener("change", () => { controls.employee.value = ""; populateAttendancePeople(); void reload(); }); controls.employee.addEventListener("change", () => void reload());
     const download = checkinButton("Descargar CSV", async () => {
         try {
-            const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&fecha=${encodeURIComponent(controls.date.value)}${admin && controls.employee.value ? `&empleadoId=${encodeURIComponent(controls.employee.value)}` : ""}`);
+            const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&desde=${encodeURIComponent(controls.from.value)}&hasta=${encodeURIComponent(controls.to.value)}${admin && controls.employee.value ? `&empleadoId=${encodeURIComponent(controls.employee.value)}` : ""}`);
+            const areaKey = admin ? String(controls.area.value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase() : "";
+            const exportRows = (report.marcas || []).filter(row => !areaKey || String(row.area || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().includes(areaKey));
             const csvHeaders = qrAdmin
                 ? ["Nombre", "RUT", "Fecha", "Área", "Turno programado", "Estado del horario", "Hora de entrada", "Diferencia de entrada (min)", "Hora de salida", "Diferencia de salida (min)", "Horas previstas", "Horas trabajadas"]
                 : ["Nombre", "RUT", "Fecha", "Hora de entrada", "Hora de salida", "Horas trabajadas"];
-            const lines = [csvHeaders, ...(report.marcas || []).map(row => qrAdmin
+            const lines = [csvHeaders, ...exportRows.map(row => qrAdmin
                 ? [row.nombre, row.rut, row.fecha, row.area, row.turnoProgramado, row.estadoHorario, row.entrada, row.minutosEntrada, row.salida, row.minutosSalida, row.horasProgramadas, row.horasTrabajadas || "Pendiente"]
                 : [row.nombre, row.rut, row.fecha, row.entrada, row.salida, row.horasTrabajadas || "Pendiente"])];
             const csv = lines.map(line => line.map(value => { const text = String(value ?? ""); const safe = /^[=+@\-]/.test(text) ? "'" + text : text; return `"${safe.replaceAll('"', '""')}"`; }).join(";")).join("\r\n");
@@ -884,30 +913,59 @@ async function renderAttendanceModule() {
     tableHeaders.push("Entrada", "Salida");
     if (qrAdmin) tableHeaders.push("Horas previstas", "Horas trabajadas", "Dif. entrada (min)", "Dif. salida (min)");
     if (admin) tableHeaders.push("Ubicación");
-    tableHeaders.push("Fotos");
     tableHeaders.forEach(label => head.appendChild(checkinNode("th", "", label))); thead.appendChild(head); table.append(thead, checkinNode("tbody")); tableWrap.appendChild(table); section.appendChild(tableWrap);
     otherModule.appendChild(section);
-    await loadAttendanceReport(section, controls.period.value, controls.date.value, "", feedback);
+    await loadAttendanceReport(section, controls.period.value, controls.from.value, controls.to.value, "", admin ? controls.area.value : "", feedback);
     if (admin) {
         try {
-            const data = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&fecha=${encodeURIComponent(controls.date.value)}`);
-            data.personas.forEach(person => controls.employee.add(new Option(person.nombre, person.id)));
+            const data = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(controls.period.value)}&desde=${encodeURIComponent(controls.from.value)}&hasta=${encodeURIComponent(controls.to.value)}`);
+            attendancePeople = data.personas || []; populateAttendancePeople();
         } catch (error) { feedback.textContent = error.message; }
     }
 }
 
-async function loadAttendanceReport(section, period, date, employeeId, feedback) {
+async function loadAttendanceReport(section, period, from, to, employeeId, area, feedback) {
     try {
         const suffix = employeeId ? `&empleadoId=${encodeURIComponent(employeeId)}` : "";
-        const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(period)}&fecha=${encodeURIComponent(date)}${suffix}`);
+        const report = await apiRequest(`/api/asistencia/reporte?periodo=${encodeURIComponent(period)}&desde=${encodeURIComponent(from)}&hasta=${encodeURIComponent(to)}${suffix}`);
+        const areaKey = String(area || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+        const rows = (report.marcas || []).filter(row => !areaKey || String(row.area || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().includes(areaKey));
         const summary = section.querySelector("[data-attendance-summary]"); summary.replaceChildren();
-        report.resumen.forEach(person => {
-            const item = checkinNode("article", "attendance-summary-item"); item.append(checkinNode("strong", "", person.nombre), checkinNode("span", "", `${person.turnosCompletos}/${person.turnosProgramados} turnos · ${person.porcentaje}`)); summary.appendChild(item);
-        });
+        if (isAdminRole()) {
+            summary.appendChild(checkinNode("h3", "Resumen por persona · " + report.desde + " a " + report.hasta));
+            const wrap = checkinNode("div", "table-container attendance-summary-table-wrap"), table = checkinNode("table"), head = checkinNode("tr"), body = checkinNode("tbody");
+            ["Trabajador", "Turnos completos", "Puntuales", "Tardanzas", "Salidas anticipadas", "Horas programadas", "Horas trabajadas", "Saldo vs. horario"].forEach(label => head.appendChild(checkinNode("th", "", label)));
+            const thead = checkinNode("thead"); thead.appendChild(head); table.append(thead, body); wrap.appendChild(table); summary.appendChild(wrap);
+            const totals = new Map(), today = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" });
+            rows.forEach(row => {
+                if (String(row.fecha || "") > today) return;
+                const key = String(row.empleadoId || row.nombre);
+                if (!totals.has(key)) totals.set(key, { completos: 0, puntuales: 0, tarde: 0, salidasTemprano: 0, programadas: 0, trabajadas: 0 });
+                const total = totals.get(key), scheduled = String(row.turnoProgramado || "").toUpperCase(), status = String(row.estadoHorario || "").toUpperCase();
+                if (scheduled && scheduled !== "LIBRE" && scheduled !== "—") total.programadas += Number(row.horasProgramadas || 0);
+                if (scheduled && scheduled !== "LIBRE" && row.entrada && row.salida) total.completos++;
+                if (status.startsWith("PUNTUAL")) total.puntuales++;
+                if (status.startsWith("TARDE")) total.tarde++;
+                if (status.includes("SALIDA ANTICIPADA")) total.salidasTemprano++;
+                const hours = String(row.horasTrabajadas || "").match(/(\d+)\s*h\s*(\d+)\s*min/i);
+                if (hours) total.trabajadas += Number(hours[1]) + Number(hours[2]) / 60;
+            });
+            const people = (report.resumen || []).filter(person => {
+                if (!areaKey) return true;
+                const personArea = person.area || rows.find(row => String(row.empleadoId) === String(person.empleadoId))?.area || "";
+                return String(personArea).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().includes(areaKey);
+            });
+            people.forEach(person => {
+                const total = totals.get(String(person.empleadoId)) || { completos: 0, puntuales: 0, tarde: 0, salidasTemprano: 0, programadas: 0, trabajadas: 0 };
+                const tr = checkinNode("tr");
+                const balance = total.trabajadas - total.programadas;
+                [person.nombre, total.completos, total.puntuales, total.tarde, total.salidasTemprano, total.programadas.toFixed(1) + " h", total.trabajadas.toFixed(1) + " h", (balance > 0 ? "+" : "") + balance.toFixed(1) + " h"].forEach(value => tr.appendChild(checkinNode("td", "", String(value))));
+                body.appendChild(tr);
+            });
+        }
         const tbody = section.querySelector(".attendance-table-wrap tbody"); tbody.replaceChildren();
-        report.marcas.forEach(row => {
-            const tr = checkinNode("tr");
-            const cells = [row.nombre, row.rut, row.fecha];
+        rows.forEach(row => {
+            const tr = checkinNode("tr"), cells = [row.nombre, row.rut, row.fecha];
             if (isAttendanceQrAdminRole()) cells.push(row.area || "—", row.turnoProgramado || "—", row.estadoHorario || "—");
             cells.push(row.entrada || "—", row.salida || "—");
             if (isAttendanceQrAdminRole()) cells.push(row.horasProgramadas == null ? "—" : row.horasProgramadas, row.horasTrabajadas || "—", row.minutosEntrada == null ? "—" : row.minutosEntrada, row.minutosSalida == null ? "—" : row.minutosSalida);
@@ -922,12 +980,9 @@ async function loadAttendanceReport(section, period, date, employeeId, feedback)
                 if (!location.childElementCount) location.textContent = "Sin datos de ubicación";
                 tr.appendChild(location);
             }
-            const photos = checkinNode("td");
-            if (row.entradaFoto) photos.appendChild(checkinButton("Entrada", () => window.open(`/api/asistencia/${row.id}/foto/entrada`, "_blank", "noopener")));
-            if (row.salidaFoto) photos.appendChild(checkinButton("Salida", () => window.open(`/api/asistencia/${row.id}/foto/salida`, "_blank", "noopener")));
-            tr.appendChild(photos); tbody.appendChild(tr);
+            tbody.appendChild(tr);
         });
-        if (!report.marcas.length) feedback.textContent = `No hay marcas entre ${report.desde} y ${report.hasta}.`;
+        if (!rows.length) feedback.textContent = `No hay marcas entre ${report.desde} y ${report.hasta}.`;
     } catch (error) { feedback.textContent = error.message; }
 }
 

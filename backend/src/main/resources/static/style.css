@@ -2148,6 +2148,21 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .attendance-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .attendance-summary-item { display: grid; gap: 5px; }
 .attendance-summary-item span { color: #4b5563; font-size: 14px; }
+.attendance-summary { display: block; margin: 18px 0; overflow-x: auto; }
+.attendance-summary h3 { margin: 0 0 12px; font-size: 1.05rem; }
+.attendance-summary-table-wrap { margin: 0; }
+.attendance-summary table { min-width: 1050px; }
+.attendance-summary th, .attendance-summary td { white-space: nowrap; }
+.attendance-filters input[type="date"] { min-width: 145px; }
+.attendance-filters select { min-width: 150px; }
+.theme-dark .attendance-summary-item span { color: #cbd5e1; }
+.schedule-current-cycle-week { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:center; margin:12px 0 18px; padding:14px 16px; border:1px solid #bfdbfe; border-radius:14px; background:linear-gradient(110deg,#eff6ff,#fff); color:#1e3a8a; }
+.schedule-cycle-eyebrow { grid-column:1/-1; font-size:.68rem; letter-spacing:.12em; font-weight:800; color:#2563eb; }
+.schedule-cycle-current-title { font-size:1.05rem; }
+.schedule-cycle-current-detail { grid-column:2; color:#475569; font-size:.86rem; }
+.theme-dark .schedule-current-cycle-week { border-color:#1d4ed8; background:linear-gradient(110deg,#172b49,#172033); color:#dbeafe; }
+.theme-dark .schedule-cycle-eyebrow { color:#7dd3fc; }
+.theme-dark .schedule-cycle-current-detail { color:#cbd5e1; }
 .attendance-table-wrap { overflow-x: auto; }
 .attendance-table-wrap table { min-width: 680px; }
 .attendance-schedule-report table { min-width: 1180px; }

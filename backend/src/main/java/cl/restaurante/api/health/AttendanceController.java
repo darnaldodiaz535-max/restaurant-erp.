@@ -170,6 +170,8 @@ public class AttendanceController {
     @GetMapping("/reporte")
     public Map<String, Object> report(@RequestParam(defaultValue = "mes") String periodo,
                                       @RequestParam(required = false) String fecha,
+                                      @RequestParam(required = false) String desde,
+                                      @RequestParam(required = false) String hasta,
                                       @RequestParam(required = false) Long empleadoId,
                                       @RequestParam(defaultValue = "false") boolean personal,
                                       HttpSession session) {
@@ -177,11 +179,19 @@ public class AttendanceController {
         boolean admin = isAdmin(user);
         LocalDate anchor = fecha == null || fecha.isBlank() ? LocalDate.now(CHILE) : LocalDate.parse(fecha);
         LocalDate from, to;
-        switch (periodo.toLowerCase()) {
-            case "dia" -> { from = anchor; to = anchor; }
-            case "semana" -> { from = anchor.with(DayOfWeek.MONDAY); to = from.plusDays(6); }
-            case "mes" -> { from = anchor.withDayOfMonth(1); to = YearMonth.from(anchor).atEndOfMonth(); }
-            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El período debe ser dia, semana o mes.");
+        if ((desde == null) != (hasta == null)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indica ambas fechas: desde y hasta.");
+        if (desde != null) {
+            try { from = LocalDate.parse(desde); to = LocalDate.parse(hasta); }
+            catch (java.time.DateTimeException ex) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El rango de fechas no es válido."); }
+            if (to.isBefore(from) || java.time.temporal.ChronoUnit.DAYS.between(from, to) > 365)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El rango debe ser válido y no superar 366 días.");
+        } else {
+            switch (periodo.toLowerCase()) {
+                case "dia" -> { from = anchor; to = anchor; }
+                case "semana" -> { from = anchor.with(DayOfWeek.MONDAY); to = from.plusDays(6); }
+                case "mes" -> { from = anchor.withDayOfMonth(1); to = YearMonth.from(anchor).atEndOfMonth(); }
+                default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El período debe ser dia, semana o mes.");
+            }
         }
         // Administrators can request all staff by leaving empleadoId unset.
         // Avoid ternary unboxing of null when the other branch is primitive long.
@@ -199,7 +209,7 @@ public class AttendanceController {
         Object[] rowArgs = selectedEmployee == null
                 ? new Object[]{java.sql.Date.valueOf(from), java.sql.Date.valueOf(to.plusDays(1))}
                 : new Object[]{java.sql.Date.valueOf(from), java.sql.Date.valueOf(to.plusDays(1)), selectedEmployee};
-        List<Map<String, Object>> rows = jdbc.query("SELECT A.ID_ASISTENCIA,E.ID_EMPLEADO,E.NOMBRE,E.RUT,A.FECHA,A.HORA_ENTRADA,A.HORA_SALIDA,A.ENTRADA_EN,A.SALIDA_EN,A.FOTO_ENTRADA,A.FOTO_SALIDA" + gpsColumns +
+        List<Map<String, Object>> rows = jdbc.query("SELECT A.ID_ASISTENCIA,E.ID_EMPLEADO,E.NOMBRE,E.RUT,A.FECHA,A.HORA_ENTRADA,A.HORA_SALIDA,A.ENTRADA_EN,A.SALIDA_EN,A.FOTO_ENTRADA,A.FOTO_SALIDA" + gpsColumns + ",E.AREA " +
                         "FROM APP_ASISTENCIA A JOIN APP_EMPLEADO E ON E.ID_EMPLEADO=A.EMPLEADO_ID " +
                         "WHERE A.FECHA>=? AND A.FECHA<?" + filter + " ORDER BY E.NOMBRE,A.FECHA,A.ID_ASISTENCIA",
                 (rs, n) -> {
@@ -211,6 +221,7 @@ public class AttendanceController {
                     row.put("nombre", rs.getString(3)); row.put("rut", rs.getString(4) == null ? "" : rs.getString(4));
                     row.put("fecha", rs.getDate(5).toLocalDate().toString()); row.put("entrada", entry);
                     row.put("salida", exit); row.put("horasTrabajadas", hours);
+                    row.put("area", rs.getString(gpsReady ? 20 : 12) == null ? "" : rs.getString(gpsReady ? 20 : 12));
                     row.put("entradaFoto", rs.getBytes(10) != null); row.put("salidaFoto", rs.getBytes(11) != null);
                     if (admin && gpsReady) {
                         row.put("entradaLat", safeNumber(rs.getObject(12))); row.put("entradaLon", safeNumber(rs.getObject(13)));
@@ -228,18 +239,24 @@ public class AttendanceController {
         // so include planned shifts and punctuality details in their personal view too.
         schedules.addScheduleDetails(rows, from, to, selectedEmployee);
 
-        List<Map<String, Object>> employees = admin ? jdbc.query("SELECT ID_EMPLEADO,NOMBRE,RUT FROM APP_EMPLEADO WHERE ESTADO='ACTIVO' ORDER BY NOMBRE",
-                (rs, n) -> Map.of("id", rs.getLong(1), "nombre", rs.getString(2), "rut", rs.getString(3) == null ? "" : rs.getString(3))) : List.of();
+        List<Map<String, Object>> employees = admin ? jdbc.query("SELECT ID_EMPLEADO,NOMBRE,RUT,AREA FROM APP_EMPLEADO WHERE ESTADO='ACTIVO' ORDER BY NOMBRE",
+                (rs, n) -> {
+                    Map<String, Object> person = new LinkedHashMap<>();
+                    person.put("id", rs.getLong(1)); person.put("nombre", rs.getString(2));
+                    person.put("rut", rs.getString(3) == null ? "" : rs.getString(3)); person.put("area", rs.getString(4) == null ? "" : rs.getString(4));
+                    return person;
+                }) : List.of();
         String summaryFilter = selectedEmployee == null ? "" : " AND E.ID_EMPLEADO=?";
-        List<Map<String, Object>> summaries = jdbc.query("SELECT E.ID_EMPLEADO,E.NOMBRE,E.RUT," +
+        List<Map<String, Object>> summaries = jdbc.query("SELECT E.ID_EMPLEADO,E.NOMBRE,E.RUT,E.AREA," +
                         "(SELECT COUNT(DISTINCT TRUNC(T.FECHA)) FROM APP_TURNO T WHERE T.EMPLEADO_ID=E.ID_EMPLEADO AND T.FECHA>=? AND T.FECHA<?) PROGRAMADOS," +
                         "(SELECT COUNT(DISTINCT TRUNC(A.FECHA)) FROM APP_ASISTENCIA A WHERE A.EMPLEADO_ID=E.ID_EMPLEADO AND A.FECHA>=? AND A.FECHA<? AND A.ENTRADA_EN IS NOT NULL AND A.SALIDA_EN IS NOT NULL) COMPLETOS " +
                         "FROM APP_EMPLEADO E WHERE E.ESTADO='ACTIVO'" + summaryFilter + " ORDER BY E.NOMBRE",
                 (rs,n)-> {
-                    long scheduled=rs.getLong(4), complete=rs.getLong(5);
-                    return Map.of("empleadoId",rs.getLong(1),"nombre",rs.getString(2),"rut",rs.getString(3)==null?"":rs.getString(3),
-                            "turnosProgramados",scheduled,"turnosCompletos",complete,
-                            "porcentaje",scheduled==0?"—":String.format(java.util.Locale.ROOT,"%.1f%%",100.0*complete/scheduled));
+                    long scheduled=rs.getLong(5), complete=rs.getLong(6);
+                    Map<String, Object> summary = new LinkedHashMap<>();
+                    summary.put("empleadoId",rs.getLong(1)); summary.put("nombre",rs.getString(2)); summary.put("rut",rs.getString(3)==null?"":rs.getString(3));
+                    summary.put("area",rs.getString(4)==null?"":rs.getString(4)); summary.put("turnosProgramados",scheduled); summary.put("turnosCompletos",complete);
+                    summary.put("porcentaje",scheduled==0?"—":String.format(java.util.Locale.ROOT,"%.1f%%",100.0*complete/scheduled)); return summary;
                 }, selectedEmployee == null
                         ? new Object[]{java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1)),java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1))}
                         : new Object[]{java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1)),java.sql.Date.valueOf(from),java.sql.Date.valueOf(to.plusDays(1)),selectedEmployee});

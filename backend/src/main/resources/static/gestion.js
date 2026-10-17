@@ -72,6 +72,8 @@ async function renderMyAttendanceSchedule(recordsSection) {
     box.append(element("p", "Consulta tus turnos por trabajador. El período inicial muestra dos semanas completas, de lunes a domingo; puedes cambiar las fechas para revisar otro tramo."));
     const todayStatus = element("div", "Consultando tu turno de hoy…", "schedule-today-status");
     todayStatus.setAttribute("role", "status"); box.append(todayStatus);
+    const cycleCurrentWeek = element("div", undefined, "schedule-current-cycle-week");
+    cycleCurrentWeek.hidden = true; box.append(cycleCurrentWeek);
     const controls = element("div", undefined, "module-controls");
     const todayIso = () => { const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map(part => [part.type, part.value])); return parts.year + "-" + parts.month + "-" + parts.day; };
     const todayDate = new Date(todayIso() + "T12:00:00");
@@ -122,7 +124,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
     box.append(attendanceInsights);
     recordsSection.before(box);
     async function load() {
-        showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…"; body.replaceChildren(); cycleHint.hidden = true;
+        showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…"; body.replaceChildren(); cycleHint.hidden = true; cycleCurrentWeek.hidden = true;
         const from = fromInput.value, until = toInput.value;
         if (!from || !until || until < from) {
             feedback.textContent = "Elige un rango de fechas válido."; showRange.disabled = todayButton.disabled = false; return;
@@ -142,6 +144,11 @@ async function renderMyAttendanceSchedule(recordsSection) {
                 today = (todayResult.dias || [])[0];
             }
             todayScheduleForNotice = today;
+            const currentCycleWeek = Number(today?.semanaCiclo || 0);
+            if (currentCycleWeek) {
+                cycleCurrentWeek.replaceChildren(element("span", "CICLO VIGENTE", "schedule-cycle-eyebrow"), element("strong", "Esta semana estás en la Semana " + currentCycleWeek, "schedule-cycle-current-title"), element("span", "Al terminar la Semana 2, el ciclo vuelve a Semana 1.", "schedule-cycle-current-detail"));
+                cycleCurrentWeek.hidden = false;
+            }
             let attendanceReport = null;
             try {
                 attendanceReport = await apiRequest("/api/asistencia/reporte?periodo=mes&fecha=" + encodeURIComponent(todayIso()) + "&personal=true");
@@ -291,7 +298,8 @@ async function renderSchedules(recordsSection) {
     const feedback = element("p", "Cargando horarios…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
     const gallery = element("div", undefined, "schedule-gallery"); box.append(gallery);
     recordsSection.before(box);
-    await renderMyAttendanceSchedule(box);
+    // La cuenta ADMIN/EMPRESA administra los turnos, pero no marca asistencia como trabajador.
+    if (!isAdminRole()) await renderMyAttendanceSchedule(box);
     if(isOwnerRole()) renderAiSchedules(box);
     const load = async () => {
         try {
