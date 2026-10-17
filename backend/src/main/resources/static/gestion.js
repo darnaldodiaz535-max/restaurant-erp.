@@ -82,6 +82,26 @@ async function renderMyAttendanceSchedule(recordsSection) {
     const fromLabel = element("label", "Desde "); fromLabel.append(fromInput);
     const toLabel = element("label", "Hasta "); toLabel.append(toInput);
     const formatDate = value => new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value + "T12:00:00"));
+    let todayScheduleForNotice = null;
+    async function refreshTodayAttendanceNotice() {
+        if (!todayScheduleForNotice || todayScheduleForNotice.estado !== "TRABAJA") return;
+        try {
+            const report = await apiRequest("/api/asistencia/reporte?periodo=dia&fecha=" + encodeURIComponent(todayIso()) + "&personal=true");
+            const mark = (report.marcas || []).find(item => item.fecha === todayIso());
+            const status = String(mark?.estadoHorario || "").toUpperCase();
+            const missing = !mark?.entrada && (status.includes("EN TURNO · SIN MARCA") || status.includes("AUSENTE · SIN MARCA"));
+            if (!missing && !mark?.entrada) return;
+            const icon = element("span", mark?.entrada ? "✓" : "!", "schedule-today-icon");
+            const copy = element("div", undefined, "schedule-today-copy");
+            const detail = mark?.entrada
+                ? "Marcaste tu entrada a las " + mark.entrada + (status.startsWith("TARDE") ? " · llegaste tarde" : status.startsWith("TEMPRANO") ? " · llegaste temprano" : " · puntual")
+                : "Tu turno comenzó a las " + (todayScheduleForNotice.entrada || "—") + ". Registra tu asistencia en el apartado Asistencia.";
+            copy.append(element("span", "ESTADO DE HOY", "schedule-today-eyebrow"), element("strong", mark?.entrada ? "Entrada registrada hoy" : status.includes("AUSENTE") ? "No aparece tu marca de entrada" : "Aún no has marcado tu entrada", "schedule-today-title"), element("span", detail, "schedule-today-detail"));
+            todayStatus.className = "schedule-today-status " + (mark?.entrada ? "schedule-today-work" : "schedule-today-missing");
+            todayStatus.replaceChildren(icon, copy, element("strong", (todayScheduleForNotice.entrada || "—") + " – " + (todayScheduleForNotice.salida || "—"), "schedule-today-time"));
+            if (!mark?.entrada) todayStatus.append(actionButton("Abrir Asistencia", () => void renderModule("Asistencia"), true));
+        } catch (error) { /* Mantiene el estado visible si la consulta temporal falla. */ }
+    }
     const showRange = actionButton("Consultar fechas", () => { void load(); }, true);
     const todayButton = actionButton("Ir a hoy", () => {
         const now = new Date(todayIso() + "T12:00:00");
@@ -96,6 +116,9 @@ async function renderMyAttendanceSchedule(recordsSection) {
     table.className = "schedule-pretty-table";
     ["Día", "Horario", "Estado", "Duración"].forEach(label => head.append(element("th", label)));
     const thead = element("thead"); thead.append(head); table.append(thead, body); tableWrap.append(table); box.append(tableWrap);
+    const attendanceInsights = element("section", undefined, "schedule-attendance-insights");
+    attendanceInsights.append(element("h4", "Mi asistencia este mes"), element("p", "Cargando tus registros…", "schedule-insights-caption"));
+    box.append(attendanceInsights);
     recordsSection.before(box);
     async function load() {
         showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…"; body.replaceChildren(); cycleHint.hidden = true;
@@ -117,6 +140,14 @@ async function renderMyAttendanceSchedule(recordsSection) {
                 const todayResult = await apiRequest("/api/asistencia/horarios/mi-horario?desde=" + encodeURIComponent(currentChileDate) + "&dias=1");
                 today = (todayResult.dias || [])[0];
             }
+            todayScheduleForNotice = today;
+            let attendanceReport = null;
+            try {
+                attendanceReport = await apiRequest("/api/asistencia/reporte?periodo=mes&fecha=" + encodeURIComponent(todayIso()) + "&personal=true");
+            } catch (error) {
+                attendanceInsights.replaceChildren(element("h4", "Mi asistencia este mes"), element("p", "No se pudieron cargar tus estadísticas de asistencia.", "schedule-insights-caption"));
+            }
+            const todayAttendance = (attendanceReport?.marcas || []).find(mark => mark.fecha === todayIso());
             todayStatus.className = "schedule-today-status";
             const todayIcon = element("span", undefined, "schedule-today-icon");
             const todayCopy = element("div", undefined, "schedule-today-copy");
@@ -127,13 +158,30 @@ async function renderMyAttendanceSchedule(recordsSection) {
                 todayIcon.textContent = "✓"; todayTitle = "Hoy estás libre"; todayDetail = "Disfruta tu día de descanso."; todayStatus.classList.add("schedule-today-off");
             } else if (today.estado === "TRABAJA") {
                 todayIcon.textContent = "↗"; todayTitle = "Tienes turno hoy"; todayDetail = [today.area, "Tu jornada está programada para hoy."].filter(Boolean).join(" · ");
-                todayTime = (today.entrada || "—") + " – " + (today.salida || "—"); todayStatus.classList.add("schedule-today-work");
+                todayTime = (today.entrada || "—") + " – " + (today.salida || "—");
+                const markStatus = String(todayAttendance?.estadoHorario || "").toUpperCase();
+                if (todayAttendance?.entrada) {
+                    todayIcon.textContent = "✓"; todayTitle = "Entrada registrada hoy";
+                    todayDetail = "Marcaste tu entrada a las " + todayAttendance.entrada + (markStatus.startsWith("TARDE") ? " · llegaste tarde" : markStatus.startsWith("TEMPRANO") ? " · llegaste temprano" : " · puntual");
+                    todayStatus.classList.add("schedule-today-work");
+                } else if (markStatus.includes("EN TURNO · SIN MARCA") || markStatus.includes("AUSENTE · SIN MARCA")) {
+                    todayIcon.textContent = "!";
+                    todayTitle = markStatus.includes("AUSENTE") ? "No aparece tu marca de entrada" : "Aún no has marcado tu entrada";
+                    todayDetail = "Tu turno comenzó a las " + (today.entrada || "—") + ". Registra tu asistencia en el apartado Asistencia.";
+                    todayStatus.classList.add("schedule-today-missing");
+                } else {
+                    todayStatus.classList.add("schedule-today-work");
+                }
             } else {
                 todayIcon.textContent = "!"; todayTitle = "Turno por confirmar"; todayDetail = "Consulta con tu jefatura si tienes dudas."; todayStatus.classList.add("schedule-today-pending");
             }
             todayCopy.append(element("span", "ESTADO DE HOY", "schedule-today-eyebrow"), element("strong", todayTitle, "schedule-today-title"), element("span", todayDetail, "schedule-today-detail"));
             todayStatus.replaceChildren(todayIcon, todayCopy);
             if (todayTime) todayStatus.append(element("strong", todayTime, "schedule-today-time"));
+            if (today?.estado === "TRABAJA" && !todayAttendance?.entrada && ["EN TURNO · SIN MARCA", "AUSENTE · SIN MARCA"].includes(String(todayAttendance?.estadoHorario || "").toUpperCase())) {
+                todayStatus.append(actionButton("Abrir Asistencia", () => void renderModule("Asistencia"), true));
+            }
+            if (attendanceReport) renderPersonalAttendanceInsights(attendanceInsights, attendanceReport);
             if (!days.some(day => day.estado !== "SIN_HORARIO")) { feedback.textContent = "No hay un horario publicado para este período."; return; }
             const validity = result.vigencias || [];
             feedback.textContent = validity.map(plan => plan.area + " · vigente " + formatDate(plan.vigenteDesde) + " a " + formatDate(plan.vigenteHasta)).join("  |  ");
@@ -178,6 +226,46 @@ async function renderMyAttendanceSchedule(recordsSection) {
         finally { showRange.disabled = todayButton.disabled = false; }
     }
     await load();
+    const attendanceNoticeTimer = setInterval(() => {
+        if (!box.isConnected) { clearInterval(attendanceNoticeTimer); return; }
+        if (!document.hidden) void refreshTodayAttendanceNotice();
+    }, 60000);
+}
+function renderPersonalAttendanceInsights(root, report) {
+    const dateParts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map(part => [part.type, part.value]));
+    const today = dateParts.year + "-" + dateParts.month + "-" + dateParts.day;
+    const scheduled = (report.marcas || []).filter(row => row.turnoProgramado && row.turnoProgramado !== "LIBRE" && row.fecha <= today);
+    const counts = [
+        { label: "Llegadas puntuales", count: 0, tone: "punctual" },
+        { label: "Llegadas temprano", count: 0, tone: "early" },
+        { label: "Llegadas tarde", count: 0, tone: "late" },
+        { label: "Salidas anticipadas", count: 0, tone: "early-exit" },
+        { label: "Turnos sin marcar", count: 0, tone: "missing" }
+    ];
+    scheduled.forEach(row => {
+        const status = String(row.estadoHorario || "").toUpperCase();
+        if (status.includes("SIN MARCA")) counts[4].count++;
+        else if (status.startsWith("PUNTUAL")) counts[0].count++;
+        else if (status.startsWith("TEMPRANO")) counts[1].count++;
+        else if (status.startsWith("TARDE")) counts[2].count++;
+        if (status.includes("SALIDA ANTICIPADA")) counts[3].count++;
+    });
+    const heading = element("div", undefined, "schedule-insights-heading");
+    heading.append(element("h4", "Mi asistencia este mes"), element("span", new Intl.DateTimeFormat("es-CL", { month: "long", year: "numeric", timeZone: "America/Santiago" }).format(new Date()), "schedule-insights-period"));
+    root.replaceChildren(heading);
+    root.append(element("p", "Resumen de tus turnos programados hasta hoy.", "schedule-insights-caption"));
+    if (!scheduled.length) { root.append(element("p", "Todavía no hay turnos registrados para este mes.", "schedule-insights-empty")); return; }
+    const chart = element("div", undefined, "schedule-insights-chart");
+    const max = Math.max(1, ...counts.map(item => item.count));
+    counts.forEach(item => {
+        const row = element("div", undefined, "schedule-insight-row");
+        const label = element("span", item.label, "schedule-insight-label");
+        const track = element("span", undefined, "schedule-insight-track");
+        const bar = element("span", undefined, "schedule-insight-bar schedule-insight-" + item.tone);
+        bar.style.width = (item.count ? Math.max(5, item.count / max * 100) : 0) + "%";
+        track.append(bar); row.append(label, track, element("strong", String(item.count), "schedule-insight-count")); chart.append(row);
+    });
+    root.append(chart);
 }
 async function renderSchedules(recordsSection) {
     const box = element("section", undefined, "data-section schedule-section");

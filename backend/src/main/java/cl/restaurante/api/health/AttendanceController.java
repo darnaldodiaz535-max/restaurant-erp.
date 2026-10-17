@@ -171,6 +171,7 @@ public class AttendanceController {
     public Map<String, Object> report(@RequestParam(defaultValue = "mes") String periodo,
                                       @RequestParam(required = false) String fecha,
                                       @RequestParam(required = false) Long empleadoId,
+                                      @RequestParam(defaultValue = "false") boolean personal,
                                       HttpSession session) {
         RoleAccessService.User user = access.current(session);
         boolean admin = isAdmin(user);
@@ -185,8 +186,11 @@ public class AttendanceController {
         // Administrators can request all staff by leaving empleadoId unset.
         // Avoid ternary unboxing of null when the other branch is primitive long.
         Long selectedEmployee;
-        if (admin) selectedEmployee = empleadoId;
+        if (personal) selectedEmployee = Long.valueOf(user.employeeId());
+        else if (admin) selectedEmployee = empleadoId;
         else selectedEmployee = Long.valueOf(user.employeeId());
+        if (personal && empleadoId != null && empleadoId.longValue() != user.employeeId())
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La vista personal solo puede consultar tu propia asistencia.");
         if (empleadoId != null && !admin) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo administración puede consultar a otra persona.");
 
         String filter = selectedEmployee == null ? "" : " AND E.ID_EMPLEADO=?";
@@ -220,7 +224,9 @@ public class AttendanceController {
                     return row;
                 }, rowArgs);
 
-        if ("ADMIN".equals(user.role())) schedules.addScheduleDetails(rows, from, to, selectedEmployee);
+        // The schedule report is already scoped to the signed-in employee for non-admins,
+        // so include planned shifts and punctuality details in their personal view too.
+        schedules.addScheduleDetails(rows, from, to, selectedEmployee);
 
         List<Map<String, Object>> employees = admin ? jdbc.query("SELECT ID_EMPLEADO,NOMBRE,RUT FROM APP_EMPLEADO WHERE ESTADO='ACTIVO' ORDER BY NOMBRE",
                 (rs, n) -> Map.of("id", rs.getLong(1), "nombre", rs.getString(2), "rut", rs.getString(3) == null ? "" : rs.getString(3))) : List.of();
