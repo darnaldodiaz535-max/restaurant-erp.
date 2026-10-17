@@ -69,15 +69,16 @@ async function renderMyAttendanceSchedule(recordsSection) {
     const box = element("section", undefined, "data-section personal-schedule");
     const heading = element("div", undefined, "module-header");
     heading.append(element("h3", "Mi horario asignado")); box.append(heading);
-    box.append(element("p", "Aquí puedes consultar los turnos que administración o la jefatura de tu área publicó para ti."));
+    box.append(element("p", "Consulta tus turnos por trabajador. El período inicial muestra dos semanas completas, de lunes a domingo; puedes cambiar las fechas para revisar otro tramo."));
     const todayStatus = element("div", "Consultando tu turno de hoy…", "schedule-today-status");
     todayStatus.setAttribute("role", "status"); box.append(todayStatus);
     const controls = element("div", undefined, "module-controls");
     const todayIso = () => { const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map(part => [part.type, part.value])); return parts.year + "-" + parts.month + "-" + parts.day; };
     const todayDate = new Date(todayIso() + "T12:00:00");
     const toIso = date => String(date.getFullYear()).padStart(4, "0") + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
-    const fromInput = element("input"); fromInput.type = "date"; fromInput.value = toIso(todayDate); fromInput.setAttribute("aria-label", "Fecha inicial");
-    const defaultEnd = new Date(todayDate); defaultEnd.setDate(defaultEnd.getDate() + 13);
+    const mondayOf = date => { const monday = new Date(date); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); return monday; };
+    const fromInput = element("input"); fromInput.type = "date"; fromInput.value = toIso(mondayOf(todayDate)); fromInput.setAttribute("aria-label", "Fecha inicial");
+    const defaultEnd = new Date(fromInput.value + "T12:00:00"); defaultEnd.setDate(defaultEnd.getDate() + 13);
     const toInput = element("input"); toInput.type = "date"; toInput.value = toIso(defaultEnd); toInput.setAttribute("aria-label", "Fecha final");
     const fromLabel = element("label", "Desde "); fromLabel.append(fromInput);
     const toLabel = element("label", "Hasta "); toLabel.append(toInput);
@@ -104,8 +105,8 @@ async function renderMyAttendanceSchedule(recordsSection) {
     }
     const showRange = actionButton("Consultar fechas", () => { void load(); }, true);
     const todayButton = actionButton("Ir a hoy", () => {
-        const now = new Date(todayIso() + "T12:00:00");
-        fromInput.value = toIso(now); now.setDate(now.getDate() + 13); toInput.value = toIso(now); void load();
+        const monday = mondayOf(new Date(todayIso() + "T12:00:00"));
+        fromInput.value = toIso(monday); monday.setDate(monday.getDate() + 13); toInput.value = toIso(monday); void load();
     });
     controls.append(fromLabel, toLabel, showRange, todayButton); box.append(controls);
     const range = element("p", undefined, "schedule-date-range"); box.append(range);
