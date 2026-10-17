@@ -207,10 +207,15 @@ async function renderMyAttendanceSchedule(recordsSection) {
                         && day.fecha >= plan.vigenteDesde && day.fecha <= plan.vigenteHasta;
                 });
                 if (activeCycle) {
-                    const offset = Math.floor((new Date(day.fecha + "T12:00:00") - new Date(activeCycle.vigenteDesde + "T12:00:00")) / 86400000);
-                    const cycleDays = Number(activeCycle.diasCiclo || 14);
-                    cycleWeek = Math.floor((offset % cycleDays) / 7) + 1;
-                    cycleNumber = Math.floor(offset / cycleDays);
+                    const toUtcDay = value => {
+                        const [year, month, date] = String(value).slice(0, 10).split("-").map(Number);
+                        return Date.UTC(year, month - 1, date);
+                    };
+                    const planStart = new Date(toUtcDay(activeCycle.vigenteDesde));
+                    const planMonday = toUtcDay(activeCycle.vigenteDesde) - ((planStart.getUTCDay() + 6) % 7) * 86400000;
+                    const weekIndex = Math.floor((toUtcDay(day.fecha) - planMonday) / (7 * 86400000));
+                    cycleWeek = (weekIndex % 2) + 1;
+                    cycleNumber = Math.floor(weekIndex / 2);
                 }
                 const cycleBlock = cycleWeek ? `${cycleNumber}:${cycleWeek}` : "";
                 if (cycleWeek && cycleBlock !== lastCycleBlock) {
