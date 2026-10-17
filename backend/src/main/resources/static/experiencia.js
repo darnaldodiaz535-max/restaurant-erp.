@@ -1,12 +1,23 @@
 // MariGex: keeps authentication, task endpoints and the personal inbox already in use.
 async function startMarigex() {
     const started=performance.now();
-    try { await initializeAuthentication(); }
+    let startupTimer;
+    try {
+        await Promise.race([
+            initializeAuthentication(),
+            new Promise((_, reject) => {
+                startupTimer = setTimeout(() => reject(new Error('El servidor está tardando en responder. Revisa tu conexión y vuelve a intentarlo.')), 60000);
+            })
+        ]);
+    } catch (error) {
+        if (!currentProfile) showLogin(error.message);
+    }
     finally {
+        clearTimeout(startupTimer);
         await new Promise(resolve=>setTimeout(resolve,Math.max(0,1700-(performance.now()-started))));
         document.body.classList.remove('booting');
         const splash=document.getElementById('marigexSplash');
-        splash.classList.add('splash-exit');setTimeout(()=>splash.remove(),250);
+        splash?.classList.add('splash-exit');if(splash)setTimeout(()=>splash.remove(),250);
         if(currentProfile && new URLSearchParams(location.search).has('avisos'))openPushInbox();
     }
 }
