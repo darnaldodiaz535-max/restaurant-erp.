@@ -167,6 +167,7 @@ public class AttendanceScheduleService {
             if (employee.rut() != null && !employee.rut().isBlank()) byRut.computeIfAbsent(normalizeRut(employee.rut()), ignored -> new ArrayList<>()).add(employee);
         }
         List<Map<String, Object>> shifts = new ArrayList<>();
+        boolean biweeklyWorkbook = false;
         DataFormatter formatter = new DataFormatter(Locale.ROOT);
         try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
             var evaluator = workbook.getCreationHelper().createFormulaEvaluator();
@@ -182,14 +183,35 @@ public class AttendanceScheduleService {
                 int endCol = findColumn(header, formatter, evaluator, "SALIDA", "HORA SALIDA", "HORA DE SALIDA", "TERMINO", "TÉRMINO", "HORA FIN", "HASTA");
                 Map<Integer, LocalDate> dateHeaders = new LinkedHashMap<>();
                 Map<Integer, Integer> weekdayHeaders = new LinkedHashMap<>();
+                Map<Integer, Integer> cycleWeekdayHeaders = new LinkedHashMap<>();
                 for (Cell cell : header) {
                     LocalDate date = dateValue(cell, formatter, evaluator);
                     if (date != null) dateHeaders.put(cell.getColumnIndex(), date);
-                    int weekday = weekday(text(cell, formatter, evaluator));
+                    String headerText = text(cell, formatter, evaluator);
+                    int cycleDay = cycleWeekday(headerText);
+                    if (cycleDay > 0) cycleWeekdayHeaders.put(cell.getColumnIndex(), cycleDay);
+                    int weekday = weekday(headerText);
                     if (weekday > 0) weekdayHeaders.put(cell.getColumnIndex(), weekday);
                 }
                 if (nameCol < 0 && rutCol < 0) continue;
-                boolean matrix = !dateHeaders.isEmpty() || !weekdayHeaders.isEmpty();
+                boolean biweekly = !cycleWeekdayHeaders.isEmpty();
+                if (biweekly) {
+                    Set<Integer> cycleDays = new HashSet<>(cycleWeekdayHeaders.values());
+                    if (cycleWeekdayHeaders.size() != 14 || cycleDays.size() != 14)
+                        throw bad("El ciclo de dos semanas necesita 14 columnas únicas: Semana 1 y Semana 2, de lunes a domingo.");
+                    if (!dateHeaders.isEmpty() || !weekdayHeaders.isEmpty())
+                        throw bad("Usa en este Excel solo los encabezados Semana 1 - Lunes a Domingo y Semana 2 - Lunes a Domingo.");
+                    if (requestedFrom == null || requestedTo == null)
+                        throw bad("Indica desde cuándo y hasta cuándo rige el ciclo de dos semanas.");
+                    if (requestedFrom.getDayOfWeek() != DayOfWeek.MONDAY)
+                        throw bad("Para un ciclo de dos semanas, ‘Vigente desde’ debe ser lunes.");
+                    if (ChronoUnit.DAYS.between(requestedFrom, requestedTo) < 13)
+                        throw bad("La vigencia debe incluir al menos los 14 días del ciclo.");
+                    for (int day = 1; day <= 14; day++) if (!cycleDays.contains(day))
+                        throw bad("Falta una columna del ciclo: Semana " + ((day - 1) / 7 + 1) + " - " + DAYS.get((day - 1) % 7) + ".");
+                    biweeklyWorkbook = true;
+                }
+                boolean matrix = biweekly || !dateHeaders.isEmpty() || !weekdayHeaders.isEmpty();
                 Map<Integer, Integer> matrixColumns = new LinkedHashMap<>();
                 if (dateHeaders.isEmpty()) matrixColumns.putAll(weekdayHeaders);
                 else dateHeaders.forEach((column, date) -> matrixColumns.put(column, date.getDayOfWeek().getValue()));
@@ -201,7 +223,7 @@ public class AttendanceScheduleService {
                     if (from == null) from = min;
                     if (to == null) to = max;
                 }
-                if (matrix && dateHeaders.isEmpty() && (from == null || to == null)) throw bad("Esta planilla usa columnas por día de la semana. Indica desde cuándo y hasta cuándo rige para repetir esos días.");
+                if (matrix && dateHeaders.isEmpty() && !biweekly && (from == null || to == null)) throw bad("Esta planilla usa columnas por día de la semana. Indica desde cuándo y hasta cuándo rige para repetir esos días.");
                 int firstData = headerIndex + 1;
                 for (int r = firstData; r <= sheet.getLastRowNum(); r++) {
                     Row row = sheet.getRow(r); if (row == null) continue;
@@ -209,7 +231,19 @@ public class AttendanceScheduleService {
                     String rut = rutCol < 0 ? "" : text(row.getCell(rutCol), formatter, evaluator);
                     if (name.isBlank() && rut.isBlank()) continue;
                     Employee employee = matchEmployee(name, rut, byName, byRut);
-                    if (matrix) {
+                    if (biweekly) {
+                        for (Map.Entry<Integer, Integer> column : cycleWeekdayHeaders.entrySet()) {
+                            int cycleDay = column.getValue();
+                            String rawShift = text(row.getCell(column.getKey()), formatter, evaluator).trim();
+                            if (rawShift.isBlank()) throw bad("Completa todos los días de las dos semanas para " + (name.isBlank() ? rut : name) + "; escribe LIBRE cuando no trabaja.");
+                            LocalDate cycleDate = from.plusDays(cycleDay - 1L);
+                            addPreviewShift(shifts, employee, name, rut, cycleDate, rawShift);
+                            Map<String, Object> item = shifts.get(shifts.size() - 1);
+                            item.put("semanaCiclo", (cycleDay - 1) / 7 + 1);
+                            item.put("diaCiclo", (cycleDay - 1) % 7 + 1);
+                            item.put("diaNombre", DAYS.get((cycleDay - 1) % 7));
+                        }
+                    } else if (matrix) {
                         for (Map.Entry<Integer, Integer> column : matrixColumns.entrySet()) {
                             int col = column.getKey();
                             LocalDate date = dateHeaders.get(col);
@@ -247,7 +281,7 @@ public class AttendanceScheduleService {
             LocalDate date = LocalDate.parse((String) shift.get("fecha"));
             if (date.isBefore(from) || date.isAfter(to)) throw bad("Hay turnos fuera del período seleccionado.");
         }
-        return Map.of("area", area, "vigenteDesde", from.toString(), "vigenteHasta", to.toString(), "turnos", shifts,
+        return Map.of("area", area, "tipoCiclo", biweeklyWorkbook ? "ROTACION_2_SEMANAS" : "CALENDARIO_FECHAS", "vigenteDesde", from.toString(), "vigenteHasta", to.toString(), "turnos", shifts,
                 "personas", shifts.stream().map(row -> String.valueOf(row.get("trabajador"))).distinct().count());
     }
 
@@ -258,6 +292,11 @@ public class AttendanceScheduleService {
         LocalDate from = LocalDate.parse(String.valueOf(request.get("vigenteDesde")));
         LocalDate to = LocalDate.parse(String.valueOf(request.get("vigenteHasta")));
         validateRange(from, to);
+        String cycleType = String.valueOf(request.getOrDefault("tipoCiclo", "CALENDARIO_FECHAS"));
+        boolean biweekly = "ROTACION_2_SEMANAS".equals(cycleType);
+        if (!biweekly && !"CALENDARIO_FECHAS".equals(cycleType)) throw bad("El tipo de ciclo enviado no es válido.");
+        if (biweekly && (from.getDayOfWeek() != DayOfWeek.MONDAY || ChronoUnit.DAYS.between(from, to) < 13))
+            throw bad("El ciclo debe comenzar un lunes y su vigencia debe cubrir al menos 14 días.");
         Object rawRows = request.get("turnos");
         if (!(rawRows instanceof List<?> rows) || rows.isEmpty()) throw bad("La vista previa no contiene turnos.");
         Map<Long, Employee> active = new HashMap<>();
@@ -272,9 +311,19 @@ public class AttendanceScheduleService {
             catch (NumberFormatException ex) { throw bad("La selección de trabajador no es válida."); }
             Employee employee = active.get(employeeId);
             if (employee == null) throw bad("Cada turno debe estar asignado a un trabajador activo del área seleccionada.");
-            LocalDate date = LocalDate.parse(String.valueOf(row.get("fecha")));
-            if (date.isBefore(from) || date.isAfter(to)) throw bad("Hay turnos fuera de la vigencia indicada.");
-            int index = (int) ChronoUnit.DAYS.between(from, date) + 1;
+            int index;
+            if (biweekly) {
+                try {
+                    int week = Integer.parseInt(String.valueOf(row.get("semanaCiclo")));
+                    int day = Integer.parseInt(String.valueOf(row.get("diaCiclo")));
+                    if (week < 1 || week > 2 || day < 1 || day > 7) throw bad("El ciclo debe tener dos semanas de lunes a domingo.");
+                    index = (week - 1) * 7 + day;
+                } catch (NumberFormatException ex) { throw bad("La vista previa contiene un día del ciclo no válido."); }
+            } else {
+                LocalDate date = LocalDate.parse(String.valueOf(row.get("fecha")));
+                if (date.isBefore(from) || date.isAfter(to)) throw bad("Hay turnos fuera de la vigencia indicada.");
+                index = (int) ChronoUnit.DAYS.between(from, date) + 1;
+            }
             String shift = String.valueOf(row.containsKey("estado") ? row.get("estado") : "TRABAJA");
             boolean off = "LIBRE".equalsIgnoreCase(shift);
             LocalTime start = off ? null : parseClock(String.valueOf(row.get("entrada")));
@@ -288,13 +337,13 @@ public class AttendanceScheduleService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Para cargar personal sin RUT, ejecuta también la migración 13_rut_opcional_horarios.sql en Oracle.");
         jdbc.update("DELETE FROM APP_ASISTENCIA_PLANILLA WHERE AREA=? AND VIGENTE_DESDE>=? AND VIGENTE_DESDE<=?", area, java.sql.Date.valueOf(from), java.sql.Date.valueOf(to));
         jdbc.update("UPDATE APP_ASISTENCIA_PLANILLA SET VIGENTE_HASTA=? WHERE AREA=? AND VIGENTE_DESDE<? AND VIGENTE_HASTA>=?", java.sql.Date.valueOf(from.minusDays(1)), area, java.sql.Date.valueOf(from), java.sql.Date.valueOf(from));
-        KeyHolder key = new GeneratedKeyHolder(); int cycleDays = (int) ChronoUnit.DAYS.between(from, to) + 1;
+        KeyHolder key = new GeneratedKeyHolder(); int cycleDays = biweekly ? 14 : (int) ChronoUnit.DAYS.between(from, to) + 1;
         jdbc.update(connection -> { var ps = connection.prepareStatement("INSERT INTO APP_ASISTENCIA_PLANILLA(AREA,VIGENTE_DESDE,VIGENTE_HASTA,CREADO_POR,TIPO_CICLO,CICLO_DIAS) VALUES(?,?,?,?,?,?)", new String[]{"ID_PLANILLA"});
-            ps.setString(1, area); ps.setDate(2, java.sql.Date.valueOf(from)); ps.setDate(3, java.sql.Date.valueOf(to)); ps.setLong(4, importedBy); ps.setString(5, "CALENDARIO_FECHAS"); ps.setInt(6, cycleDays); return ps; }, key);
+            ps.setString(1, area); ps.setDate(2, java.sql.Date.valueOf(from)); ps.setDate(3, java.sql.Date.valueOf(to)); ps.setLong(4, importedBy); ps.setString(5, cycleType); ps.setInt(6, cycleDays); return ps; }, key);
         if (key.getKey() == null) throw new IllegalStateException("No se pudo crear la versión de horario.");
         long planId = key.getKey().longValue();
         for (ShiftRow row : imports) jdbc.update("INSERT INTO APP_ASISTENCIA_HORARIO(ID_PLANILLA,EMPLEADO_ID,RUT_SNAPSHOT,NOMBRE_SNAPSHOT,SEMANA_CICLO,DIA_SEMANA,HORA_INICIO,HORA_FIN,ESTADO_DIA,HORAS_PROGRAMADAS) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                planId, row.employee().id(), row.employee().rut(), row.employee().name(), row.week(), 1,
+                planId, row.employee().id(), row.employee().rut(), row.employee().name(), row.week(), row.day(),
                 row.start() == null ? null : row.start().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
                 row.end() == null ? null : row.end().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")), row.state(), row.hours());
         return Map.of("vigenteDesde", from.toString(), "vigenteHasta", to.toString(), "personas", imports.stream().map(row -> row.employee().id()).distinct().count(), "turnos", imports.size());
@@ -332,6 +381,14 @@ public class AttendanceScheduleService {
         if (day.startsWith("SABADO") || day.equals("SAB")) return 6;
         if (day.startsWith("DOMINGO") || day.equals("DOM")) return 7;
         return 0;
+    }
+    private static int cycleWeekday(String value) {
+        String header = normalizeName(value);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^SEMANA\\s*([12])\\s*[-:]?\\s*(LUNES|LUN|MARTES|MAR|MIERCOLES|MIE|JUEVES|JUE|VIERNES|VIE|SABADO|SAB|DOMINGO|DOM)$").matcher(header);
+        if (!matcher.matches()) return 0;
+        int week = Integer.parseInt(matcher.group(1));
+        int day = weekday(matcher.group(2));
+        return day == 0 ? 0 : (week - 1) * 7 + day;
     }
     private static LocalDate parseDate(String value) {
         if (value == null || value.isBlank()) return null;

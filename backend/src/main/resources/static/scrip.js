@@ -772,10 +772,10 @@ async function renderAttendanceModule() {
     if (qrAdmin) {
         const schedulePanel = checkinNode("section", "attendance-qr-admin attendance-schedule-admin");
         const scheduleHeading = checkinNode("div", "attendance-schedule-heading");
-        scheduleHeading.appendChild(checkinNode("h4", "", "Planillas de turnos de asistencia"));
+        scheduleHeading.appendChild(checkinNode("h4", "", "Cargar horario de asistencia"));
         const help = document.createElement("details"); help.className = "attendance-schedule-help";
         const helpTitle = document.createElement("summary"); helpTitle.textContent = "¿Cómo funciona?";
-        help.append(helpTitle, checkinNode("p", "attendance-qr-help", "Sube el Excel que usa tu restaurante (.xlsx o .xls). Se aceptan calendarios con una fila por trabajador y columnas por día (Lunes a Domingo), o tablas con trabajador, fecha y turno/entrada/salida. Escribe los días libres como LIBRE o DESCANSO. Indica el período de vigencia; para filas con fechas, el sistema puede deducirlo. Revisa la vista previa y asigna los nombres que no coincidan automáticamente con Personal antes de confirmar. Se carga un área a la vez y se conservan los horarios de las otras áreas."));
+        help.append(helpTitle, checkinNode("p", "attendance-qr-help", "Sube el Excel (.xlsx o .xls). Para un ciclo de dos semanas, usa una fila por trabajador y encabezados Semana 1 - Lunes a Domingo y Semana 2 - Lunes a Domingo. También se aceptan semanas fijas y tablas con fecha y turno. Escribe LIBRE en cada día sin turno. Elige el área y la vigencia; para el ciclo de dos semanas, la fecha inicial debe ser lunes y se guardan solo los 14 días del patrón, que se repite durante la vigencia. Los nombres activos del área se vinculan automáticamente; solo tendrás que asignar los que no coincidan."));
         schedulePanel.append(scheduleHeading, help);
         const scheduleActions = checkinNode("div", "attendance-qr-setup");
         const areaSelect = checkinNode("select", "attendance-filter"); areaSelect.setAttribute("aria-label", "Área del horario");
@@ -783,7 +783,10 @@ async function renderAttendanceModule() {
         const startLabel = checkinNode("label", "attendance-radius-label", "Vigente desde");
         const startDate = checkinNode("input", "attendance-rut"); startDate.type = "date"; startDate.setAttribute("aria-label", "Fecha de inicio de vigencia del horario");
         const todayLocal = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" });
-        startDate.value = todayLocal;
+        const defaultStart = new Date(`${todayLocal}T12:00:00Z`);
+        const currentWeekday = defaultStart.getUTCDay() || 7;
+        defaultStart.setUTCDate(defaultStart.getUTCDate() + ((8 - currentWeekday) % 7));
+        startDate.value = defaultStart.toISOString().slice(0, 10);
         startLabel.appendChild(startDate);
         const endLabel = checkinNode("label", "attendance-radius-label", "Vigente hasta");
         const endDate = checkinNode("input", "attendance-rut"); endDate.type = "date"; endDate.setAttribute("aria-label", "Fecha de término de vigencia del horario"); endLabel.appendChild(endDate);
@@ -798,12 +801,15 @@ async function renderAttendanceModule() {
             previewSchedule.disabled = true; previewWrap.replaceChildren();
             try {
                 const result = await uploadRequest("/api/asistencia/horarios/previsualizar", body);
-                const rows = result.turnos || [], mappings = new Map();
+                const rows = result.turnos || [], mappings = new Map(), mappingSelects = new Set();
                 const employees = await apiRequest(employeesApi);
-                const previewTitle = checkinNode("h5", "", `Vista previa · ${result.personas} personas · ${rows.length} turnos · ${result.vigenteDesde} a ${result.vigenteHasta}`);
-                const previewHint = checkinNode("p", "attendance-qr-help", "Confirma que nombres, fechas y horas estén correctos. Si un nombre no se vinculó, selecciónalo en la tabla.");
+                const biweekly = result.tipoCiclo === "ROTACION_2_SEMANAS";
+                const previewTitle = checkinNode("h5", "", biweekly
+                    ? `Vista previa · ${result.personas} personas · ciclo de 14 días · vigencia ${result.vigenteDesde} a ${result.vigenteHasta}`
+                    : `Vista previa · ${result.personas} personas · ${rows.length} turnos · ${result.vigenteDesde} a ${result.vigenteHasta}`);
+                const previewHint = checkinNode("p", "attendance-qr-help", "Los trabajadores activos del área se reconocen por su nombre. Si alguno no se vinculó, asígnalo una vez en su primera fila. Revisa turnos y días libres antes de confirmar.");
                 const tableWrap = checkinNode("div", "table-container attendance-table-wrap"), table = checkinNode("table"), head = checkinNode("tr"), bodyRows = checkinNode("tbody");
-                ["Trabajador", "Fecha", "Entrada", "Salida", "Estado"].forEach(label => head.appendChild(checkinNode("th", "", label)));
+                (biweekly ? ["Trabajador", "Semana", "Día", "Entrada", "Salida", "Estado"] : ["Trabajador", "Fecha", "Entrada", "Salida", "Estado"]).forEach(label => head.appendChild(checkinNode("th", "", label)));
                 const thead = checkinNode("thead"); thead.appendChild(head); table.append(thead, bodyRows); tableWrap.appendChild(table);
                 for (const shift of rows) {
                     const tr = checkinNode("tr"), workerCell = checkinNode("td");
@@ -813,8 +819,11 @@ async function renderAttendanceModule() {
                     employees.filter(person => person.active !== false && (!person.area || person.area.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === areaSelect.value)).forEach(person => select.add(new Option(`${person.name || person.nombre}${person.rut ? ` · ${person.rut}` : ""}`, person.id || person.idEmpleado)));
                     select.value = String(mappings.get(workerName) || "");
                     select.addEventListener("change", () => { mappings.set(workerName, select.value); previewWrap.dataset.mappings = JSON.stringify(Object.fromEntries(mappings)); });
-                    if (shift.empleadoId) workerCell.textContent = workerName; else { workerCell.append(checkinNode("span", "", `${workerName} `), select); }
-                    tr.append(workerCell, checkinNode("td", "", shift.fecha), checkinNode("td", "", shift.entrada || "—"), checkinNode("td", "", shift.salida || "—"), checkinNode("td", "", shift.estado === "LIBRE" ? "Libre" : "Turno"));
+                    if (shift.empleadoId) workerCell.textContent = workerName;
+                    else if (!mappingSelects.has(workerName)) { workerCell.append(checkinNode("span", "", `${workerName} `), select); mappingSelects.add(workerName); }
+                    else workerCell.textContent = workerName;
+                    if (biweekly) tr.append(workerCell, checkinNode("td", "", `Semana ${shift.semanaCiclo}`), checkinNode("td", "", shift.diaNombre), checkinNode("td", "", shift.entrada || "—"), checkinNode("td", "", shift.salida || "—"), checkinNode("td", "", shift.estado === "LIBRE" ? "Libre" : "Turno"));
+                    else tr.append(workerCell, checkinNode("td", "", shift.fecha), checkinNode("td", "", shift.entrada || "—"), checkinNode("td", "", shift.salida || "—"), checkinNode("td", "", shift.estado === "LIBRE" ? "Libre" : "Turno"));
                     tr.dataset.worker = workerName; bodyRows.appendChild(tr);
                 }
                 previewWrap.dataset.mappings = JSON.stringify(Object.fromEntries(mappings));
@@ -822,7 +831,7 @@ async function renderAttendanceModule() {
                     const selectedMappings = JSON.parse(previewWrap.dataset.mappings || "{}");
                     const unresolved = [...new Set(rows.filter(row => !row.empleadoId).map(row => row.trabajador))].filter(name => !selectedMappings[name]);
                     if (unresolved.length) { feedback.textContent = `Asigna cada nombre antes de guardar: ${unresolved.join(", ")}.`; return; }
-                    const payload = { area: result.area, vigenteDesde: result.vigenteDesde, vigenteHasta: result.vigenteHasta, turnos: rows.map(row => ({ ...row, empleadoId: row.empleadoId || selectedMappings[row.trabajador] })) };
+                    const payload = { area: result.area, tipoCiclo: result.tipoCiclo, vigenteDesde: result.vigenteDesde, vigenteHasta: result.vigenteHasta, turnos: rows.map(row => ({ ...row, empleadoId: row.empleadoId || selectedMappings[row.trabajador] })) };
                     confirmSchedule.disabled = true;
                     try {
                         const saved = await apiRequest("/api/asistencia/horarios/confirmar", { method: "POST", body: JSON.stringify(payload) });
