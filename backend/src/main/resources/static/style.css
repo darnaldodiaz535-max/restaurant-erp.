@@ -2206,6 +2206,11 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .personal-schedule .module-controls label { display:grid; gap:5px; font-weight:600; }
 .personal-schedule .module-controls input[type=date] { min-height:40px; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#172033; font:inherit; }
 .schedule-date-range { color:#64748b; font-size:.92rem; }
+.schedule-cycle-hint { margin:10px 0; padding:11px 14px; border-left:4px solid #0e9aa7; border-radius:8px; background:#ecfeff; color:#155e75; font-size:.9rem; }
+.schedule-cycle-hint[hidden] { display:none; }
+.personal-schedule .schedule-cycle-week td { padding:11px 16px; border-top:1px solid #dbeafe; background:#eff6ff; color:#1e40af; }
+.schedule-cycle-week strong { font-size:.9rem; }
+.schedule-cycle-week span { margin-left:8px; color:#64748b; font-size:.82rem; font-weight:500; }
 .schedule-today-status { margin:14px 0; padding:14px 16px; border:1px solid transparent; border-radius:10px; font-weight:700; }
 .schedule-today-work { color:#166534; background:#dcfce7; border-color:#86efac; }
 .schedule-today-off { color:#1e40af; background:#dbeafe; border-color:#93c5fd; }
@@ -2214,6 +2219,9 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .schedule-today-row { background:#ecfdf5; font-weight:700; }
 .theme-dark .personal-schedule .module-controls input[type=date] { background:#0f172a; color:#e2e8f0; border-color:#475569; }
 .theme-dark .schedule-date-range { color:#cbd5e1; }
+.theme-dark .schedule-cycle-hint { border-color:#22d3d8; background:#12313a; color:#cffafe; }
+.theme-dark .personal-schedule .schedule-cycle-week td { border-color:#334155; background:#1a2d49; color:#bfdbfe; }
+.theme-dark .schedule-cycle-week span { color:#b8c7da; }
 .theme-dark .schedule-today-work { color:#bbf7d0; background:#123524; border-color:#166534; }
 .theme-dark .schedule-today-off { color:#bfdbfe; background:#172b49; border-color:#1d4ed8; }
 .theme-dark .schedule-today-none { color:#e2e8f0; background:#1e293b; border-color:#475569; }

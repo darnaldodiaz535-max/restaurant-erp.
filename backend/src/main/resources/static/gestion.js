@@ -89,6 +89,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
     });
     controls.append(fromLabel, toLabel, showRange, todayButton); box.append(controls);
     const range = element("p", undefined, "schedule-date-range"); box.append(range);
+    const cycleHint = element("p", undefined, "schedule-cycle-hint");
     const feedback = element("p", "Cargando tu horario…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
     const tableWrap = element("div", undefined, "table-container");
     const table = element("table"), head = element("tr"), body = element("tbody");
@@ -97,7 +98,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
     const thead = element("thead"); thead.append(head); table.append(thead, body); tableWrap.append(table); box.append(tableWrap);
     recordsSection.before(box);
     async function load() {
-        showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…"; body.replaceChildren();
+        showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…"; body.replaceChildren(); cycleHint.hidden = true;
         const from = fromInput.value, until = toInput.value;
         if (!from || !until || until < from) {
             feedback.textContent = "Elige un rango de fechas válido."; showRange.disabled = todayButton.disabled = false; return;
@@ -134,8 +135,21 @@ async function renderMyAttendanceSchedule(recordsSection) {
             todayStatus.replaceChildren(todayIcon, todayCopy);
             if (todayTime) todayStatus.append(element("strong", todayTime, "schedule-today-time"));
             if (!days.some(day => day.estado !== "SIN_HORARIO")) { feedback.textContent = "No hay un horario publicado para este período."; return; }
-            feedback.textContent = (result.vigencias || []).map(plan => plan.area + " · vigente " + formatDate(plan.vigenteDesde) + " a " + formatDate(plan.vigenteHasta)).join("  |  ");
+            const validity = result.vigencias || [];
+            feedback.textContent = validity.map(plan => plan.area + " · vigente " + formatDate(plan.vigenteDesde) + " a " + formatDate(plan.vigenteHasta)).join("  |  ");
+            const hasBiweeklyCycle = validity.some(plan => plan.tipoCiclo === "ROTACION_2_SEMANAS" || Number(plan.diasCiclo) === 14);
+            cycleHint.textContent = hasBiweeklyCycle ? "Ciclo vigente: Semana 1 → Semana 2. Al terminar la Semana 2, el patrón vuelve a Semana 1 y se repite hasta la fecha de término." : "";
+            cycleHint.hidden = !hasBiweeklyCycle;
+            if (hasBiweeklyCycle && !cycleHint.isConnected) feedback.before(cycleHint);
+            let lastCycleWeek = null;
             days.forEach(day => {
+                const cycleWeek = Number(day.semanaCiclo || 0);
+                if (cycleWeek && cycleWeek !== lastCycleWeek) {
+                    const cycleRow = element("tr", undefined, "schedule-cycle-week");
+                    const cycleCell = element("td"); cycleCell.colSpan = 4;
+                    cycleCell.append(element("strong", "Semana " + cycleWeek), element("span", " · patrón del ciclo vigente"));
+                    cycleRow.append(cycleCell); body.append(cycleRow); lastCycleWeek = cycleWeek;
+                }
                 const isToday = day.fecha === todayIso();
                 const row = element("tr", undefined, isToday ? "schedule-today-row" : "");
                 const dayLabel = day.dia ? day.dia.charAt(0).toLocaleUpperCase("es-CL") + day.dia.slice(1) : "—";

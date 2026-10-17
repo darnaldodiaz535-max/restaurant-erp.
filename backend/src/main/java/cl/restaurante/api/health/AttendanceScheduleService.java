@@ -654,6 +654,9 @@ public class AttendanceScheduleService {
                 int offset = (int) ChronoUnit.DAYS.between(activePlan.from(), date);
                 int cycleDays = Math.max(1, activePlan.cycleDays());
                 int cycleIndex = "CALENDARIO_FECHAS".equals(activePlan.type()) ? offset + 1 : offset % cycleDays + 1;
+                if (!"CALENDARIO_FECHAS".equals(activePlan.type()) && cycleDays >= 14 && cycleDays % 7 == 0) {
+                    day.put("semanaCiclo", (cycleIndex - 1) / 7 + 1);
+                }
                 ScheduleRow shift = activePlanRows.stream()
                         .filter(row -> storedCycleIndex(row) == cycleIndex).findFirst().orElse(null);
                 if (shift == null) {
