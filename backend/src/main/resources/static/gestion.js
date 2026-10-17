@@ -197,14 +197,31 @@ async function renderMyAttendanceSchedule(recordsSection) {
             cycleHint.textContent = hasBiweeklyCycle ? "Ciclo vigente: Semana 1 → Semana 2. Al terminar la Semana 2, el patrón vuelve a Semana 1 y se repite hasta la fecha de término." : "";
             cycleHint.hidden = !hasBiweeklyCycle;
             if (hasBiweeklyCycle && !cycleHint.isConnected) feedback.before(cycleHint);
-            let lastCycleWeek = null;
+            let lastCycleBlock = null;
             days.forEach(day => {
-                const cycleWeek = Number(day.semanaCiclo || 0);
-                if (cycleWeek && cycleWeek !== lastCycleWeek) {
+                let cycleWeek = Number(day.semanaCiclo || 0);
+                let cycleNumber = 0;
+                const activeCycle = validity.find(plan => {
+                    const cycleDays = Number(plan.diasCiclo || 0);
+                    return (plan.tipoCiclo === "ROTACION_2_SEMANAS" || cycleDays === 14)
+                        && day.fecha >= plan.vigenteDesde && day.fecha <= plan.vigenteHasta;
+                });
+                if (activeCycle) {
+                    const offset = Math.floor((new Date(day.fecha + "T12:00:00") - new Date(activeCycle.vigenteDesde + "T12:00:00")) / 86400000);
+                    const cycleDays = Number(activeCycle.diasCiclo || 14);
+                    cycleWeek = Math.floor((offset % cycleDays) / 7) + 1;
+                    cycleNumber = Math.floor(offset / cycleDays);
+                }
+                const cycleBlock = cycleWeek ? `${cycleNumber}:${cycleWeek}` : "";
+                if (cycleWeek && cycleBlock !== lastCycleBlock) {
                     const cycleRow = element("tr", undefined, "schedule-cycle-week");
                     const cycleCell = element("td"); cycleCell.colSpan = 4;
-                    cycleCell.append(element("strong", "Semana " + cycleWeek), element("span", " · patrón del ciclo vigente"));
-                    cycleRow.append(cycleCell); body.append(cycleRow); lastCycleWeek = cycleWeek;
+                    const weekStart = new Date(day.fecha + "T12:00:00");
+                    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+                    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
+                    const weekRange = new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short", timeZone: "America/Santiago" });
+                    cycleCell.append(element("strong", "Semana " + cycleWeek), element("span", ` · lunes ${weekRange.format(weekStart)} a domingo ${weekRange.format(weekEnd)}`));
+                    cycleRow.append(cycleCell); body.append(cycleRow); lastCycleBlock = cycleBlock;
                 }
                 const isToday = day.fecha === todayIso();
                 const row = element("tr", undefined, isToday ? "schedule-today-row" : "");
