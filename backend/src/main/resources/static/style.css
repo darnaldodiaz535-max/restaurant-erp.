@@ -2219,3 +2219,54 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .theme-dark .schedule-today-none { color:#e2e8f0; background:#1e293b; border-color:#475569; }
 .theme-dark .schedule-today-pending { color:#fde68a; background:#422006; border-color:#a16207; }
 .theme-dark .schedule-today-row { background:#123524; }
+
+/* Refined personal schedule: clear today callout and compact shift table. */
+.personal-schedule { overflow:hidden; }
+.personal-schedule .schedule-today-status {
+    display:grid; grid-template-columns:52px minmax(0,1fr) auto; align-items:center; gap:15px;
+    margin:18px 0; padding:18px 20px; border:1px solid transparent; border-radius:16px;
+    box-shadow:0 8px 22px rgba(15,23,42,.06);
+}
+.schedule-today-icon { display:grid; place-items:center; width:48px; height:48px; border-radius:14px; background:rgba(255,255,255,.72); font-size:25px; font-weight:800; }
+.schedule-today-copy { display:grid; gap:3px; min-width:0; }
+.schedule-today-eyebrow { font-size:.68rem; letter-spacing:.12em; font-weight:800; opacity:.75; }
+.schedule-today-title { font-size:1.12rem; line-height:1.3; }
+.schedule-today-detail { font-size:.9rem; font-weight:500; opacity:.82; }
+.schedule-today-time { justify-self:end; white-space:nowrap; padding:10px 14px; border:1px solid currentColor; border-radius:12px; background:rgba(255,255,255,.58); font-size:1.15rem; font-variant-numeric:tabular-nums; }
+.personal-schedule .table-container { overflow-x:auto; margin-top:12px; border:1px solid #e2e8f0; border-radius:14px; background:#fff; }
+.personal-schedule .schedule-pretty-table { width:100%; min-width:560px; border-collapse:separate; border-spacing:0; }
+.personal-schedule .schedule-pretty-table thead th { padding:12px 16px; background:#f8fafc; color:#64748b; font-size:.72rem; letter-spacing:.08em; text-align:left; text-transform:uppercase; }
+.personal-schedule .schedule-pretty-table tbody td { padding:13px 16px; border-top:1px solid #edf0f4; vertical-align:middle; }
+.personal-schedule .schedule-pretty-table tbody tr:first-child td { border-top:0; }
+.personal-schedule .schedule-pretty-table tbody tr:hover { background:#f8fafc; }
+.schedule-day-cell { display:grid; gap:2px; }
+.schedule-day-cell strong { color:#172033; text-transform:capitalize; }
+.schedule-day-cell span { color:#64748b; font-size:.82rem; }
+.schedule-hours-cell strong { color:#172033; font-size:.98rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.schedule-hours-cell span { color:#94a3b8; font-size:.88rem; }
+.schedule-state-chip { display:inline-flex; align-items:center; min-height:27px; padding:4px 10px; border-radius:999px; font-size:.77rem; font-weight:700; white-space:nowrap; }
+.schedule-state-work { color:#166534; background:#dcfce7; }
+.schedule-state-off { color:#1d4ed8; background:#dbeafe; }
+.schedule-state-none { color:#475569; background:#f1f5f9; }
+.schedule-state-pending { color:#92400e; background:#fef3c7; }
+.personal-schedule .schedule-pretty-table .schedule-today-row { background:#f0fdf4; }
+.personal-schedule .schedule-pretty-table .schedule-today-row td:first-child { box-shadow:inset 3px 0 #16a34a; }
+.theme-dark .personal-schedule .table-container { border-color:#334155; background:#111c2f; }
+.theme-dark .personal-schedule .schedule-pretty-table thead th { background:#172338; color:#aebed1; }
+.theme-dark .personal-schedule .schedule-pretty-table tbody td { border-color:#29374b; }
+.theme-dark .personal-schedule .schedule-pretty-table tbody tr:hover { background:#172338; }
+.theme-dark .schedule-day-cell strong,.theme-dark .schedule-hours-cell strong { color:#e2e8f0; }
+.theme-dark .schedule-day-cell span { color:#aebed1; }
+.theme-dark .schedule-state-work { color:#bbf7d0; background:#123524; }
+.theme-dark .schedule-state-off { color:#bfdbfe; background:#172b49; }
+.theme-dark .schedule-state-none { color:#e2e8f0; background:#1e293b; }
+.theme-dark .schedule-state-pending { color:#fde68a; background:#422006; }
+.theme-dark .personal-schedule .schedule-pretty-table .schedule-today-row { background:#102b20; }
+@media(max-width:620px) {
+    .personal-schedule .schedule-today-status { grid-template-columns:42px minmax(0,1fr); gap:11px; padding:15px; }
+    .schedule-today-icon { width:40px; height:40px; border-radius:12px; }
+    .schedule-today-title { font-size:1rem; }
+    .schedule-today-detail { font-size:.82rem; }
+    .schedule-today-time { grid-column:2; justify-self:start; margin-top:3px; padding:7px 11px; font-size:1rem; }
+    .personal-schedule .schedule-pretty-table thead th,.personal-schedule .schedule-pretty-table tbody td { padding:11px 12px; }
+}

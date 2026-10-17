@@ -92,7 +92,8 @@ async function renderMyAttendanceSchedule(recordsSection) {
     const feedback = element("p", "Cargando tu horario…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
     const tableWrap = element("div", undefined, "table-container");
     const table = element("table"), head = element("tr"), body = element("tbody");
-    ["Día", "Fecha", "Turno", "Horas"].forEach(label => head.append(element("th", label)));
+    table.className = "schedule-pretty-table";
+    ["Día", "Horario", "Estado", "Duración"].forEach(label => head.append(element("th", label)));
     const thead = element("thead"); thead.append(head); table.append(thead, body); tableWrap.append(table); box.append(tableWrap);
     recordsSection.before(box);
     async function load() {
@@ -116,24 +117,48 @@ async function renderMyAttendanceSchedule(recordsSection) {
                 today = (todayResult.dias || [])[0];
             }
             todayStatus.className = "schedule-today-status";
+            const todayIcon = element("span", undefined, "schedule-today-icon");
+            const todayCopy = element("div", undefined, "schedule-today-copy");
+            let todayTitle, todayDetail, todayTime = "";
             if (!today || today.estado === "SIN_HORARIO") {
-                todayStatus.textContent = "Hoy no tienes un turno publicado."; todayStatus.classList.add("schedule-today-none");
+                todayIcon.textContent = "–"; todayTitle = "Hoy no tienes un turno publicado"; todayDetail = "No hay un horario asignado para este día."; todayStatus.classList.add("schedule-today-none");
             } else if (today.estado === "LIBRE") {
-                todayStatus.textContent = "Hoy estás libre."; todayStatus.classList.add("schedule-today-off");
+                todayIcon.textContent = "✓"; todayTitle = "Hoy estás libre"; todayDetail = "Disfruta tu día de descanso."; todayStatus.classList.add("schedule-today-off");
             } else if (today.estado === "TRABAJA") {
-                todayStatus.textContent = "Tienes turno hoy · " + (today.entrada || "—") + " – " + (today.salida || "—"); todayStatus.classList.add("schedule-today-work");
+                todayIcon.textContent = "↗"; todayTitle = "Tienes turno hoy"; todayDetail = [today.area, "Tu jornada está programada para hoy."].filter(Boolean).join(" · ");
+                todayTime = (today.entrada || "—") + " – " + (today.salida || "—"); todayStatus.classList.add("schedule-today-work");
             } else {
-                todayStatus.textContent = "Hoy tienes un turno por confirmar."; todayStatus.classList.add("schedule-today-pending");
+                todayIcon.textContent = "!"; todayTitle = "Turno por confirmar"; todayDetail = "Consulta con tu jefatura si tienes dudas."; todayStatus.classList.add("schedule-today-pending");
             }
+            todayCopy.append(element("span", "ESTADO DE HOY", "schedule-today-eyebrow"), element("strong", todayTitle, "schedule-today-title"), element("span", todayDetail, "schedule-today-detail"));
+            todayStatus.replaceChildren(todayIcon, todayCopy);
+            if (todayTime) todayStatus.append(element("strong", todayTime, "schedule-today-time"));
             if (!days.some(day => day.estado !== "SIN_HORARIO")) { feedback.textContent = "No hay un horario publicado para este período."; return; }
             feedback.textContent = (result.vigencias || []).map(plan => plan.area + " · vigente " + formatDate(plan.vigenteDesde) + " a " + formatDate(plan.vigenteHasta)).join("  |  ");
             days.forEach(day => {
                 const isToday = day.fecha === todayIso();
                 const row = element("tr", undefined, isToday ? "schedule-today-row" : "");
-                const label = day.estado === "LIBRE" ? "Libre" : day.estado === "TRABAJA" ? (day.entrada || "—") + " – " + (day.salida || "—") : day.estado === "SIN_HORARIO" ? "Sin horario vigente" : "Turno por confirmar";
-                const hours = day.estado === "TRABAJA" ? Number(day.horas || 0).toLocaleString("es-CL") + " h" : "—";
                 const dayLabel = day.dia ? day.dia.charAt(0).toLocaleUpperCase("es-CL") + day.dia.slice(1) : "—";
-                row.append(element("td", dayLabel), element("td", formatDate(day.fecha)), element("td", label), element("td", hours)); body.append(row);
+                const dayCell = element("div", undefined, "schedule-day-cell");
+                dayCell.append(element("strong", dayLabel), element("span", formatDate(day.fecha)));
+                const hoursCell = element("div", undefined, "schedule-hours-cell");
+                const stateCell = element("span", undefined, "schedule-state-chip");
+                let statusLabel, statusClass;
+                if (day.estado === "TRABAJA") {
+                    hoursCell.append(element("strong", (day.entrada || "—") + " – " + (day.salida || "—")));
+                    statusLabel = "Turno asignado"; statusClass = "schedule-state-work";
+                } else if (day.estado === "LIBRE") {
+                    hoursCell.append(element("span", "Sin turno programado")); statusLabel = "Libre"; statusClass = "schedule-state-off";
+                } else if (day.estado === "SIN_HORARIO") {
+                    hoursCell.append(element("span", "—")); statusLabel = "Sin horario"; statusClass = "schedule-state-none";
+                } else {
+                    hoursCell.append(element("span", "Pendiente de confirmar")); statusLabel = "Por confirmar"; statusClass = "schedule-state-pending";
+                }
+                stateCell.textContent = statusLabel; stateCell.classList.add(statusClass);
+                const duration = day.estado === "TRABAJA" ? Number(day.horas || 0).toLocaleString("es-CL") + " h" : "—";
+                const dayTd = element("td"), hoursTd = element("td"), statusTd = element("td");
+                dayTd.append(dayCell); hoursTd.append(hoursCell); statusTd.append(stateCell);
+                row.append(dayTd, hoursTd, statusTd, element("td", duration)); body.append(row);
             });
         } catch (error) { feedback.textContent = error.message || "No se pudo cargar tu horario."; }
         finally { showRange.disabled = todayButton.disabled = false; }
