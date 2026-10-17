@@ -571,8 +571,7 @@ public class AttendanceScheduleService {
             int day = date.getDayOfWeek().getValue();
             for (ScheduleRow plan : plans.values()) {
                 if (date.isBefore(plan.from()) || date.isAfter(plan.to())) continue;
-                int offset = (int) ChronoUnit.DAYS.between(plan.from(), date);
-                int cycleIndex = plan.type().equals("CALENDARIO_FECHAS") ? offset + 1 : offset % plan.cycleDays() + 1;
+                int cycleIndex = cycleIndexForDate(plan, date);
                 ScheduleRow shift = byCycleDay.get(key(plan.employeeId(), plan.area(), cycleIndex, 1));
                 if (shift == null) continue;
                 Map<String, Object> row = actualByPersonDay.get(plan.employeeId() + "|" + date);
@@ -651,9 +650,8 @@ public class AttendanceScheduleService {
                 day.put("estado", "SIN_HORARIO"); day.put("entrada", ""); day.put("salida", ""); day.put("horas", 0);
             } else {
                 day.put("area", areaLabel(activePlan.area()));
-                int offset = (int) ChronoUnit.DAYS.between(activePlan.from(), date);
                 int cycleDays = Math.max(1, activePlan.cycleDays());
-                int cycleIndex = "CALENDARIO_FECHAS".equals(activePlan.type()) ? offset + 1 : offset % cycleDays + 1;
+                int cycleIndex = cycleIndexForDate(activePlan, date);
                 if (!"CALENDARIO_FECHAS".equals(activePlan.type()) && cycleDays >= 14 && cycleDays % 7 == 0) {
                     day.put("semanaCiclo", (cycleIndex - 1) / 7 + 1);
                 }
@@ -680,8 +678,7 @@ public class AttendanceScheduleService {
         List<ScheduleRow> definitions = jdbc.query("SELECT P.AREA,P.VIGENTE_DESDE,P.VIGENTE_HASTA,D.EMPLEADO_ID,D.RUT_SNAPSHOT,D.NOMBRE_SNAPSHOT,D.SEMANA_CICLO,D.DIA_SEMANA,D.HORA_INICIO,D.HORA_FIN,D.ESTADO_DIA,D.HORAS_PROGRAMADAS,P.TIPO_CICLO,P.CICLO_DIAS FROM APP_ASISTENCIA_PLANILLA P JOIN APP_ASISTENCIA_HORARIO D ON D.ID_PLANILLA=P.ID_PLANILLA WHERE P.VIGENTE_DESDE<=? AND P.VIGENTE_HASTA>=?",
                 (rs, n) -> new ScheduleRow(rs.getString(1), rs.getDate(2).toLocalDate(), rs.getDate(3).toLocalDate(), rs.getLong(4), rs.getString(5), rs.getString(6), rs.getInt(7), rs.getInt(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getDouble(12), rs.getString(13), rs.getInt(14)), java.sql.Date.valueOf(date), java.sql.Date.valueOf(date));
         for (ScheduleRow plan : definitions) {
-            int offset=(int)ChronoUnit.DAYS.between(plan.from(),date);
-            int cycleIndex=plan.type().equals("CALENDARIO_FECHAS")?offset+1:offset%plan.cycleDays()+1;
+            int cycleIndex=cycleIndexForDate(plan,date);
             if (cycleIndex != storedCycleIndex(plan)) continue;
             Map<String, Object> row = new LinkedHashMap<>(); row.put("empleadoId", plan.employeeId()); row.put("nombre", plan.name()); row.put("rut", plan.rut()); row.put("area", areaLabel(plan.area()));
             row.put("turnoProgramado", "TRABAJA".equals(plan.state()) ? plan.start() + "–" + plan.end() : "LIBRE"); row.put("estadoHorario", plan.state()); row.put("horasProgramadas", plan.hours()); rows.add(row);
@@ -766,6 +763,19 @@ public class AttendanceScheduleService {
     }
     private static String safe(Object value) { return value == null ? "" : String.valueOf(value); }
     private static String key(long employeeId, String area, int week, int day) { return employeeId + "|" + area + "|" + week + "|" + day; }
+    private static int cycleIndexForDate(ScheduleRow plan, LocalDate date) {
+        int cycleDays = Math.max(1, plan.cycleDays());
+        int offset;
+        if ("CALENDARIO_FECHAS".equals(plan.type())) {
+            offset = (int) ChronoUnit.DAYS.between(plan.from(), date);
+        } else if ("ROTACION_2_SEMANAS".equals(plan.type()) && cycleDays == 14) {
+            LocalDate firstMonday = plan.from().with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            offset = (int) ChronoUnit.DAYS.between(firstMonday, date);
+        } else {
+            offset = (int) ChronoUnit.DAYS.between(plan.from(), date);
+        }
+        return Math.floorMod(offset, cycleDays) + 1;
+    }
     private static int storedCycleIndex(ScheduleRow row) { return row.week() <= 2 && row.day() > 1 ? (row.week() - 1) * 7 + row.day() : row.week(); }
     private static ResponseStatusException bad(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
 

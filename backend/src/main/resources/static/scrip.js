@@ -1114,6 +1114,14 @@ async function renderModule(name, selectedArea = null) {
     const heading = document.createElement("div"); heading.className = "module-heading";
     const icon = document.createElement("span"); icon.className = "module-icon"; icon.textContent = icons[slug] || "📋"; icon.setAttribute("aria-hidden", "true");
     const copy = document.createElement("div"); copy.append(title, description); heading.append(icon, copy);
+    if (name === "Horarios") {
+        const scheduleHost = document.createElement("div");
+        scheduleHost.className = "schedule-module-content";
+        otherModule.append(scheduleHost);
+        otherModule.hidden = false;
+        await renderSchedules(scheduleHost);
+        return;
+    }
     const add = document.createElement("button"); add.className = "primary-button"; add.type = "button"; add.textContent = `+ ${name === "Horarios" ? "Crear horario por trabajador" : name === "Asistencia" ? "Registrar asistencia" : "Agregar registro"}`;
     const importInventory = document.createElement("button");
 importInventory.className = "secondary-button";

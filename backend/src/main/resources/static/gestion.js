@@ -297,7 +297,7 @@ function renderPersonalAttendanceInsights(root, report) {
     });
     root.append(chart);
 }
-async function renderSchedules(recordsSection) {
+async function renderSchedules(container) {
     const box = element("section", undefined, "data-section schedule-section");
     const head = element("div", undefined, "module-header");
     head.append(element("h3", "Horario del equipo"));
@@ -319,10 +319,14 @@ async function renderSchedules(recordsSection) {
     form.append(fields, save, actionButton("Cancelar", () => form.hidden = true)); box.append(form);
     const feedback = element("p", "Cargando horarios…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
     const gallery = element("div", undefined, "schedule-gallery"); box.append(gallery);
-    recordsSection.before(box);
+    container.append(box);
     // La cuenta ADMIN/EMPRESA administra los turnos, pero no marca asistencia como trabajador.
     if (!isAdminRole()) await renderMyAttendanceSchedule(box);
     if(isOwnerRole()) renderAiSchedules(box);
+    if (isOwnerRole() && !isAdminRole()) {
+        const personalSchedule = container.querySelector(":scope > .personal-schedule");
+        if (personalSchedule) container.append(personalSchedule);
+    }
     const load = async () => {
         try {
             const rows = await apiRequest("/api/horarios"); gallery.replaceChildren();

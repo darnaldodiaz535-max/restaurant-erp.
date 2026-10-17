@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-imagenes-inicio-20261017-1';
+const CACHE_NAME='marigex-shell-horario-tablet-semanas-20261017-3';
 const DEVICE_CACHE='marigex-device';
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png','/images/santiago-costanera-loading.png','/images/marigex-login-restaurant.png'];
 self.addEventListener('install',event=>{

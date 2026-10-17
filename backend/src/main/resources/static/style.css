@@ -2270,6 +2270,15 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     margin:18px 0; padding:18px 20px; border:1px solid transparent; border-radius:16px;
     box-shadow:0 8px 22px rgba(15,23,42,.06);
 }
+.personal-schedule .schedule-today-status button {
+    grid-column: 1 / -1;
+    justify-self: start;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    white-space: normal;
+}
 .schedule-today-icon { display:grid; place-items:center; width:48px; height:48px; border-radius:14px; background:rgba(255,255,255,.72); font-size:25px; font-weight:800; }
 .schedule-today-copy { display:grid; gap:3px; min-width:0; }
 .schedule-today-eyebrow { font-size:.68rem; letter-spacing:.12em; font-weight:800; opacity:.75; }
@@ -2317,7 +2326,7 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .schedule-today-title { font-size:1rem; }
     .schedule-today-detail { font-size:.82rem; }
     .schedule-today-time { grid-column:2; justify-self:start; margin-top:3px; padding:7px 11px; font-size:1rem; }
-    .schedule-today-missing button { grid-column:2 / -1; justify-self:start; }
+    .personal-schedule .schedule-today-status button { grid-column:1 / -1; }
     .personal-schedule .schedule-pretty-table thead th,.personal-schedule .schedule-pretty-table tbody td { padding:11px 12px; }
     .schedule-attendance-insights { padding:16px 13px; }
     .schedule-insight-row { grid-template-columns:minmax(108px,125px) minmax(45px,1fr) 24px; gap:8px; }
