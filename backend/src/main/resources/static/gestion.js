@@ -257,8 +257,3 @@ void (async () => {
     }
     await startMarigex();
 })();
-
-
-
-
-\n
