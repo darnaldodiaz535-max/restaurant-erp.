@@ -68,7 +68,10 @@ async function renderArea(area) {
 async function renderMyAttendanceSchedule(recordsSection) {
     const box = element("section", undefined, "data-section personal-schedule");
     const heading = element("div", undefined, "module-header");
-    heading.append(element("h3", "Mi horario asignado")); box.append(heading);
+    const jumpToSchedule = element("button", "Mi horario asignado ↓", "schedule-jump-button");
+    jumpToSchedule.type = "button";
+    jumpToSchedule.setAttribute("aria-label", "Ir a la tabla de mi horario asignado");
+    heading.append(jumpToSchedule); box.append(heading);
     box.append(element("p", "Consulta tus turnos por trabajador. El período inicial muestra dos semanas completas, de lunes a domingo; puedes cambiar las fechas para revisar otro tramo."));
     const todayStatus = element("div", "Consultando tu turno de hoy…", "schedule-today-status");
     todayStatus.setAttribute("role", "status"); box.append(todayStatus);
@@ -115,6 +118,12 @@ async function renderMyAttendanceSchedule(recordsSection) {
     const cycleHint = element("p", undefined, "schedule-cycle-hint");
     const feedback = element("p", "Cargando tu horario…", "empty-state"); feedback.setAttribute("role", "status"); box.append(feedback);
     const tableWrap = element("div", undefined, "table-container");
+    tableWrap.id = "my-assigned-schedule-table";
+    tableWrap.tabIndex = -1;
+    jumpToSchedule.addEventListener("click", () => {
+        tableWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+        tableWrap.focus({ preventScroll: true });
+    });
     const table = element("table"), head = element("tr"), body = element("tbody");
     table.className = "schedule-pretty-table";
     ["Día", "Horario", "Estado", "Duración"].forEach(label => head.append(element("th", label)));
