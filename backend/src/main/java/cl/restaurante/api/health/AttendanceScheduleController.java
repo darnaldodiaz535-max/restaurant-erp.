@@ -117,5 +117,3 @@ public class AttendanceScheduleController {
         return user;
     }
 }
-
-\n
