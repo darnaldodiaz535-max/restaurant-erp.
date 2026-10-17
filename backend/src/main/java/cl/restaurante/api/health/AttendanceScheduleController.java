@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
@@ -58,6 +59,22 @@ public class AttendanceScheduleController {
                                                HttpSession session) throws IOException {
         RoleAccessService.User user = requireAdmin(session);
         return schedules.importWorkbook(workbook, formato, startsOn, area, user.id());
+    }
+
+    @PostMapping(value = "/previsualizar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> preview(@RequestParam("planilla") MultipartFile workbook,
+                                       @RequestParam String area,
+                                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate vigenteDesde,
+                                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate vigenteHasta,
+                                       HttpSession session) throws IOException {
+        requireAdmin(session);
+        return schedules.previewWorkbook(workbook, area, vigenteDesde, vigenteHasta);
+    }
+
+    @PostMapping(value = "/confirmar", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> confirm(@RequestBody Map<String, Object> request, HttpSession session) {
+        RoleAccessService.User user = requireAdmin(session);
+        return schedules.confirmPreview(request, user.id());
     }
 
     @GetMapping("/dia")

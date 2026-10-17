@@ -41,7 +41,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class AttendanceScheduleService {
     private static final List<String> DAYS = List.of("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo");
-    private static final Pattern SHIFT = Pattern.compile("^([01]?\\d|2[0-3])[:.]([0-5]\\d)\\s*[-–]\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)$");
+    private static final Pattern SHIFT = Pattern.compile("^([01]?\\d|2[0-3])[:.]([0-5]\\d)\\s*(?:[-–—]|A|HASTA)\\s*([01]?\\d|2[0-3])[:.]([0-5]\\d)$", Pattern.CASE_INSENSITIVE);
     private final JdbcTemplate jdbc;
 
     public AttendanceScheduleService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
@@ -151,6 +151,232 @@ public class AttendanceScheduleService {
         return templateOptions().stream().filter(option -> option.get("id").equalsIgnoreCase(format)).findFirst()
                 .orElseThrow(() -> bad("Selecciona uno de los cuatro formatos de horario disponibles."));
     }
+
+    /** Reads common roster layouts and returns a reviewable, normalized date-by-date preview. */
+    public Map<String, Object> previewWorkbook(MultipartFile file, String selectedArea, LocalDate requestedFrom, LocalDate requestedTo) throws IOException {
+        requireSchema();
+        String area = normalizeAreaRequired(selectedArea);
+        if (file == null || file.isEmpty() || file.getSize() > 10 * 1024 * 1024) throw bad("Selecciona un Excel de hasta 10 MB.");
+        String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase(Locale.ROOT);
+        if (!filename.endsWith(".xlsx") && !filename.endsWith(".xls")) throw bad("Por ahora el horario debe estar en Excel (.xlsx o .xls).");
+        List<Employee> active = activeEmployees().stream().filter(employee -> employee.area().equals(area)).toList();
+        if (active.isEmpty()) throw bad("No hay personal activo del área " + areaLabel(area) + " en Personal.");
+        Map<String, List<Employee>> byName = new HashMap<>(), byRut = new HashMap<>();
+        for (Employee employee : active) {
+            byName.computeIfAbsent(normalizeName(employee.name()), ignored -> new ArrayList<>()).add(employee);
+            if (employee.rut() != null && !employee.rut().isBlank()) byRut.computeIfAbsent(normalizeRut(employee.rut()), ignored -> new ArrayList<>()).add(employee);
+        }
+        List<Map<String, Object>> shifts = new ArrayList<>();
+        DataFormatter formatter = new DataFormatter(Locale.ROOT);
+        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+            var evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+            for (Sheet sheet : workbook) {
+                int headerIndex = findHeaderRow(sheet, formatter, evaluator);
+                if (headerIndex < 0) continue;
+                Row header = sheet.getRow(headerIndex);
+                int nameCol = findColumn(header, formatter, evaluator, "NOMBRE", "TRABAJADOR", "EMPLEADO", "PERSONAL", "COLABORADOR");
+                int rutCol = findColumn(header, formatter, evaluator, "RUT", "RUN", "DOCUMENTO", "IDENTIFICACION");
+                int dateCol = findColumn(header, formatter, evaluator, "FECHA", "DIA", "DIA FECHA", "FECHA TURNO");
+                int shiftCol = findColumn(header, formatter, evaluator, "TURNO", "HORARIO", "JORNADA", "HORA");
+                int startCol = findColumn(header, formatter, evaluator, "ENTRADA", "HORA ENTRADA", "HORA DE ENTRADA", "INICIO", "HORA INICIO", "DESDE");
+                int endCol = findColumn(header, formatter, evaluator, "SALIDA", "HORA SALIDA", "HORA DE SALIDA", "TERMINO", "TÉRMINO", "HORA FIN", "HASTA");
+                Map<Integer, LocalDate> dateHeaders = new LinkedHashMap<>();
+                Map<Integer, Integer> weekdayHeaders = new LinkedHashMap<>();
+                for (Cell cell : header) {
+                    LocalDate date = dateValue(cell, formatter, evaluator);
+                    if (date != null) dateHeaders.put(cell.getColumnIndex(), date);
+                    int weekday = weekday(text(cell, formatter, evaluator));
+                    if (weekday > 0) weekdayHeaders.put(cell.getColumnIndex(), weekday);
+                }
+                if (nameCol < 0 && rutCol < 0) continue;
+                boolean matrix = !dateHeaders.isEmpty() || !weekdayHeaders.isEmpty();
+                Map<Integer, Integer> matrixColumns = new LinkedHashMap<>();
+                if (dateHeaders.isEmpty()) matrixColumns.putAll(weekdayHeaders);
+                else dateHeaders.forEach((column, date) -> matrixColumns.put(column, date.getDayOfWeek().getValue()));
+                if (!matrix && dateCol < 0) continue;
+                LocalDate from = requestedFrom, to = requestedTo;
+                if (!dateHeaders.isEmpty()) {
+                    LocalDate min = dateHeaders.values().stream().min(LocalDate::compareTo).orElseThrow();
+                    LocalDate max = dateHeaders.values().stream().max(LocalDate::compareTo).orElseThrow();
+                    if (from == null) from = min;
+                    if (to == null) to = max;
+                }
+                if (matrix && dateHeaders.isEmpty() && (from == null || to == null)) throw bad("Esta planilla usa columnas por día de la semana. Indica desde cuándo y hasta cuándo rige para repetir esos días.");
+                int firstData = headerIndex + 1;
+                for (int r = firstData; r <= sheet.getLastRowNum(); r++) {
+                    Row row = sheet.getRow(r); if (row == null) continue;
+                    String name = nameCol < 0 ? "" : text(row.getCell(nameCol), formatter, evaluator);
+                    String rut = rutCol < 0 ? "" : text(row.getCell(rutCol), formatter, evaluator);
+                    if (name.isBlank() && rut.isBlank()) continue;
+                    Employee employee = matchEmployee(name, rut, byName, byRut);
+                    if (matrix) {
+                        for (Map.Entry<Integer, Integer> column : matrixColumns.entrySet()) {
+                            int col = column.getKey();
+                            LocalDate date = dateHeaders.get(col);
+                            if (date == null) {
+                                if (column.getValue() < 1) continue;
+                                for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) if (d.getDayOfWeek().getValue() == column.getValue()) {
+                                    String shiftText = shiftText(row, -1, col, startCol, endCol, formatter, evaluator);
+                                    if (!shiftText.isBlank()) addPreviewShift(shifts, employee, name, rut, d, shiftText);
+                                }
+                            } else {
+                                String shiftText = shiftText(row, -1, col, startCol, endCol, formatter, evaluator);
+                                if (!shiftText.isBlank()) addPreviewShift(shifts, employee, name, rut, date, shiftText);
+                            }
+                        }
+                    } else {
+                        LocalDate date = dateValue(row.getCell(dateCol), formatter, evaluator);
+                        if (date == null) throw bad("Hoja " + sheet.getSheetName() + ", fila " + (r + 1) + ": no pude reconocer la fecha.");
+                        String shiftText = shiftText(row, shiftCol, shiftCol, startCol, endCol, formatter, evaluator);
+                        if (shiftText.isBlank()) continue;
+                        addPreviewShift(shifts, employee, name, rut, date, shiftText);
+                        if (from == null || date.isBefore(from)) from = date;
+                        if (to == null || date.isAfter(to)) to = date;
+                    }
+                }
+                if (from != null && to != null) { requestedFrom = from; requestedTo = to; }
+            }
+        } catch (ResponseStatusException ex) { throw ex; }
+        catch (Exception ex) { throw bad("No pude interpretar la planilla. Revisa que tenga encabezados de trabajador y columnas de días o fecha/turno."); }
+        if (shifts.isEmpty()) throw bad("No encontré turnos. La planilla debe incluir trabajador, día/fecha y horario (o LIBRE).");
+        LocalDate from = requestedFrom, to = requestedTo;
+        if (from == null) from = shifts.stream().map(row -> LocalDate.parse((String) row.get("fecha"))).min(LocalDate::compareTo).orElseThrow();
+        if (to == null) to = shifts.stream().map(row -> LocalDate.parse((String) row.get("fecha"))).max(LocalDate::compareTo).orElseThrow();
+        validateRange(from, to);
+        for (Map<String, Object> shift : shifts) {
+            LocalDate date = LocalDate.parse((String) shift.get("fecha"));
+            if (date.isBefore(from) || date.isAfter(to)) throw bad("Hay turnos fuera del período seleccionado.");
+        }
+        return Map.of("area", area, "vigenteDesde", from.toString(), "vigenteHasta", to.toString(), "turnos", shifts,
+                "personas", shifts.stream().map(row -> String.valueOf(row.get("trabajador"))).distinct().count());
+    }
+
+    @Transactional
+    public Map<String, Object> confirmPreview(Map<String, Object> request, long importedBy) {
+        requireSchema();
+        String area = normalizeAreaRequired(String.valueOf(request.getOrDefault("area", "")));
+        LocalDate from = LocalDate.parse(String.valueOf(request.get("vigenteDesde")));
+        LocalDate to = LocalDate.parse(String.valueOf(request.get("vigenteHasta")));
+        validateRange(from, to);
+        Object rawRows = request.get("turnos");
+        if (!(rawRows instanceof List<?> rows) || rows.isEmpty()) throw bad("La vista previa no contiene turnos.");
+        Map<Long, Employee> active = new HashMap<>();
+        activeEmployees().stream().filter(employee -> employee.area().equals(area)).forEach(employee -> active.put(employee.id(), employee));
+        List<ShiftRow> imports = new ArrayList<>(); Set<String> unique = new HashSet<>();
+        for (Object item : rows) {
+            if (!(item instanceof Map<?, ?> row)) throw bad("La vista previa contiene una fila no válida.");
+            Object employeeValue = row.get("empleadoId");
+            if (employeeValue == null || String.valueOf(employeeValue).isBlank()) throw bad("Asigna un trabajador a cada turno antes de guardar.");
+            long employeeId;
+            try { employeeId = Long.parseLong(String.valueOf(employeeValue)); }
+            catch (NumberFormatException ex) { throw bad("La selección de trabajador no es válida."); }
+            Employee employee = active.get(employeeId);
+            if (employee == null) throw bad("Cada turno debe estar asignado a un trabajador activo del área seleccionada.");
+            LocalDate date = LocalDate.parse(String.valueOf(row.get("fecha")));
+            if (date.isBefore(from) || date.isAfter(to)) throw bad("Hay turnos fuera de la vigencia indicada.");
+            int index = (int) ChronoUnit.DAYS.between(from, date) + 1;
+            String shift = String.valueOf(row.containsKey("estado") ? row.get("estado") : "TRABAJA");
+            boolean off = "LIBRE".equalsIgnoreCase(shift);
+            LocalTime start = off ? null : parseClock(String.valueOf(row.get("entrada")));
+            LocalTime end = off ? null : parseClock(String.valueOf(row.get("salida")));
+            if (!off && start.equals(end)) throw bad("La entrada y salida de " + employee.name() + " son iguales.");
+            double hours = off ? 0 : (ChronoUnit.MINUTES.between(start, end) + (end.isBefore(start) ? 1440 : 0)) / 60.0;
+            if (!unique.add(employeeId + "|" + index)) throw bad("La vista previa repite una fecha para " + employee.name() + ".");
+            imports.add(new ShiftRow(employee, area, index, 1, start, end, off ? "LIBRE" : "TRABAJA", hours));
+        }
+        if (imports.stream().anyMatch(row -> row.employee().rut() == null || row.employee().rut().isBlank()) && !rutSnapshotAllowsNull())
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Para cargar personal sin RUT, ejecuta también la migración 13_rut_opcional_horarios.sql en Oracle.");
+        jdbc.update("DELETE FROM APP_ASISTENCIA_PLANILLA WHERE AREA=? AND VIGENTE_DESDE>=? AND VIGENTE_DESDE<=?", area, java.sql.Date.valueOf(from), java.sql.Date.valueOf(to));
+        jdbc.update("UPDATE APP_ASISTENCIA_PLANILLA SET VIGENTE_HASTA=? WHERE AREA=? AND VIGENTE_DESDE<? AND VIGENTE_HASTA>=?", java.sql.Date.valueOf(from.minusDays(1)), area, java.sql.Date.valueOf(from), java.sql.Date.valueOf(from));
+        KeyHolder key = new GeneratedKeyHolder(); int cycleDays = (int) ChronoUnit.DAYS.between(from, to) + 1;
+        jdbc.update(connection -> { var ps = connection.prepareStatement("INSERT INTO APP_ASISTENCIA_PLANILLA(AREA,VIGENTE_DESDE,VIGENTE_HASTA,CREADO_POR,TIPO_CICLO,CICLO_DIAS) VALUES(?,?,?,?,?,?)", new String[]{"ID_PLANILLA"});
+            ps.setString(1, area); ps.setDate(2, java.sql.Date.valueOf(from)); ps.setDate(3, java.sql.Date.valueOf(to)); ps.setLong(4, importedBy); ps.setString(5, "CALENDARIO_FECHAS"); ps.setInt(6, cycleDays); return ps; }, key);
+        if (key.getKey() == null) throw new IllegalStateException("No se pudo crear la versión de horario.");
+        long planId = key.getKey().longValue();
+        for (ShiftRow row : imports) jdbc.update("INSERT INTO APP_ASISTENCIA_HORARIO(ID_PLANILLA,EMPLEADO_ID,RUT_SNAPSHOT,NOMBRE_SNAPSHOT,SEMANA_CICLO,DIA_SEMANA,HORA_INICIO,HORA_FIN,ESTADO_DIA,HORAS_PROGRAMADAS) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                planId, row.employee().id(), row.employee().rut(), row.employee().name(), row.week(), 1,
+                row.start() == null ? null : row.start().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                row.end() == null ? null : row.end().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")), row.state(), row.hours());
+        return Map.of("vigenteDesde", from.toString(), "vigenteHasta", to.toString(), "personas", imports.stream().map(row -> row.employee().id()).distinct().count(), "turnos", imports.size());
+    }
+
+    private static void validateRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) throw bad("Indica un período de vigencia válido.");
+        long days = ChronoUnit.DAYS.between(from, to) + 1;
+        if (days > 366) throw bad("El período puede abarcar hasta 366 días por carga.");
+    }
+    private static int findHeaderRow(Sheet sheet, DataFormatter formatter, org.apache.poi.ss.usermodel.FormulaEvaluator evaluator) {
+        for (int r = sheet.getFirstRowNum(); r <= Math.min(sheet.getLastRowNum(), 20); r++) {
+            Row row = sheet.getRow(r); if (row == null) continue;
+            boolean employee = findColumn(row, formatter, evaluator, "NOMBRE", "TRABAJADOR", "EMPLEADO", "PERSONAL", "COLABORADOR", "RUT", "RUN") >= 0;
+            if (employee) return r;
+        }
+        return -1;
+    }
+    private static int findColumn(Row row, DataFormatter formatter, org.apache.poi.ss.usermodel.FormulaEvaluator evaluator, String... aliases) {
+        if (row == null) return -1;
+        Set<String> expected = new HashSet<>(); for (String alias : aliases) expected.add(normalizeName(alias));
+        for (Cell cell : row) {
+            String label = normalizeName(text(cell, formatter, evaluator));
+            if (expected.contains(label) || expected.stream().anyMatch(alias -> label.startsWith(alias + " ") || label.startsWith(alias + "/") || label.startsWith(alias + " ("))) return cell.getColumnIndex();
+        }
+        return -1;
+    }
+    private static int weekday(String value) {
+        String day = normalizeName(value);
+        if (day.startsWith("LUNES") || day.equals("LUN")) return 1;
+        if (day.startsWith("MARTES") || day.equals("MAR")) return 2;
+        if (day.startsWith("MIERCOLES") || day.equals("MIE")) return 3;
+        if (day.startsWith("JUEVES") || day.equals("JUE")) return 4;
+        if (day.startsWith("VIERNES") || day.equals("VIE")) return 5;
+        if (day.startsWith("SABADO") || day.equals("SAB")) return 6;
+        if (day.startsWith("DOMINGO") || day.equals("DOM")) return 7;
+        return 0;
+    }
+    private static LocalDate parseDate(String value) {
+        if (value == null || value.isBlank()) return null;
+        String text = value.trim();
+        try { return LocalDate.parse(text); } catch (Exception ignored) { }
+        for (java.time.format.DateTimeFormatter f : List.of(java.time.format.DateTimeFormatter.ofPattern("d/M/uuuu"), java.time.format.DateTimeFormatter.ofPattern("d-M-uuuu"), java.time.format.DateTimeFormatter.ofPattern("d/M/uu")))
+            try { return LocalDate.parse(text, f); } catch (Exception ignored) { }
+        for (Locale locale : List.of(Locale.forLanguageTag("es-CL"), Locale.ENGLISH))
+            try { return LocalDate.parse(text, java.time.format.DateTimeFormatter.ofPattern("d-MMM-uuuu", locale)); } catch (Exception ignored) { }
+        return null;
+    }
+    private static LocalDate dateValue(Cell cell, DataFormatter formatter, org.apache.poi.ss.usermodel.FormulaEvaluator evaluator) {
+        if (cell != null && cell.getCellType() == org.apache.poi.ss.usermodel.CellType.NUMERIC && org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell))
+            return cell.getLocalDateTimeCellValue().toLocalDate();
+        return parseDate(text(cell, formatter, evaluator));
+    }
+    private static String shiftText(Row row, int shiftColumn, int matrixColumn, int startColumn, int endColumn, DataFormatter formatter, org.apache.poi.ss.usermodel.FormulaEvaluator evaluator) {
+        if (startColumn >= 0 && endColumn >= 0) {
+            String start = text(row.getCell(startColumn), formatter, evaluator), end = text(row.getCell(endColumn), formatter, evaluator);
+            if (!start.isBlank() && !end.isBlank()) return start + "-" + end;
+        }
+        int col = shiftColumn >= 0 ? shiftColumn : matrixColumn;
+        return col < 0 ? "" : text(row.getCell(col), formatter, evaluator);
+    }
+    private void addPreviewShift(List<Map<String, Object>> shifts, Employee employee, String name, String rut, LocalDate date, String rawShift) {
+        String normalized = normalizeName(rawShift);
+        Map<String, Object> item = new LinkedHashMap<>(); item.put("trabajador", employee == null ? name : employee.name()); item.put("rut", employee == null ? rut : employee.rut());
+        item.put("empleadoId", employee == null ? null : employee.id()); item.put("fecha", date.toString());
+        if (normalized.equals("LIBRE") || normalized.equals("DESCANSO") || normalized.equals("L") || normalized.equals("OFF")) { item.put("estado", "LIBRE"); item.put("entrada", ""); item.put("salida", ""); item.put("horas", 0); }
+        else {
+            Matcher matcher = SHIFT.matcher(rawShift.trim());
+            if (!matcher.matches()) throw bad("No reconocí el turno de " + (name.isBlank() ? rut : name) + " el " + date + ". Usa 09:00-17:00 o LIBRE.");
+            LocalTime start = parseClock(matcher.group(1) + ":" + matcher.group(2)), end = parseClock(matcher.group(3) + ":" + matcher.group(4));
+            if (start.equals(end)) throw bad("La entrada y salida no pueden ser iguales (" + (name.isBlank() ? rut : name) + ", " + date + ").");
+            double hours = (ChronoUnit.MINUTES.between(start, end) + (end.isBefore(start) ? 1440 : 0)) / 60.0;
+            item.put("estado", "TRABAJA"); item.put("entrada", start.toString()); item.put("salida", end.toString()); item.put("horas", hours);
+        }
+        shifts.add(item);
+    }
+    private static Employee matchEmployee(String name, String rut, Map<String, List<Employee>> byName, Map<String, List<Employee>> byRut) {
+        List<Employee> matches = rut.isBlank() ? List.of() : byRut.getOrDefault(normalizeRut(rut), List.of());
+        if (matches.isEmpty()) matches = byName.getOrDefault(normalizeName(name), List.of());
+        return matches.size() == 1 ? matches.get(0) : null;
+    }
+    private static String normalizeRut(String value) { return normalizeName(value).replaceAll("[^0-9K]", ""); }
 
     @Transactional
     public Map<String, Object> importWorkbook(MultipartFile file, String format, LocalDate startsOn, String selectedArea, long importedBy) throws IOException {
@@ -283,6 +509,7 @@ public class AttendanceScheduleService {
             actualByPersonDay.put(k, row);
         }
         LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Santiago"));
+        LocalTime now = LocalTime.now(java.time.ZoneId.of("America/Santiago"));
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
             int day = date.getDayOfWeek().getValue();
             for (ScheduleRow plan : plans.values()) {
@@ -297,7 +524,7 @@ public class AttendanceScheduleService {
                     row.put("nombre", plan.name()); row.put("rut", plan.rut()); row.put("fecha", date.toString());
                     row.put("entrada", ""); row.put("salida", ""); row.put("horasTrabajadas", "—");
                     row.put("entradaFoto", false); row.put("salidaFoto", false);
-                    String status = "LIBRE".equals(shift.state()) ? "LIBRE" : date.isAfter(today) ? "PROGRAMADO" : "SIN MARCA";
+                    String status = "LIBRE".equals(shift.state()) ? "LIBRE" : missingShiftStatus(date, today, now, shift);
                     row.put("estadoHorario", status);
                     attendanceRows.add(row); actualByPersonDay.put(plan.employeeId() + "|" + date, row);
                 }
@@ -306,7 +533,7 @@ public class AttendanceScheduleService {
                 row.put("horasProgramadas", shift.hours());
                 String actualEntry = safe(row.get("entrada")), actualExit = safe(row.get("salida"));
                 if ("LIBRE".equals(shift.state())) row.put("estadoHorario", actualEntry.isBlank() && actualExit.isBlank() ? "LIBRE" : "MARCA EN DÍA LIBRE");
-                else if (actualEntry.isBlank()) row.put("estadoHorario", date.isAfter(today) ? "PROGRAMADO" : "SIN MARCA");
+                else if (actualEntry.isBlank()) row.put("estadoHorario", missingShiftStatus(date, today, now, shift));
                 else {
                     int delta = minutes(actualEntry) - minutes(shift.start());
                     row.put("minutosEntrada", delta);
@@ -405,6 +632,16 @@ public class AttendanceScheduleService {
         catch (NumberFormatException ex) { throw bad("El total semanal debe ser un número calculado por la plantilla."); }
     }
     private static int minutes(String value) { try { LocalTime time = LocalTime.parse(value); return time.getHour() * 60 + time.getMinute(); } catch (Exception ex) { return 0; } }
+    private static String missingShiftStatus(LocalDate date, LocalDate today, LocalTime now, ScheduleRow shift) {
+        if (date.isAfter(today)) return "PROGRAMADO";
+        if (date.isBefore(today)) return "AUSENTE · SIN MARCA";
+        int nowMinutes = now.getHour() * 60 + now.getMinute();
+        int start = minutes(shift.start()), end = minutes(shift.end());
+        if (end < start) end += 24 * 60;
+        if (nowMinutes < start) return "PROGRAMADO";
+        if (nowMinutes <= end) return "EN TURNO · SIN MARCA";
+        return "AUSENTE · SIN MARCA";
+    }
     private static String safe(Object value) { return value == null ? "" : String.valueOf(value); }
     private static String key(long employeeId, String area, int week, int day) { return employeeId + "|" + area + "|" + week + "|" + day; }
     private static int storedCycleIndex(ScheduleRow row) { return row.week() <= 2 && row.day() > 1 ? (row.week() - 1) * 7 + row.day() : row.week(); }

@@ -2126,6 +2126,10 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .attendance-schedule-help p { max-width: 900px; margin: 8px 0 0; }
 .attendance-schedule-file { min-width: 240px; max-width: min(420px, 80vw); padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; }
 .attendance-schedule-admin .attendance-radius-label { min-width: 220px; }
+.attendance-schedule-preview { display: grid; gap: 10px; margin-top: 16px; }
+.attendance-schedule-preview h5, .attendance-schedule-preview p { margin: 0; }
+.attendance-schedule-preview table { min-width: 760px; }
+.attendance-schedule-preview select { min-width: 190px; max-width: 260px; }
 .attendance-qr-admin h4, .attendance-qr-help, .attendance-location-status, .attendance-qr-expiry { margin: 0; }
 .attendance-qr-admin h4 { color: #0c4a6e; }
 .attendance-qr-help, .attendance-location-status, .attendance-qr-expiry { color: #475569; font-size: 14px; }
