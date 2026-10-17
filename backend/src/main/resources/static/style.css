@@ -2224,7 +2224,8 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .schedule-cycle-hint { margin:10px 0; padding:11px 14px; border-left:4px solid #0e9aa7; border-radius:8px; background:#ecfeff; color:#155e75; font-size:.9rem; }
 .schedule-cycle-hint[hidden] { display:none; }
 .personal-schedule .schedule-cycle-week td { padding:11px 16px; border-top:1px solid #dbeafe; background:#eff6ff; color:#1e40af; }
-.schedule-cycle-week strong { font-size:.9rem; }
+.schedule-cycle-week td { border-left:4px solid #0e9aa7; }
+.schedule-cycle-week strong { display:inline-block; font-size:.95rem; font-weight:850; letter-spacing:.045em; }
 .schedule-cycle-week span { margin-left:8px; color:#64748b; font-size:.82rem; font-weight:500; }
 .schedule-attendance-insights { margin-top:20px; padding:20px; border:1px solid #e2e8f0; border-radius:16px; background:linear-gradient(145deg,#fff,#f8fafc); }
 .schedule-insights-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }

@@ -234,7 +234,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
                     weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
                     const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
                     const weekRange = new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short", timeZone: "America/Santiago" });
-                    cycleCell.append(element("strong", "Semana " + cycleWeek), element("span", ` · lunes ${weekRange.format(weekStart)} a domingo ${weekRange.format(weekEnd)}`));
+                    cycleCell.append(element("strong", "SEMANA " + cycleWeek), element("span", ` · lunes ${weekRange.format(weekStart)} a domingo ${weekRange.format(weekEnd)}`));
                     cycleRow.append(cycleCell); body.append(cycleRow); lastCycleBlock = cycleBlock;
                 }
                 const isToday = day.fecha === todayIso();
