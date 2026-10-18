@@ -1349,7 +1349,7 @@ if (slug === "inventario") {
     inventoryGroupFilter.add(new Option("Cocina", "COCINA"));
     inventoryGroupFilter.add(new Option("Barra", "BARRA"));
     inventoryGroupFilter.add(
-        new Option("Pendientes de clasificar", "SIN_GRUPO")
+        new Option("Bodega", "SIN_GRUPO")
     );
 
     inventoryGroupFilter.addEventListener("change", () => {

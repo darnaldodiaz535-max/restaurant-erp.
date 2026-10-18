@@ -31,7 +31,7 @@ import jakarta.servlet.http.HttpSession;
 @RequestMapping("/api/inventario/importacion")
 public class InventoryImportController {
 
-    private static final int MAX_FILAS = 500;
+    private static final int MAX_FILAS = 2000;
     private static final long MAX_ARCHIVO = 10L * 1024L * 1024L;
 
     private static final List<String> COLUMNAS = List.of(
@@ -84,46 +84,32 @@ public class InventoryImportController {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "El Excel no contiene hojas."));
             }
-
-            Sheet sheet = workbook.getSheetAt(0);
-            Row encabezado = sheet.getRow(sheet.getFirstRowNum());
-
-            if (encabezado == null) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("error", "La primera hoja está vacía."));
-            }
-
             DataFormatter formatter = new DataFormatter(Locale.ROOT);
-            Map<String, Integer> posiciones = new HashMap<>();
-
-            for (int i = 0; i < encabezado.getLastCellNum(); i++) {
-                String nombre = normalizarEncabezado(
-                        formatter.formatCellValue(encabezado.getCell(i))
-                );
-                if (!nombre.isBlank()) {
-                    posiciones.put(nombre, i);
+            List<Sheet> hojas = new ArrayList<>();
+            List<HeaderInfo> encabezados = new ArrayList<>();
+            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+                Sheet sheet = workbook.getSheetAt(i);
+                if (sheet.getLastRowNum() < sheet.getFirstRowNum()) continue;
+                HeaderInfo header = detectarEncabezado(sheet, formatter);
+                if (header != null) {
+                    hojas.add(sheet);
+                    encabezados.add(header);
                 }
             }
-
-            boolean formatoCompleto = COLUMNAS.stream().allMatch(posiciones::containsKey);
-            boolean listaConEncabezado = posiciones.containsKey("INSUMO")
-                    || posiciones.containsKey("NOMBRE")
-                    || posiciones.containsKey("PRODUCTO")
-                    || posiciones.containsKey("INGREDIENTE");
-            int columnaNombre = posiciones.getOrDefault("INSUMO",
-                    posiciones.getOrDefault("NOMBRE",
-                            posiciones.getOrDefault("PRODUCTO", posiciones.getOrDefault("INGREDIENTE", 0))));
-            String grupoLista = texto(grupoSeleccionado).toUpperCase(Locale.ROOT);
-            if (!formatoCompleto && listaConEncabezado && posiciones.size() > 1) {
-                List<String> faltantes = COLUMNAS.stream()
-                        .filter(columna -> !posiciones.containsKey(columna))
-                        .toList();
-                return ResponseEntity.badRequest().body(Map.of(
-                        "error", "La planilla tiene encabezados incompletos. Usa la lista de una sola columna o completa los siete encabezados requeridos.",
-                        "columnasFaltantes", faltantes
-                ));
+            if (hojas.isEmpty()) {
+                Sheet sheet = java.util.stream.IntStream.range(0, workbook.getNumberOfSheets())
+                        .mapToObj(workbook::getSheetAt)
+                        .filter(candidate -> candidate.getLastRowNum() >= candidate.getFirstRowNum())
+                        .findFirst().orElse(null);
+                if (sheet == null) return ResponseEntity.badRequest().body(Map.of("error", "El Excel no contiene filas con datos."));
+                int nameColumn = inferirColumnaNombre(sheet, formatter);
+                hojas.add(sheet);
+                encabezados.add(new HeaderInfo(sheet.getFirstRowNum() - 1, Map.of(), nameColumn, false));
             }
-            if (!formatoCompleto && !grupoLista.equals("COCINA") && !grupoLista.equals("BARRA")) {
+
+            String grupoLista = texto(grupoSeleccionado).toUpperCase(Locale.ROOT);
+            boolean soloNombres = encabezados.stream().anyMatch(header -> !header.formatoCompleto());
+            if (soloNombres && !grupoLista.equals("COCINA") && !grupoLista.equals("BARRA")) {
                 return ResponseEntity.badRequest().body(Map.of(
                         "error", "Selecciona Cocina o Barra en el inventario antes de importar solo nombres."
                 ));
@@ -131,46 +117,47 @@ public class InventoryImportController {
 
             List<Map<String, Object>> filas = new ArrayList<>();
 
-            int primeraFilaDatos = formatoCompleto || listaConEncabezado
-                    ? sheet.getFirstRowNum() + 1
-                    : sheet.getFirstRowNum();
-            for (int i = primeraFilaDatos; i <= sheet.getLastRowNum(); i++) {
-                Row fila = sheet.getRow(i);
-                if (fila == null) continue;
+            for (int sheetIndex = 0; sheetIndex < hojas.size(); sheetIndex++) {
+                Sheet sheet = hojas.get(sheetIndex);
+                HeaderInfo header = encabezados.get(sheetIndex);
+                for (int i = header.row() + 1; i <= sheet.getLastRowNum(); i++) {
+                    Row fila = sheet.getRow(i);
+                    if (fila == null) continue;
 
-                Insumo insumo = formatoCompleto
-                        ? new Insumo(
-                                celda(fila, posiciones.get("INSUMO"), formatter),
-                                celda(fila, posiciones.get("CATEGORIA"), formatter),
-                                celda(fila, posiciones.get("STOCK_ACTUAL"), formatter),
-                                celda(fila, posiciones.get("UNIDAD"), formatter),
-                                celda(fila, posiciones.get("STOCK_MINIMO"), formatter),
-                                celda(fila, posiciones.get("STOCK_MAXIMO"), formatter),
-                                celda(fila, posiciones.get("GRUPO"), formatter))
-                        : new Insumo(
-                                celda(fila, columnaNombre, formatter),
-                                "Por clasificar", "0", "Unidad", "0", "", grupoLista);
+                    Insumo insumo = header.formatoCompleto()
+                            ? new Insumo(
+                                    celda(fila, header.columns().get("INSUMO"), formatter),
+                                    celda(fila, header.columns().get("CATEGORIA"), formatter),
+                                    celda(fila, header.columns().get("STOCK_ACTUAL"), formatter),
+                                    celda(fila, header.columns().get("UNIDAD"), formatter),
+                                    celda(fila, header.columns().get("STOCK_MINIMO"), formatter),
+                                    celda(fila, header.columns().get("STOCK_MAXIMO"), formatter),
+                                    celda(fila, header.columns().get("GRUPO"), formatter))
+                            : new Insumo(
+                                    celda(fila, header.nameColumn(), formatter),
+                                    "Por clasificar", "0", "Unidad", "0", "", grupoLista);
 
-                if (insumo.vacio()) continue;
+                    if (insumo.vacio() || esTextoDeEncabezado(insumo.insumo())) continue;
+                    if (filas.size() >= MAX_FILAS) {
+                        return ResponseEntity.badRequest()
+                                .body(Map.of("error", "Puedes importar hasta 2.000 insumos por archivo."));
+                    }
 
-                if (filas.size() >= MAX_FILAS) {
-                    return ResponseEntity.badRequest()
-                            .body(Map.of("error", "Puedes importar hasta 500 insumos."));
+                    List<String> errores = validar(insumo);
+                    Map<String, Object> resultado = new HashMap<>();
+                    resultado.put("fila", i + 1);
+                    resultado.put("hoja", sheet.getSheetName());
+                    resultado.put("insumo", insumo.insumo());
+                    resultado.put("categoria", insumo.categoria());
+                    resultado.put("stockActual", insumo.stockActual());
+                    resultado.put("unidad", insumo.unidad());
+                    resultado.put("stockMinimo", insumo.stockMinimo());
+                    resultado.put("stockMaximo", insumo.stockMaximo());
+                    resultado.put("grupo", insumo.grupo());
+                    resultado.put("valida", errores.isEmpty());
+                    resultado.put("errores", errores);
+                    filas.add(resultado);
                 }
-
-                List<String> errores = validar(insumo);
-                Map<String, Object> resultado = new HashMap<>();
-                resultado.put("fila", i + 1);
-                resultado.put("insumo", insumo.insumo());
-                resultado.put("categoria", insumo.categoria());
-                resultado.put("stockActual", insumo.stockActual());
-                resultado.put("unidad", insumo.unidad());
-                resultado.put("stockMinimo", insumo.stockMinimo());
-                resultado.put("stockMaximo", insumo.stockMaximo());
-                resultado.put("grupo", insumo.grupo());
-                resultado.put("valida", errores.isEmpty());
-                resultado.put("errores", errores);
-                filas.add(resultado);
             }
 
             return ResponseEntity.ok(Map.of("total", filas.size(), "filas", filas));
@@ -200,7 +187,7 @@ public class InventoryImportController {
 
         if (request.filas().size() > MAX_FILAS) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Puedes importar hasta 500 insumos."));
+                    .body(Map.of("error", "Puedes importar hasta 2.000 insumos por archivo."));
         }
 
         List<String> errores = new ArrayList<>();
@@ -318,6 +305,74 @@ public class InventoryImportController {
         return formatter.formatCellValue(fila.getCell(columna)).trim();
     }
 
+    private static HeaderInfo detectarEncabezado(Sheet sheet, DataFormatter formatter) {
+        int lastHeaderRow = Math.min(sheet.getLastRowNum(), sheet.getFirstRowNum() + 20);
+        for (int rowIndex = sheet.getFirstRowNum(); rowIndex <= lastHeaderRow; rowIndex++) {
+            Row row = sheet.getRow(rowIndex);
+            if (row == null || row.getLastCellNum() < 1) continue;
+
+            Map<String, Integer> columns = new HashMap<>();
+            int nameColumn = -1;
+            for (int column = 0; column < row.getLastCellNum(); column++) {
+                String header = normalizarEncabezado(celda(row, column, formatter));
+                if (header.isBlank()) continue;
+                columns.putIfAbsent(header, column);
+                if (nameColumn < 0 && esColumnaNombre(header)) nameColumn = column;
+            }
+
+            boolean complete = COLUMNAS.stream().allMatch(columns::containsKey);
+            if (complete) return new HeaderInfo(rowIndex, columns, columns.get("INSUMO"), true);
+            if (nameColumn >= 0) return new HeaderInfo(rowIndex, columns, nameColumn, false);
+        }
+        return null;
+    }
+
+    private static int inferirColumnaNombre(Sheet sheet, DataFormatter formatter) {
+        int first = sheet.getFirstRowNum();
+        int last = Math.min(sheet.getLastRowNum(), first + 24);
+        Map<Integer, Integer> scores = new HashMap<>();
+        for (int rowIndex = first; rowIndex <= last; rowIndex++) {
+            Row row = sheet.getRow(rowIndex);
+            if (row == null) continue;
+            for (int column = 0; column < row.getLastCellNum(); column++) {
+                String value = celda(row, column, formatter);
+                if (value.isBlank() || esTextoDeEncabezado(value) || pareceNumero(value)) continue;
+                scores.merge(column, 1, Integer::sum);
+            }
+        }
+        return scores.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(0);
+    }
+
+    private static boolean esColumnaNombre(String header) {
+        return switch (header) {
+            case "INSUMO", "NOMBRE", "NOMBRE_INSUMO", "NOMBRE_DEL_INSUMO",
+                    "PRODUCTO", "NOMBRE_PRODUCTO", "NOMBRE_DEL_PRODUCTO",
+                    "INGREDIENTE", "INGREDIENTES", "MATERIA_PRIMA", "ARTICULO",
+                    "ITEM", "ITEM_NAME", "PRODUCT_NAME", "DESCRIPCION",
+                    "DESCRIPCION_PRODUCTO", "DESCRIPCION_DEL_PRODUCTO" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean esTextoDeEncabezado(String value) {
+        String header = normalizarEncabezado(value);
+        return esColumnaNombre(header) || COLUMNAS.contains(header)
+                || header.equals("TOTAL") || header.equals("SUBTOTAL")
+                || header.equals("OBSERVACIONES");
+    }
+
+    private static boolean pareceNumero(String value) {
+        try {
+            numero(value);
+            return true;
+        } catch (NumberFormatException error) {
+            return false;
+        }
+    }
+
     private static String normalizarEncabezado(String valor) {
         return Normalizer.normalize(valor, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}+", "")
@@ -331,6 +386,8 @@ public class InventoryImportController {
     }
 
     public record ImportRequest(List<Insumo> filas) {}
+
+    private record HeaderInfo(int row, Map<String, Integer> columns, int nameColumn, boolean formatoCompleto) {}
 
     public record Insumo(
             String insumo,
