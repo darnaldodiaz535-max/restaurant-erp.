@@ -1458,6 +1458,8 @@ record.values.forEach((value, columnIndex) => {
         return;
     }
 
+    td.classList.add("inventory-stock-cell");
+
     const cantidad = document.createElement("span");
     cantidad.className = "inventory-quantity";
 
@@ -1983,7 +1985,7 @@ document.getElementById("inventoryImportCsv")?.addEventListener("click", () => {
 document.getElementById("inventoryImportExcel")?.addEventListener("click", () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".xlsx,.xls";
+    input.accept = ".xlsx,.xls,.xlsm";
 
     input.addEventListener("change", async () => {
         const archivo = input.files?.[0];

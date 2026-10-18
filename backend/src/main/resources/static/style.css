@@ -1800,20 +1800,32 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 
 .module-screen--inventario .inventory-quantity {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: 42px minmax(76px, 1fr) 42px;
     align-items: center;
     gap: 6px;
-    min-width: 0;
+    min-width: 166px;
+}
+
+.module-screen--inventario .inventory-stock-cell {
+    min-width: 176px;
 }
 
 .module-screen--inventario .inventory-quantity input {
     width: 100%;
-    min-width: 0;
+    min-width: 76px;
+    min-height: 42px;
     box-sizing: border-box;
+    padding: 8px 4px;
+    text-align: center;
+    color: #172033;
+    background: #fff;
+    color-scheme: light;
 }
 
 .module-screen--inventario .inventory-quantity button {
-    min-width: 36px;
+    width: 42px;
+    min-width: 42px;
+    min-height: 42px;
     padding: 8px;
 }
 
