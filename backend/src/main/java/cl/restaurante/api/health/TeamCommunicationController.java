@@ -298,7 +298,7 @@ public class TeamCommunicationController {
         return jdbc.query("""
                 SELECT U.ID_USUARIO, E.NOMBRE, U.ROL
                   FROM APP_USUARIO U JOIN APP_EMPLEADO E ON E.ID_EMPLEADO=U.ID_EMPLEADO
-                 WHERE U.ACTIVO='S' AND UPPER(E.ESTADO)='ACTIVO' AND """ + clause + " ORDER BY E.NOMBRE",
+                 WHERE U.ACTIVO='S' AND UPPER(E.ESTADO)='ACTIVO' """ + " AND " + clause + " ORDER BY E.NOMBRE",
                 (rs, row) -> new Person(rs.getLong(1), rs.getString(2), rs.getString(3)), args);
     }
 
