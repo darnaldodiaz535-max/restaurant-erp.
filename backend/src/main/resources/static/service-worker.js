@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-horario-ciclo-semanas-visible-20261018-1';
+const CACHE_NAME='marigex-shell-horario-semana-ciclo-ancla-20261018-3';
 const DEVICE_CACHE='marigex-device';
 const IMAGE_ASSETS=['/images/santiago-costanera-loading.jpg','/images/marigex-login-restaurant.jpg'];
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];

@@ -153,11 +153,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
                 today = (todayResult.dias || [])[0];
             }
             todayScheduleForNotice = today;
-            const currentCycleWeek = Number(today?.semanaCiclo || 0);
-            if (currentCycleWeek) {
-                cycleCurrentWeek.replaceChildren(element("span", "CICLO VIGENTE", "schedule-cycle-eyebrow"), element("strong", "Esta semana estás en la Semana " + currentCycleWeek, "schedule-cycle-current-title"), element("span", "Al terminar la Semana 2, el ciclo vuelve a Semana 1.", "schedule-cycle-current-detail"));
-                cycleCurrentWeek.hidden = false;
-            }
+            cycleCurrentWeek.hidden = true;
             let attendanceReport = null;
             try {
                 attendanceReport = await apiRequest("/api/asistencia/reporte?periodo=mes&fecha=" + encodeURIComponent(todayIso()) + "&personal=true");
@@ -212,23 +208,40 @@ async function renderMyAttendanceSchedule(recordsSection) {
             };
             const isTwoWeekCycle = plan => String(plan?.tipoCiclo || "").toUpperCase() === "ROTACION_2_SEMANAS" || Number(plan?.diasCiclo) === 14;
             const twoWeekPlans = validity.filter(isTwoWeekCycle);
-            const fallbackCycleStart = twoWeekPlans[0]?.vigenteDesde || days[0]?.fecha || from;
+            // Una misma rotación puede llegar en varias vigencias consecutivas;
+            // conserva como ancla la primera vigencia consultada para no reiniciar en Semana 1.
+            const rotatingAreas = new Set(twoWeekPlans.map(plan => String(plan.area || "").trim().toLocaleUpperCase("es-CL")));
+            const cycleStartByArea = new Map();
+            validity.filter(plan => rotatingAreas.has(String(plan.area || "").trim().toLocaleUpperCase("es-CL"))).forEach(plan => {
+                const area = String(plan.area || "").trim().toLocaleUpperCase("es-CL");
+                const start = String(plan.vigenteDesde || "").slice(0, 10);
+                if (start && (!cycleStartByArea.has(area) || start < cycleStartByArea.get(area))) cycleStartByArea.set(area, start);
+            });
+            const fallbackCycleStart = [...cycleStartByArea.values()].sort()[0] || days[0]?.fecha || from;
             const mondayOf = value => {
                 const stamp = toUtcDay(value);
                 return stamp - ((new Date(stamp).getUTCDay() + 6) % 7) * 86400000;
             };
+            const cycleWeekFor = day => {
+                if (!twoWeekPlans.length) return Number(day?.semanaCiclo || 0);
+                const area = String(day?.area || "").trim().toLocaleUpperCase("es-CL");
+                const start = cycleStartByArea.get(area) || fallbackCycleStart;
+                const index = Math.max(0, Math.floor((mondayOf(day?.fecha) - mondayOf(start)) / (7 * 86400000)));
+                return (index % 2) + 1;
+            };
+            const currentCycleWeek = cycleWeekFor(today);
+            if (currentCycleWeek) {
+                cycleCurrentWeek.replaceChildren(element("span", "CICLO VIGENTE", "schedule-cycle-eyebrow"), element("strong", "Esta semana estás en la Semana " + currentCycleWeek, "schedule-cycle-current-title"), element("span", "Al terminar la Semana 2, el ciclo vuelve a Semana 1.", "schedule-cycle-current-detail"));
+                cycleCurrentWeek.hidden = false;
+            }
             let lastCycleBlock = null;
             [...days].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).forEach(day => {
                 const dayDate = String(day.fecha || "").slice(0, 10);
-                const activeCycle = twoWeekPlans.find(plan => {
-                    const start = String(plan.vigenteDesde || "").slice(0, 10);
-                    const end = String(plan.vigenteHasta || "").slice(0, 10);
-                    return dayDate >= start && dayDate <= end;
-                });
-                const cycleStart = String(activeCycle?.vigenteDesde || fallbackCycleStart).slice(0, 10);
-                const weekIndex = Math.max(0, Math.floor((mondayOf(dayDate) - mondayOf(cycleStart)) / (7 * 86400000)));
+                const dayArea = String(day.area || "").trim().toLocaleUpperCase("es-CL");
                 // Alterna explícitamente cada lunes: Semana 1, Semana 2, y vuelve a Semana 1.
-                const cycleWeek = twoWeekPlans.length ? (weekIndex % 2) + 1 : Number(day.semanaCiclo || 0);
+                const cycleWeek = cycleWeekFor(day);
+                const cycleStart = cycleStartByArea.get(dayArea) || fallbackCycleStart;
+                const weekIndex = Math.max(0, Math.floor((mondayOf(dayDate) - mondayOf(cycleStart)) / (7 * 86400000)));
                 const cycleNumber = Math.floor(weekIndex / 2);
                 const cycleBlock = cycleWeek ? `${cycleNumber}:${cycleWeek}` : "";
                 if (cycleWeek && cycleBlock !== lastCycleBlock) {
