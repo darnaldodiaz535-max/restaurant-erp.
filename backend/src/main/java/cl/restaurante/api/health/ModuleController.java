@@ -42,6 +42,7 @@ public class ModuleController {
 
     @GetMapping("/{module}")
     public List<Row> list(@PathVariable String module, HttpSession session, @RequestParam(required=false) String area) {
+        rejectDedicatedCommunicationModule(module);
         Def d = definition(module);
         access.requireModuleView(session, module);
         StringBuilder sql = new StringBuilder("SELECT T.").append(d.id).append(" AS RECORD_ID");
@@ -186,6 +187,14 @@ public class ModuleController {
     private String label(String module) { return switch(module) { case "turnos" -> "Horarios"; case "tareas-diarias" -> "Tareas diarias"; case "incidencias" -> "Incidencias"; case "compras" -> "Compras"; case "reservas" -> "Reservas"; default -> module; }; }
     private void rejectGenericAttendanceWrite(String module) {
         if ("asistencia".equalsIgnoreCase(module)) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Usa los botones Entrada y Salida para registrar asistencia.");
+        rejectDedicatedCommunicationModule(module);
+    }
+    private void rejectDedicatedCommunicationModule(String module) {
+        if (Set.of("reportes", "incidencias").contains(module.toLowerCase())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.GONE,
+                    "Este módulo ahora usa los flujos de Reportes diarios y Comunicación del equipo.");
+        }
     }
     private Long recipient(Def d,long id) {
         var ref=d.fields.stream().filter(f->f.kind==Kind.EMPLOYEE).findFirst().orElse(null);

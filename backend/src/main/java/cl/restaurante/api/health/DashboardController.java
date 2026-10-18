@@ -30,13 +30,13 @@ public class DashboardController {
         m.put("Producción", count("SELECT COUNT(*) FROM APP_PRODUCCION WHERE TRUNC(FECHA) = TRUNC(SYSDATE)"));
         m.put("Reservas", count("SELECT COUNT(*) FROM APP_RESERVA WHERE TRUNC(FECHA) = TRUNC(SYSDATE)"));
         m.put("Limpieza", count("SELECT COUNT(*) FROM APP_LIMPIEZA WHERE UPPER(ESTADO) NOT IN ('COMPLETADA','COMPLETADO','FINALIZADA','FINALIZADO')"));
-        m.put("Incidencias", count("SELECT COUNT(*) FROM APP_INCIDENCIA WHERE UPPER(ESTADO) NOT IN ('CERRADA','CERRADO','RESUELTA','RESUELTO')"));
+        m.put("Comunicación del equipo", count("SELECT COUNT(*) FROM APP_COMUNICACION WHERE DESTINATARIO_USUARIO=? AND UPPER(ESTADO) NOT IN ('CERRADA','RESPONDIDA')", user.id()));
         m.put("Compras", count("SELECT COUNT(*) FROM APP_COMPRA WHERE UPPER(ESTADO) NOT IN ('RECIBIDA','RECIBIDO','COMPLETADA','COMPLETADO')"));
         m.put("Mermas", count("SELECT COUNT(*) FROM APP_MERMA WHERE FECHA >= TRUNC(SYSDATE, 'IW')"));
         m.put("Control sanitario", count("SELECT COUNT(*) FROM APP_CONTROL_SANITARIO WHERE UPPER(ESTADO) NOT IN ('COMPLETADO','COMPLETADA','OK','CUMPLE')"));
-        m.put("Reportes", count("SELECT COUNT(*) FROM APP_REPORTE"));
+        m.put("Reportes", count("SELECT COUNT(*) FROM APP_REPORTE_DIARIO WHERE CREADO_EN >= SYSTIMESTAMP - INTERVAL '15' DAY"));
         return m;
     }
 
-    private long count(String sql) { return jdbc.queryForObject(sql, Long.class); }
+    private long count(String sql, Object... args) { return jdbc.queryForObject(sql, Long.class, args); }
 }

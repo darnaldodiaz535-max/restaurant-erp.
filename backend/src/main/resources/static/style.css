@@ -2025,6 +2025,27 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .checkin-tabs, .checkin-actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .checkin-tabs button, .checkin-actions button { min-height: 42px; padding: 9px 14px; border: 0; border-radius: 9px; background: #e8eefc; color: #1e3a8a; font: inherit; font-weight: 700; cursor: pointer; }
 .checkin-tabs .primary-button, .checkin-actions .primary-button { background: #2563eb; color: #fff; }
+.checkin-tabs button.active { background: var(--module-accent, #0e9daf); color: #fff; }
+.daily-reports-data, .team-communication-data { display: grid; gap: 16px; }
+.daily-report-retention, .communication-route-note { margin: 0; padding: 13px 15px; border: 1px solid #bae6fd; border-radius: 11px; background: #f0f9ff; color: #075985; line-height: 1.5; }
+.daily-report-form, .communication-send-form { display: grid; gap: 13px; padding: 18px; border: 1px solid #e2e8f0; border-radius: 13px; background: #f8fafc; }
+.daily-report-form label, .communication-send-form label { display: grid; gap: 7px; color: #334155; font-size: 14px; font-weight: 700; }
+.daily-report-form input, .daily-report-form select, .daily-report-form textarea, .communication-send-form input, .communication-send-form select, .communication-send-form textarea, .communication-inbox-controls select { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #1e293b; font: inherit; }
+.daily-report-form textarea, .communication-send-form textarea { resize: vertical; }
+.daily-report-list, .communication-message-list { display: grid; gap: 12px; }
+.daily-report-heading { margin: 5px 0 0; }
+.daily-report-card, .communication-message-card { display: grid; gap: 9px; padding: 17px; border: 1px solid #e2e8f0; border-radius: 13px; background: #fff; box-shadow: 0 2px 8px #0f172a08; }
+.daily-report-card h4, .communication-message-card h4 { margin: 0; color: #1e293b; font-size: 16px; }
+.daily-report-card p, .communication-message-card > p { margin: 0; color: #475569; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.daily-report-meta, .communication-message-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #64748b; font-size: 12px; }
+.daily-report-area, .communication-area, .communication-status { width: max-content; padding: 4px 9px; border-radius: 999px; background: #e0f2fe; color: #075985; font-size: 12px; font-weight: 800; }
+.communication-status { background: #f1f5f9; color: #475569; }
+.communication-message-meta { font-size: 12px; }
+.communication-inbox-controls { display: flex; align-items: center; gap: 10px; max-width: 360px; color: #475569; font-weight: 700; }
+.communication-inbox-controls select { flex: 1; }
+.communication-message-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.communication-message-actions button { padding: 8px 11px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; font: inherit; font-weight: 700; cursor: pointer; }
+.communication-message-actions button:hover { border-color: var(--module-accent); color: var(--module-accent); }
 .checkin-area-title { margin: 0; color: #1e3a8a; font-size: 20px; }
 .checkin-feedback { min-height: 1.2em; margin: 0; color: #b45309; }
 .checkin-roster, .checkin-day, .checkin-summary-card { display: grid; gap: 12px; padding: 18px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; }
@@ -2054,6 +2075,9 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .checkin-roster-row, .checkin-task, .checkin-admin-person { align-items: flex-start; flex-direction: column; }
     .checkin-roster-row > button, .checkin-task > button, .checkin-photo-button { width: 100%; min-height: 44px; }
     .checkin-trend-row { grid-template-columns: 95px minmax(50px, 1fr) 42px; gap: 7px; }
+    .daily-report-form, .communication-send-form { padding: 14px; }
+    .daily-report-meta, .communication-message-heading { align-items: flex-start; flex-direction: column; }
+    .communication-inbox-controls { align-items: stretch; flex-direction: column; }
 }
 /* NOTIFICACIONES - Botones de acciones */
 

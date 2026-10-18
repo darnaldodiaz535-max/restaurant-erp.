@@ -28,7 +28,6 @@ public class ActivityController {
             "INVENTARIO_BAJO",
             "TAREAS_PENDIENTES",
             "CONTROL_SANITARIO_PENDIENTE",
-            "INCIDENCIAS_PENDIENTES",
             "COMPRAS_PENDIENTES");
 
     private final JdbcTemplate jdbc;
@@ -74,10 +73,7 @@ public class ActivityController {
                 SELECT A.ID_ACTIVIDAD, A.USUARIO, A.MODULO, A.DETALLE
                 FROM APP_ACTIVIDAD A
                 WHERE A.OCULTA = 'N'
-                  AND (
-                        A.ACCION IN ('ENVIAR_TAREA', 'COMPLETAR_TAREA')
-                     OR (LOWER(A.MODULO) = 'incidencias' AND A.ACCION = 'CREAR')
-                  )
+                  AND A.ACCION IN ('ENVIAR_TAREA', 'COMPLETAR_TAREA')
                   AND NOT EXISTS (
                         SELECT 1
                         FROM APP_ALERTA_DESCARTADA D
@@ -94,11 +90,10 @@ public class ActivityController {
                         rs.getString("DETALLE")));
 
         for (EventAlert event : eventAlerts) {
-            boolean incident = "incidencias".equalsIgnoreCase(event.module());
             String key = "ACTIVIDAD_EVENTO_" + event.id();
             alerts.add(new Alert(
                     key,
-                    incident ? "Incidencias" : "Tareas diarias",
+                    "Tareas diarias",
                     "🔔",
                     1,
                     event.username() + ": " + event.detail()));
@@ -132,16 +127,6 @@ public class ActivityController {
                 "SELECT COUNT(*) FROM APP_CONTROL_SANITARIO "
                         + "WHERE UPPER(ESTADO) NOT IN "
                         + "('OK','CUMPLE','COMPLETADO','COMPLETADA','NORMAL')");
-
-        addCountAlert(
-                alerts,
-                "INCIDENCIAS_PENDIENTES",
-                "Incidencias",
-                "⚠️",
-                "incidencia(s) sin resolver",
-                "SELECT COUNT(*) FROM APP_INCIDENCIA "
-                        + "WHERE UPPER(ESTADO) NOT IN "
-                        + "('CERRADA','CERRADO','RESUELTA','RESUELTO')");
 
         addCountAlert(
                 alerts,

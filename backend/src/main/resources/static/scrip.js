@@ -57,7 +57,7 @@ const iconPaths = {
     "Recetas": '<path d="M6 3h12a2 2 0 0 1 2 2v16H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
     Reservas: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3"/>',
     Limpieza: '<path d="M4 20h16M7 16l2-8h6l2 8M10 8V4h4v4M12 2v2"/>',
-    Incidencias: '<path d="M10 3 2 18a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3L14 3a2 2 0 0 0-4 0Z"/><path d="M12 9v4M12 17h.01"/>',
+    "Comunicación del equipo": '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/>',
     Compras: '<path d="M3 3h2l2.4 12.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="10" cy="21" r="1"/><circle cx="18" cy="21" r="1"/>',
     Mermas: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3"/>',
     "Control sanitario": '<path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0Z"/><path d="M12 11v7"/>',
@@ -107,7 +107,13 @@ function canManageModule(key) {
     if (["personal", "turnos", "configuracion"].includes(key)) return isOwnerRole();
     return isOwnerRole() || isSalonRole() || (isKitchenRole() && kitchenModuleKeys.has(key));
 }
-function canSeeModule(key) { return Boolean(currentProfile); }
+function canSeeModule(key) {
+    if (!currentProfile) return false;
+    if (key === "reportes") {
+        return ["ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA"].includes(accessRole());
+    }
+    return true;
+}
 async function uploadRequest(url, formData) {
     const response = await fetch(url, { method: "POST", body: formData, credentials: "same-origin" });
     if (!response.ok) { const problem = await response.json().catch(() => ({})); throw new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`); }
@@ -454,6 +460,8 @@ function showScreen(link) {
     else if (label === "Cierre de turno") renderCloseShiftPlaceholder();
     else if (label === "Recetas") renderRecipesPlaceholder();
     else if (label === "Asistencia") void renderAttendanceModule();
+    else if (label === "Reportes") void renderDailyReportsModule();
+    else if (label === "Comunicación del equipo") void renderTeamCommunicationModule();
     else if (["Cocina", "Salón", "Barra", "Copería"].includes(label)) void renderArea(normalizeArea(label));
     else void renderModule(label);
     activateNav(link);
@@ -478,11 +486,227 @@ function renderRecipesPlaceholder() {
     otherModule.append(section);
 }
 
+function communicationAreaLabel(area) {
+    return ({ SALON: "Salón", COCINA: "Cocina", BARRA: "Barra", COPERIA: "Copería", GENERAL: "General" })[area] || area;
+}
+
+function communicationStatusLabel(status) {
+    return ({ NUEVA: "Nueva", EN_REVISION: "En revisión", RESPONDIDA: "Respondida", CERRADA: "Cerrada" })[status] || status;
+}
+
+function renderDailyReportsModule() {
+    const revision = ++screenRevision;
+    dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
+    otherModule.replaceChildren();
+    otherModule.className = "module-screen module-screen--daily-reports";
+    otherModule.style.setProperty("--module-accent", "#7c3aed");
+    const title = checkinHeader("Reportes diarios", "Registro breve de lo ocurrido en Salón, Cocina o Barra.");
+    const section = checkinNode("section", "generic-data daily-reports-data");
+    const notice = checkinNode("p", "daily-report-retention", "⚠️ Los reportes diarios se conservan durante 15 días y luego se eliminan automáticamente.");
+    const form = checkinNode("form", "daily-report-form");
+    const role = accessRole();
+    const admin = ["ADMIN", "EMPRESA"].includes(role);
+    if (admin) {
+        const areaLabel = checkinNode("label", "", "Área del reporte");
+        const area = checkinNode("select", "daily-report-area");
+        [["", "Selecciona un área"], ["SALON", "Salón"], ["COCINA", "Cocina"], ["BARRA", "Barra"]]
+            .forEach(([value, label]) => area.add(new Option(label, value)));
+        area.required = true;
+        areaLabel.appendChild(area); form.appendChild(areaLabel);
+    }
+    const titleLabel = checkinNode("label", "", "Título");
+    const titleInput = checkinNode("input"); titleInput.type = "text"; titleInput.maxLength = 160; titleInput.required = true; titleInput.placeholder = "Ej.: Novedades del turno";
+    titleLabel.appendChild(titleInput);
+    const detailLabel = checkinNode("label", "", "Detalle del reporte");
+    const detailInput = checkinNode("textarea"); detailInput.rows = 5; detailInput.maxLength = 4000; detailInput.required = true; detailInput.placeholder = "Resume lo ocurrido, pendientes y datos que debe conocer el equipo.";
+    detailLabel.appendChild(detailInput);
+    const submit = checkinButton("Guardar reporte diario", null, "primary-button"); submit.type = "submit";
+    form.append(titleLabel, detailLabel, submit);
+    const history = checkinNode("div", "daily-report-list");
+    section.append(notice, form, checkinNode("h3", "daily-report-heading", "Reportes de los últimos 15 días"), history);
+    otherModule.append(title, section);
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault(); submit.disabled = true;
+        try {
+            await apiRequest("/api/comunicacion/reportes", { method: "POST", body: JSON.stringify({
+                area: admin ? form.querySelector("select")?.value : "",
+                titulo: titleInput.value, detalle: detailInput.value
+            }) });
+            titleInput.value = ""; detailInput.value = "";
+            await loadReports();
+        } catch (error) { window.alert(`No se pudo guardar el reporte: ${error.message}`); }
+        finally { submit.disabled = false; }
+    });
+    async function loadReports() {
+        history.replaceChildren(checkinNode("p", "empty-state", "Cargando reportes…"));
+        try {
+            const reports = await apiRequest("/api/comunicacion/reportes");
+            if (revision !== screenRevision) return;
+            history.replaceChildren();
+            if (!reports.length) { history.appendChild(checkinNode("p", "empty-state", "Todavía no hay reportes dentro de los últimos 15 días.")); return; }
+            reports.forEach((report) => {
+                const card = checkinNode("article", "daily-report-card");
+                const meta = checkinNode("div", "daily-report-meta");
+                meta.append(checkinNode("span", "daily-report-area", communicationAreaLabel(report.area)),
+                    checkinNode("time", "", `${report.fecha} · ${report.autor}`));
+                card.append(meta, checkinNode("h4", "", report.titulo), checkinNode("p", "", report.detalle));
+                history.appendChild(card);
+            });
+        } catch (error) { history.replaceChildren(checkinNode("p", "error-message", `No se pudieron cargar los reportes: ${error.message}`)); }
+    }
+    void loadReports();
+}
+
+async function renderTeamCommunicationModule() {
+    const revision = ++screenRevision;
+    dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
+    otherModule.replaceChildren();
+    otherModule.className = "module-screen module-screen--team-communication";
+    otherModule.style.setProperty("--module-accent", "#0f9ba8");
+    otherModule.appendChild(checkinHeader("Comunicación del equipo", "Envía inquietudes a la jefatura de tu área y revisa los mensajes que recibes."));
+    const section = checkinNode("section", "generic-data team-communication-data");
+    section.appendChild(checkinNode("p", "communication-route-note", "Los trabajadores escriben a la jefatura de su área. Las jefaturas elevan los mensajes a Administración."));
+    const tabs = checkinNode("div", "checkin-tabs");
+    const body = checkinNode("div", "communication-panel");
+    section.append(tabs, body); otherModule.appendChild(section);
+    let capabilities;
+    try { capabilities = await apiRequest("/api/comunicacion/destinatarios"); }
+    catch (error) { body.appendChild(checkinNode("p", "error-message", `No se pudo abrir Comunicación del equipo: ${error.message}`)); return; }
+    if (revision !== screenRevision) return;
+    if (!capabilities.puedeEnviarInquietud && !["ADMIN", "EMPRESA"].includes(accessRole())) {
+        section.insertBefore(checkinNode("p", "communication-route-note", "No hay una jefatura activa asignada a tu área para recibir mensajes. Pide a Administración que revise los accesos."), tabs);
+    }
+
+    function activateTab(label, render) {
+        tabs.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.textContent === label));
+        body.replaceChildren(); void render();
+    }
+    if (capabilities.puedeEnviarInquietud) {
+        tabs.appendChild(checkinButton("Enviar inquietud", () => activateTab("Enviar inquietud", renderSendForm), "primary-button"));
+    }
+    tabs.appendChild(checkinButton("Mensajes", () => activateTab("Mensajes", renderInbox)));
+    if (capabilities.puedeEvaluar) {
+        tabs.appendChild(checkinButton("Evaluar jefatura", () => activateTab("Evaluar jefatura", renderEvaluation)));
+    } else if (["ADMIN", "EMPRESA"].includes(accessRole())) {
+        tabs.appendChild(checkinButton("Resumen de evaluaciones", () => activateTab("Resumen de evaluaciones", renderEvaluationSummary)));
+    }
+    if (capabilities.puedeEnviarInquietud) activateTab("Enviar inquietud", renderSendForm);
+    else activateTab("Mensajes", renderInbox);
+
+    function renderSendForm() {
+        const form = checkinNode("form", "communication-send-form");
+        const recipientsLabel = checkinNode("label", "", "Enviar a");
+        const recipient = checkinNode("select"); recipient.required = true;
+        recipient.add(new Option("Selecciona una persona", ""));
+        capabilities.destinatarios.forEach((person) => recipient.add(new Option(`${person.name} · ${person.role.replaceAll("_", " ")}`, String(person.id))));
+        recipientsLabel.appendChild(recipient);
+        const typeLabel = checkinNode("label", "", "Tipo");
+        const type = checkinNode("select");
+        [["INQUIETUD", "Inquietud"], ["QUEJA", "Queja"], ["SUGERENCIA", "Sugerencia"], ["SITUACION", "Situación"]].forEach(([value, label]) => type.add(new Option(label, value)));
+        typeLabel.appendChild(type);
+        const subjectLabel = checkinNode("label", "", "Asunto");
+        const subject = checkinNode("input"); subject.type = "text"; subject.maxLength = 160; subject.required = true; subjectLabel.appendChild(subject);
+        const messageLabel = checkinNode("label", "", "Mensaje");
+        const message = checkinNode("textarea"); message.rows = 5; message.maxLength = 3000; message.required = true; messageLabel.appendChild(message);
+        const submit = checkinButton("Enviar mensaje", null, "primary-button"); submit.type = "submit";
+        form.append(recipientsLabel, typeLabel, subjectLabel, messageLabel, submit); body.appendChild(form);
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault(); submit.disabled = true;
+            try {
+                await apiRequest("/api/comunicacion/inquietudes", { method: "POST", body: JSON.stringify({
+                    destinatarioUsuario: Number(recipient.value), categoria: type.value,
+                    asunto: subject.value, mensaje: message.value
+                }) });
+                window.alert("El mensaje se envió correctamente.");
+                activateTab("Mensajes", renderInbox);
+            } catch (error) { window.alert(`No se pudo enviar: ${error.message}`); }
+            finally { submit.disabled = false; }
+        });
+    }
+
+    async function renderInbox() {
+        const controls = checkinNode("div", "communication-inbox-controls");
+        const filter = checkinNode("select");
+        [["todas", "Enviados y recibidos"], ["recibidas", "Recibidos"], ["enviadas", "Enviados"]].forEach(([value, label]) => filter.add(new Option(label, value)));
+        controls.append(checkinNode("label", "", "Ver: "), filter); body.appendChild(controls);
+        const list = checkinNode("div", "communication-message-list"); body.appendChild(list);
+        const load = async () => {
+            list.replaceChildren(checkinNode("p", "empty-state", "Cargando mensajes…"));
+            try {
+                const messages = await apiRequest(`/api/comunicacion/inquietudes?vista=${encodeURIComponent(filter.value)}`);
+                if (revision !== screenRevision) return;
+                list.replaceChildren();
+                if (!messages.length) { list.appendChild(checkinNode("p", "empty-state", "No hay mensajes para mostrar.")); return; }
+                messages.forEach((message) => {
+                    const card = checkinNode("article", "communication-message-card");
+                    const heading = checkinNode("div", "communication-message-heading");
+                    const who = message.enviadoPorMi ? `Para: ${message.destinatario}` : `De: ${message.autor}`;
+                    heading.append(checkinNode("span", "communication-area", communicationAreaLabel(message.area)), checkinNode("span", "communication-status", communicationStatusLabel(message.estado)));
+                    card.append(heading, checkinNode("h4", "", message.asunto), checkinNode("p", "communication-message-meta", `${message.categoria} · ${who} · ${message.creadoEn.replace("T", " ")}`), checkinNode("p", "", message.mensaje));
+                    if (message.recibidoPorMi && message.estado !== "CERRADA") {
+                        const actions = checkinNode("div", "communication-message-actions");
+                        [["EN_REVISION", "Marcar en revisión"], ["RESPONDIDA", "Marcar respondida"], ["CERRADA", "Cerrar"]]
+                            .filter(([state]) => state !== message.estado)
+                            .forEach(([state, label]) => actions.appendChild(checkinButton(label, async () => {
+                                try { await apiRequest(`/api/comunicacion/inquietudes/${message.id}/estado`, { method: "PUT", body: JSON.stringify({ estado: state }) }); await load(); }
+                                catch (error) { window.alert(`No se pudo actualizar: ${error.message}`); }
+                            })));
+                        card.appendChild(actions);
+                    }
+                    list.appendChild(card);
+                });
+            } catch (error) { list.replaceChildren(checkinNode("p", "error-message", `No se pudieron cargar los mensajes: ${error.message}`)); }
+        };
+        filter.addEventListener("change", () => void load()); void load();
+    }
+
+    function renderEvaluation() {
+        if (capabilities.evaluacionEnviada) {
+            body.appendChild(checkinNode("p", "communication-route-note", `Ya registraste tu evaluación de ${communicationAreaLabel(capabilities.area)} para ${capabilities.periodoEvaluacion}. Podrás volver a evaluar el próximo mes.`));
+            return;
+        }
+        const supervisors = capabilities.jefaturasEvaluables || [];
+        if (!supervisors.length) { body.appendChild(checkinNode("p", "empty-state", "Todavía no hay una jefatura activa registrada para tu área.")); return; }
+        const form = checkinNode("form", "communication-send-form");
+        const bossLabel = checkinNode("label", "", "Jefatura de tu área");
+        const boss = checkinNode("select"); boss.required = true; boss.add(new Option("Selecciona una jefatura", ""));
+        supervisors.forEach((person) => boss.add(new Option(person.name, String(person.id)))); bossLabel.appendChild(boss);
+        const scoreLabel = checkinNode("label", "", "Calificación · 1 a 5");
+        const score = checkinNode("select"); [["", "Selecciona"], ["1", "1 · Necesita mejorar"], ["2", "2 · Regular"], ["3", "3 · Bien"], ["4", "4 · Muy bien"], ["5", "5 · Excelente"]].forEach(([value, label]) => score.add(new Option(label, value))); score.required = true; scoreLabel.appendChild(score);
+        const submit = checkinButton("Enviar evaluación", null, "primary-button"); submit.type = "submit";
+        form.append(bossLabel, scoreLabel, submit); body.append(form);
+        body.prepend(checkinNode("p", "communication-route-note", `Puedes enviar una evaluación por mes para ${communicationAreaLabel(capabilities.area)}. La administración verá los resultados agrupados, sin nombres de quienes respondieron.`));
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault(); submit.disabled = true;
+            try {
+                await apiRequest("/api/comunicacion/evaluaciones", { method: "POST", body: JSON.stringify({ jefeUsuario: Number(boss.value), puntaje: Number(score.value) }) });
+                capabilities.evaluacionEnviada = true;
+                body.replaceChildren(checkinNode("p", "communication-route-note", "Tu evaluación quedó registrada. Podrás volver a evaluar el próximo mes."));
+            } catch (error) { window.alert(`No se pudo guardar la evaluación: ${error.message}`); }
+            finally { submit.disabled = false; }
+        });
+    }
+
+    async function renderEvaluationSummary() {
+        body.appendChild(checkinNode("p", "communication-route-note", `Evaluaciones recibidas durante ${capabilities.periodoEvaluacion}. Se muestran resultados agrupados.`));
+        const list = checkinNode("div", "communication-message-list"); body.appendChild(list);
+        try {
+            const rows = await apiRequest("/api/comunicacion/evaluaciones/resumen");
+            if (!rows.length) { list.appendChild(checkinNode("p", "empty-state", "Todavía no hay evaluaciones este mes.")); return; }
+            rows.forEach((row) => {
+                const card = checkinNode("article", "communication-message-card");
+                card.append(checkinNode("span", "communication-area", communicationAreaLabel(row.area)), checkinNode("h4", "", row.jefe), checkinNode("p", "", `Promedio ${row.promedio} de 5 · ${row.evaluaciones} evaluaciones`));
+                list.appendChild(card);
+            });
+        } catch (error) { list.replaceChildren(checkinNode("p", "error-message", `No se pudo cargar el resumen: ${error.message}`)); }
+    }
+}
+
 const checkinAreas = ["SALON", "COPERIA", "COCINA", "BARRA"];
 const checkinAreaNames = { SALON: "Salón", COPERIA: "Copería", COCINA: "Cocina", BARRA: "Barra" };
 const checkinAdmin = () => ["ADMIN", "EMPRESA"].includes(accessRole());
 function checkinNode(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; }
-function checkinButton(label, handler, cls = "secondary-button") { const button = checkinNode("button", cls, label); button.type = "button"; button.addEventListener("click", handler); return button; }
+function checkinButton(label, handler, cls = "secondary-button") { const button = checkinNode("button", cls, label); button.type = "button"; if (handler) button.addEventListener("click", handler); return button; }
 function checkinAreaForProfile() {
     const raw = String(currentProfile?.area || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
     if (raw.includes("COPER")) return "COPERIA"; if (raw.includes("SALON")) return "SALON";
@@ -1779,7 +2003,7 @@ if (notificationBtn && notificationMenu) {
     notificationMenu.querySelectorAll(".notification-item").forEach((item) => item.addEventListener("click", () => {
         notificationMenu.classList.remove("show");
         const title = item.querySelector("strong")?.textContent ?? "";
-        const destination = title.includes("Tarea") ? "Tareas diarias" : title.includes("Incidencia") ? "Incidencias" : title.includes("Compra") ? "Compras" : "Inventario";
+        const destination = title.includes("Tarea") ? "Tareas diarias" : (title.includes("Comunicación") || title.includes("Incidencia")) ? "Comunicación del equipo" : title.includes("Compra") ? "Compras" : "Inventario";
         const target = menuItems.find((link) => link.textContent.includes(destination));
         if (target) showScreen(target);
     }));
@@ -2294,7 +2518,7 @@ async function enterApplication(profile) {
     document.getElementById("addEmployeeButton").disabled = !isOwnerRole();
     document.getElementById("importEmployeesButton").hidden = !isAdminRole();
     adminMenu?.querySelectorAll("button").forEach((button) => { if (button.textContent.includes("Configuración")) button.disabled = false; });
-    menuItems.forEach(link => { link.hidden = false; });
+    menuItems.forEach(link => { link.hidden = !canSeeModule(slugifyLabel(navLabel(link))); });
     document.querySelectorAll(".dashboard-cards .card").forEach((card) => { const label = card.querySelector("h3")?.textContent.trim() || ""; card.hidden = !canSeeModule(slugifyLabel(label)); });
     authScreen.hidden = true;
     setAuthError("");
