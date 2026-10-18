@@ -1492,7 +1492,7 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .splash-content p + p { color:#bcd0e4; font-size:.96rem; animation-delay:.3s; }
 .splash-spinner { display:inline-block; margin-top:22px; width:30px; height:30px; border:2px solid rgba(255,255,255,.3); border-top-color:#37d0d0; border-radius:50%; animation: splash-spin .85s linear infinite; }
 #marigexSplash::before, #marigexSplash::after { position:absolute; z-index:0; inset:-3%; content:""; pointer-events:none; }
-#marigexSplash::before { background-image:url("images/santiago-costanera-loading.png"); background-size:cover; background-position:center 54%; transform:scale(1.025); animation:splash-city-drift 28s ease-in-out infinite alternate; }
+#marigexSplash::before { background-image:url("images/santiago-costanera-loading.jpg"); background-size:cover; background-position:center 54%; transform:scale(1.025); animation:splash-city-drift 28s ease-in-out infinite alternate; }
 #marigexSplash::after { background:linear-gradient(90deg,rgba(7,14,25,.55),rgba(7,14,25,.24) 48%,rgba(7,14,25,.38)),linear-gradient(180deg,rgba(7,14,25,.18),rgba(7,14,25,.1) 45%,rgba(7,14,25,.52)); }
 @keyframes splash-city-drift { from { transform:scale(1.025) translate3d(-.3%,0,0); } to { transform:scale(1.09) translate3d(.3%,-.5%,0); } }
 @keyframes splash-logo-float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-5px); } }
@@ -1544,7 +1544,7 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .theme-dark .settings-callout { background:#132b3c; color:#dbeafe; }
 .theme-dark .profile-vacation-history { border-color:#334155; }
 .data-saver *, .data-saver *::before, .data-saver *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; }
-.data-saver .settings-about::before, .data-saver .auth-brand::before, .data-saver .auth-brand::after { display:none !important; }
+.data-saver .settings-about::before { display:none !important; }
 @media(max-width:700px) { .notification-modules { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:520px) { .notification-preferences form.auth-form { grid-template-columns:1fr; } .notification-modules { grid-template-columns:1fr; } }
 .evidence-camera { max-height:calc(100dvh - 24px); overflow:auto; width:min(600px,calc(100% - 24px)); }
@@ -1598,7 +1598,7 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     pointer-events: none;
 }
 .auth-brand::before {
-    background: url("images/marigex-login-restaurant.png") center / cover no-repeat;
+    background: url("images/marigex-login-restaurant.jpg") center / cover no-repeat;
     animation: auth-photo-drift 28s ease-in-out infinite alternate;
 }
 .auth-brand::after {

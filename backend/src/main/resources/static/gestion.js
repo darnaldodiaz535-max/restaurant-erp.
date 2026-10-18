@@ -206,26 +206,30 @@ async function renderMyAttendanceSchedule(recordsSection) {
             cycleHint.textContent = hasBiweeklyCycle ? "Ciclo vigente: Semana 1 → Semana 2. Al terminar la Semana 2, el patrón vuelve a Semana 1 y se repite hasta la fecha de término." : "";
             cycleHint.hidden = !hasBiweeklyCycle;
             if (hasBiweeklyCycle && !cycleHint.isConnected) feedback.before(cycleHint);
+            const toUtcDay = value => {
+                const [year, month, date] = String(value || "").slice(0, 10).split("-").map(Number);
+                return year && month && date ? Date.UTC(year, month - 1, date) : NaN;
+            };
+            const isTwoWeekCycle = plan => String(plan?.tipoCiclo || "").toUpperCase() === "ROTACION_2_SEMANAS" || Number(plan?.diasCiclo) === 14;
+            const twoWeekPlans = validity.filter(isTwoWeekCycle);
+            const fallbackCycleStart = twoWeekPlans[0]?.vigenteDesde || days[0]?.fecha || from;
+            const mondayOf = value => {
+                const stamp = toUtcDay(value);
+                return stamp - ((new Date(stamp).getUTCDay() + 6) % 7) * 86400000;
+            };
             let lastCycleBlock = null;
-            days.forEach(day => {
-                let cycleWeek = Number(day.semanaCiclo || 0);
-                let cycleNumber = 0;
-                const activeCycle = validity.find(plan => {
-                    const cycleDays = Number(plan.diasCiclo || 0);
-                    return (plan.tipoCiclo === "ROTACION_2_SEMANAS" || cycleDays === 14)
-                        && day.fecha >= plan.vigenteDesde && day.fecha <= plan.vigenteHasta;
+            [...days].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).forEach(day => {
+                const dayDate = String(day.fecha || "").slice(0, 10);
+                const activeCycle = twoWeekPlans.find(plan => {
+                    const start = String(plan.vigenteDesde || "").slice(0, 10);
+                    const end = String(plan.vigenteHasta || "").slice(0, 10);
+                    return dayDate >= start && dayDate <= end;
                 });
-                if (activeCycle) {
-                    const toUtcDay = value => {
-                        const [year, month, date] = String(value).slice(0, 10).split("-").map(Number);
-                        return Date.UTC(year, month - 1, date);
-                    };
-                    const planStart = new Date(toUtcDay(activeCycle.vigenteDesde));
-                    const planMonday = toUtcDay(activeCycle.vigenteDesde) - ((planStart.getUTCDay() + 6) % 7) * 86400000;
-                    const weekIndex = Math.floor((toUtcDay(day.fecha) - planMonday) / (7 * 86400000));
-                    cycleWeek = (weekIndex % 2) + 1;
-                    cycleNumber = Math.floor(weekIndex / 2);
-                }
+                const cycleStart = String(activeCycle?.vigenteDesde || fallbackCycleStart).slice(0, 10);
+                const weekIndex = Math.max(0, Math.floor((mondayOf(dayDate) - mondayOf(cycleStart)) / (7 * 86400000)));
+                // Alterna explícitamente cada lunes: Semana 1, Semana 2, y vuelve a Semana 1.
+                const cycleWeek = twoWeekPlans.length ? (weekIndex % 2) + 1 : Number(day.semanaCiclo || 0);
+                const cycleNumber = Math.floor(weekIndex / 2);
                 const cycleBlock = cycleWeek ? `${cycleNumber}:${cycleWeek}` : "";
                 if (cycleWeek && cycleBlock !== lastCycleBlock) {
                     const cycleRow = element("tr", undefined, "schedule-cycle-week");

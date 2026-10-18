@@ -1,6 +1,7 @@
-const CACHE_NAME='marigex-shell-horario-ciclo-semanas-visible-20261017-5';
+const CACHE_NAME='marigex-shell-horario-ciclo-semanas-visible-20261018-1';
 const DEVICE_CACHE='marigex-device';
-const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png','/images/santiago-costanera-loading.png','/images/marigex-login-restaurant.png'];
+const IMAGE_ASSETS=['/images/santiago-costanera-loading.jpg','/images/marigex-login-restaurant.jpg'];
+const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',event=>{
     event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)));
     self.skipWaiting();
@@ -15,6 +16,15 @@ self.addEventListener('fetch',event=>{
     const url=new URL(event.request.url);
     // Never cache APIs, sessions, private photos or writes.
     if(event.request.method!=='GET'||url.origin!==self.location.origin||url.pathname.startsWith('/api/'))return;
+    if(IMAGE_ASSETS.includes(url.pathname)){
+        event.respondWith((async()=>{
+            const cache=await caches.open(CACHE_NAME);
+            const cached=await cache.match(url.pathname);
+            const network=fetch(event.request).then(response=>{if(response.ok)void cache.put(url.pathname,response.clone());return response;}).catch(()=>cached);
+            return cached||network;
+        })());
+        return;
+    }
     if(!SHELL.includes(url.pathname)&&event.request.mode!=='navigate')return;
     event.respondWith((async()=>{
         const cache=await caches.open(CACHE_NAME);
