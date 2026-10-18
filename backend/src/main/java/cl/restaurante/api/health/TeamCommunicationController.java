@@ -53,20 +53,20 @@ public class TeamCommunicationController {
         String area = employeeArea(user.employeeId());
         List<Person> recipients = targetAccounts(user);
         List<Person> supervisors = null;
-        boolean mayRate = access.isWorker(user) && area != null;
-        if (mayRate) supervisors = supervisors(area);
-        Integer submittedThisMonth = mayRate
-                ? jdbc.queryForObject("SELECT COUNT(*) FROM APP_EVAL_JEFATURA WHERE EVALUADOR_USUARIO=? AND AREA=? AND PERIODO=?",
-                        Integer.class, user.id(), area, YearMonth.now(CHILE).toString())
-                : 0;
+        boolean mayRate = access.isWorker(user);
+        if (mayRate) supervisors = supervisors();
+        List<Long> evaluatedThisMonth = mayRate
+                ? jdbc.query("SELECT EVALUADO_USUARIO FROM APP_EVAL_JEFATURA WHERE EVALUADOR_USUARIO=? AND PERIODO=?",
+                        (rs, row) -> rs.getLong(1), user.id(), YearMonth.now(CHILE).toString())
+                : List.of();
         return Map.of(
                 "area", area == null ? "" : area,
                 "destinatarios", recipients,
                 "jefaturasEvaluables", supervisors == null ? List.of() : supervisors,
                 "puedeReportar", REPORT_ROLES.contains(user.role()),
-                "puedeEnviarInquietud", !recipients.isEmpty(),
+                "puedeEnviarInquietud", access.isWorker(user) || Set.of("JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL").contains(user.role()),
                 "puedeEvaluar", mayRate,
-                "evaluacionEnviada", submittedThisMonth != null && submittedThisMonth > 0,
+                "evaluacionesEnviadas", evaluatedThisMonth,
                 "periodoEvaluacion", YearMonth.now(CHILE).toString());
     }
 
@@ -83,9 +83,10 @@ public class TeamCommunicationController {
                  WHERE R.CREADO_EN >= SYSTIMESTAMP - INTERVAL '15' DAY
                  ORDER BY R.CREADO_EN DESC
                 """, (rs, row) -> new DailyReport(
-                rs.getLong(1), rs.getString(2), rs.getDate(3).toLocalDate().toString(),
+                rs.getLong(1), rs.getString(2), rs.getTimestamp(3).toLocalDateTime().toLocalDate().toString(),
                 rs.getString(4), rs.getString(5), rs.getString(6),
-                rs.getTimestamp(7).toLocalDateTime().toString()));
+                rs.getTimestamp(7).toLocalDateTime().toString(),
+                rs.getTimestamp(3).toLocalDateTime().toLocalTime().toString().substring(0, 5)));
     }
 
     @PostMapping("/reportes")
@@ -95,6 +96,16 @@ public class TeamCommunicationController {
         String area = reportArea(user, request == null ? null : request.area());
         String title = clean(request == null ? null : request.titulo());
         String detail = clean(request == null ? null : request.detalle());
+        LocalDate reportDate;
+        java.time.LocalTime reportTime;
+        try {
+            reportDate = request == null || request.fecha() == null || request.fecha().isBlank()
+                    ? LocalDate.now(CHILE) : LocalDate.parse(request.fecha());
+            reportTime = request == null || request.hora() == null || request.hora().isBlank()
+                    ? java.time.LocalTime.now(CHILE).withSecond(0).withNano(0) : java.time.LocalTime.parse(request.hora());
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indica una fecha y hora válidas.");
+        }
         if (title.isBlank() || title.length() > 160) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escribe un título de hasta 160 caracteres.");
         }
@@ -106,7 +117,7 @@ public class TeamCommunicationController {
                 INSERT INTO APP_REPORTE_DIARIO
                     (AUTOR_USUARIO, AREA, FECHA_REPORTE, TITULO, DETALLE)
                 VALUES (?, ?, ?, ?, ?)
-                """, user.id(), area, java.sql.Date.valueOf(LocalDate.now(CHILE)), title, detail);
+                """, user.id(), area, java.sql.Timestamp.valueOf(reportDate.atTime(reportTime)), title, detail);
         activity.record(session, "CREAR", "Reportes", "Se guardó un reporte diario de " + area);
         return Map.of("status", "guardado");
     }
@@ -207,28 +218,26 @@ public class TeamCommunicationController {
         RoleAccessService.User user = access.current(session);
         if (!access.isWorker(user)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La evaluación está disponible para trabajadores.");
         String area = employeeArea(user.employeeId());
-        if (area == null || !AREA_LEADER_ROLE.containsKey(area)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tu ficha no tiene un área con jefatura evaluable.");
-        }
         if (request == null || request.jefeUsuario() == null || request.puntaje() < 1 || request.puntaje() > 5) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecciona una jefatura y una calificación de 1 a 5.");
         }
-        boolean validBoss = supervisors(area).stream().anyMatch(person -> person.id() == request.jefeUsuario());
-        if (!validBoss) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes evaluar a la jefatura de tu área.");
+        Person boss = supervisors().stream().filter(person -> person.id() == request.jefeUsuario()).findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Selecciona una jefatura activa de Salón, Barra o Cocina."));
+        String areaEvaluada = areaForLeaderRole(boss.role());
         String period = YearMonth.now(CHILE).toString();
         Integer existing = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM APP_EVAL_JEFATURA
-                 WHERE EVALUADOR_USUARIO=? AND AREA=? AND PERIODO=?
-                """, Integer.class, user.id(), area, period);
+                 WHERE EVALUADOR_USUARIO=? AND EVALUADO_USUARIO=? AND PERIODO=?
+                """, Integer.class, user.id(), boss.id(), period);
         if (existing != null && existing > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya enviaste tu evaluación de esta área durante este mes.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya enviaste tu evaluación para esta jefatura durante este mes.");
         }
         jdbc.update("""
                 INSERT INTO APP_EVAL_JEFATURA
                     (EVALUADOR_USUARIO, EVALUADO_USUARIO, AREA, PERIODO, PUNTAJE, COMENTARIO)
                 VALUES (?, ?, ?, ?, ?, ?)
-                """, user.id(), request.jefeUsuario(), area, period, request.puntaje(), null);
-        activity.record(session, "EVALUAR", "Comunicación del equipo", "Se registró evaluación mensual de jefatura en " + area);
+                """, user.id(), boss.id(), areaEvaluada, period, request.puntaje(), null);
+        activity.record(session, "EVALUAR", "Comunicación del equipo", "Se registró evaluación mensual de jefatura en " + areaEvaluada);
         return Map.of("status", "guardada", "periodo", period);
     }
 
@@ -279,19 +288,26 @@ public class TeamCommunicationController {
         String role = user.role();
         if (access.isWorker(user)) {
             String area = employeeArea(user.employeeId());
-            String targetRole = AREA_LEADER_ROLE.get(area);
-            if (targetRole == null) return List.of();
-            return findUsers("U.ROL=? AND " + AreaService.sql("E.AREA") + "=?", targetRole, area);
+            String targetRole = area == null ? null : AREA_LEADER_ROLE.get(area);
+            return targetRole == null ? List.of() : findUsers("U.ROL=?", targetRole);
         }
         if (Set.of("JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL").contains(role)) {
-            return findUsers("U.ROL IN ('ADMIN','EMPRESA')");
+            return findUsers("U.ROL IN ('ADMIN','EMPRESA','JEFE_LOCAL')");
         }
         return List.of();
     }
 
-    private List<Person> supervisors(String area) {
-        String role = AREA_LEADER_ROLE.get(area);
-        return role == null ? List.of() : findUsers("U.ROL=? AND " + AreaService.sql("E.AREA") + "=?", role, area);
+    private List<Person> supervisors() {
+        return findUsers("U.ROL IN ('JEFE_SALON','JEFE_BARRA','JEFE_COCINA')");
+    }
+
+    private String areaForLeaderRole(String role) {
+        return switch (role) {
+            case "JEFE_SALON" -> "SALON";
+            case "JEFE_BARRA" -> "BARRA";
+            case "JEFE_COCINA" -> "COCINA";
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Jefatura no evaluable.");
+        };
     }
 
     private List<Person> findUsers(String clause, Object... args) {
@@ -315,8 +331,8 @@ public class TeamCommunicationController {
     private static String clean(String value) { return value == null ? "" : value.trim(); }
 
     public record Person(long id, String name, String role) {}
-    public record DailyReport(long id, String area, String fecha, String titulo, String detalle, String autor, String creadoEn) {}
-    public record ReportRequest(String area, String titulo, String detalle) {}
+    public record DailyReport(long id, String area, String fecha, String titulo, String detalle, String autor, String creadoEn, String hora) {}
+    public record ReportRequest(String area, String fecha, String hora, String titulo, String detalle) {}
     public record Concern(long id, String area, String categoria, String asunto, String mensaje,
                           String estado, String creadoEn, boolean enviadoPorMi, boolean recibidoPorMi,
                           String autor, String destinatario) {}

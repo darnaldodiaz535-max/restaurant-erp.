@@ -514,6 +514,15 @@ function renderDailyReportsModule() {
         area.required = true;
         areaLabel.appendChild(area); form.appendChild(areaLabel);
     }
+    const dateLabel = checkinNode("label", "", "Día del reporte");
+    const reportDate = checkinNode("input"); reportDate.type = "date"; reportDate.required = true;
+    const nowInChile = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Santiago" }));
+    reportDate.value = `${nowInChile.getFullYear()}-${String(nowInChile.getMonth() + 1).padStart(2, "0")}-${String(nowInChile.getDate()).padStart(2, "0")}`;
+    dateLabel.appendChild(reportDate);
+    const timeLabel = checkinNode("label", "", "Hora");
+    const reportTime = checkinNode("input"); reportTime.type = "time"; reportTime.required = true;
+    reportTime.value = `${String(nowInChile.getHours()).padStart(2, "0")}:${String(nowInChile.getMinutes()).padStart(2, "0")}`;
+    timeLabel.appendChild(reportTime);
     const titleLabel = checkinNode("label", "", "Título");
     const titleInput = checkinNode("input"); titleInput.type = "text"; titleInput.maxLength = 160; titleInput.required = true; titleInput.placeholder = "Ej.: Novedades del turno";
     titleLabel.appendChild(titleInput);
@@ -521,7 +530,7 @@ function renderDailyReportsModule() {
     const detailInput = checkinNode("textarea"); detailInput.rows = 5; detailInput.maxLength = 4000; detailInput.required = true; detailInput.placeholder = "Resume lo ocurrido, pendientes y datos que debe conocer el equipo.";
     detailLabel.appendChild(detailInput);
     const submit = checkinButton("Guardar reporte diario", null, "primary-button"); submit.type = "submit";
-    form.append(titleLabel, detailLabel, submit);
+    form.append(dateLabel, timeLabel, titleLabel, detailLabel, submit);
     const history = checkinNode("div", "daily-report-list");
     section.append(notice, form, checkinNode("h3", "daily-report-heading", "Reportes de los últimos 15 días"), history);
     otherModule.append(title, section);
@@ -530,6 +539,7 @@ function renderDailyReportsModule() {
         try {
             await apiRequest("/api/comunicacion/reportes", { method: "POST", body: JSON.stringify({
                 area: admin ? form.querySelector("select")?.value : "",
+                fecha: reportDate.value, hora: reportTime.value,
                 titulo: titleInput.value, detalle: detailInput.value
             }) });
             titleInput.value = ""; detailInput.value = "";
@@ -548,7 +558,7 @@ function renderDailyReportsModule() {
                 const card = checkinNode("article", "daily-report-card");
                 const meta = checkinNode("div", "daily-report-meta");
                 meta.append(checkinNode("span", "daily-report-area", communicationAreaLabel(report.area)),
-                    checkinNode("time", "", `${report.fecha} · ${report.autor}`));
+                    checkinNode("time", "", `${new Date(`${report.fecha}T12:00:00`).toLocaleDateString("es-CL")} · ${report.hora} · ${report.autor}`));
                 card.append(meta, checkinNode("h4", "", report.titulo), checkinNode("p", "", report.detalle));
                 history.appendChild(card);
             });
@@ -565,7 +575,7 @@ async function renderTeamCommunicationModule() {
     otherModule.style.setProperty("--module-accent", "#0f9ba8");
     otherModule.appendChild(checkinHeader("Comunicación del equipo", "Envía inquietudes a la jefatura de tu área y revisa los mensajes que recibes."));
     const section = checkinNode("section", "generic-data team-communication-data");
-    section.appendChild(checkinNode("p", "communication-route-note", "Los trabajadores escriben a la jefatura de su área. Las jefaturas elevan los mensajes a Administración."));
+    section.appendChild(checkinNode("p", "communication-route-note", "Los trabajadores escriben a la jefatura de su área. Las jefaturas elevan los mensajes a Administración. Las evaluaciones llegan solo a Administración."));
     const tabs = checkinNode("div", "checkin-tabs");
     const body = checkinNode("div", "communication-panel");
     section.append(tabs, body); otherModule.appendChild(section);
@@ -573,25 +583,24 @@ async function renderTeamCommunicationModule() {
     try { capabilities = await apiRequest("/api/comunicacion/destinatarios"); }
     catch (error) { body.appendChild(checkinNode("p", "error-message", `No se pudo abrir Comunicación del equipo: ${error.message}`)); return; }
     if (revision !== screenRevision) return;
-    if (!capabilities.puedeEnviarInquietud && !["ADMIN", "EMPRESA"].includes(accessRole())) {
-        section.insertBefore(checkinNode("p", "communication-route-note", "No hay una jefatura activa asignada a tu área para recibir mensajes. Pide a Administración que revise los accesos."), tabs);
-    }
-
     function activateTab(label, render) {
-        tabs.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.textContent === label));
+        tabs.querySelectorAll("button").forEach((button) => button.classList.toggle("active", button.dataset.tab === label));
         body.replaceChildren(); void render();
     }
     if (capabilities.puedeEnviarInquietud) {
-        tabs.appendChild(checkinButton("Enviar inquietud", () => activateTab("Enviar inquietud", renderSendForm), "primary-button"));
+        const button = checkinButton("Escribir mensaje", () => activateTab("compose", renderSendForm)); button.dataset.tab = "compose"; tabs.appendChild(button);
     }
-    tabs.appendChild(checkinButton("Mensajes", () => activateTab("Mensajes", renderInbox)));
+    for (const [label, view] of [["Recibidos", "recibidas"], ["Enviados", "enviadas"]]) {
+        const button = checkinButton(label, () => activateTab(view, () => renderInbox(view)));
+        button.dataset.tab = view; tabs.appendChild(button);
+    }
     if (capabilities.puedeEvaluar) {
-        tabs.appendChild(checkinButton("Evaluar jefatura", () => activateTab("Evaluar jefatura", renderEvaluation)));
+        const button = checkinButton("Evaluar jefaturas", () => activateTab("evaluate", renderEvaluation)); button.dataset.tab = "evaluate"; tabs.appendChild(button);
     } else if (["ADMIN", "EMPRESA"].includes(accessRole())) {
-        tabs.appendChild(checkinButton("Resumen de evaluaciones", () => activateTab("Resumen de evaluaciones", renderEvaluationSummary)));
+        const button = checkinButton("Evaluaciones recibidas", () => activateTab("summary", renderEvaluationSummary)); button.dataset.tab = "summary"; tabs.appendChild(button);
     }
-    if (capabilities.puedeEnviarInquietud) activateTab("Enviar inquietud", renderSendForm);
-    else activateTab("Mensajes", renderInbox);
+    if (capabilities.puedeEnviarInquietud) activateTab("compose", renderSendForm);
+    else activateTab("recibidas", () => renderInbox("recibidas"));
 
     function renderSendForm() {
         const form = checkinNode("form", "communication-send-form");
@@ -618,22 +627,18 @@ async function renderTeamCommunicationModule() {
                     asunto: subject.value, mensaje: message.value
                 }) });
                 window.alert("El mensaje se envió correctamente.");
-                activateTab("Mensajes", renderInbox);
+                activateTab("enviadas", () => renderInbox("enviadas"));
             } catch (error) { window.alert(`No se pudo enviar: ${error.message}`); }
             finally { submit.disabled = false; }
         });
     }
 
-    async function renderInbox() {
-        const controls = checkinNode("div", "communication-inbox-controls");
-        const filter = checkinNode("select");
-        [["todas", "Enviados y recibidos"], ["recibidas", "Recibidos"], ["enviadas", "Enviados"]].forEach(([value, label]) => filter.add(new Option(label, value)));
-        controls.append(checkinNode("label", "", "Ver: "), filter); body.appendChild(controls);
+    async function renderInbox(view) {
         const list = checkinNode("div", "communication-message-list"); body.appendChild(list);
         const load = async () => {
             list.replaceChildren(checkinNode("p", "empty-state", "Cargando mensajes…"));
             try {
-                const messages = await apiRequest(`/api/comunicacion/inquietudes?vista=${encodeURIComponent(filter.value)}`);
+                const messages = await apiRequest(`/api/comunicacion/inquietudes?vista=${encodeURIComponent(view)}`);
                 if (revision !== screenRevision) return;
                 list.replaceChildren();
                 if (!messages.length) { list.appendChild(checkinNode("p", "empty-state", "No hay mensajes para mostrar.")); return; }
@@ -657,31 +662,30 @@ async function renderTeamCommunicationModule() {
                 });
             } catch (error) { list.replaceChildren(checkinNode("p", "error-message", `No se pudieron cargar los mensajes: ${error.message}`)); }
         };
-        filter.addEventListener("change", () => void load()); void load();
+        void load();
     }
 
     function renderEvaluation() {
-        if (capabilities.evaluacionEnviada) {
-            body.appendChild(checkinNode("p", "communication-route-note", `Ya registraste tu evaluación de ${communicationAreaLabel(capabilities.area)} para ${capabilities.periodoEvaluacion}. Podrás volver a evaluar el próximo mes.`));
-            return;
-        }
-        const supervisors = capabilities.jefaturasEvaluables || [];
-        if (!supervisors.length) { body.appendChild(checkinNode("p", "empty-state", "Todavía no hay una jefatura activa registrada para tu área.")); return; }
+        let supervisors = capabilities.jefaturasEvaluables || [];
+        const alreadyRated = new Set((capabilities.evaluacionesEnviadas || []).map(Number));
+        supervisors = supervisors.filter(person => !alreadyRated.has(Number(person.id)));
+        if (!supervisors.length) { body.appendChild(checkinNode("p", "communication-route-note", `Ya evaluaste a todas las jefaturas activas de Salón, Barra y Cocina para ${capabilities.periodoEvaluacion}. Podrás volver a evaluarlas el próximo mes.`)); return; }
         const form = checkinNode("form", "communication-send-form");
-        const bossLabel = checkinNode("label", "", "Jefatura de tu área");
+        const bossLabel = checkinNode("label", "", "Jefatura que quieres evaluar");
         const boss = checkinNode("select"); boss.required = true; boss.add(new Option("Selecciona una jefatura", ""));
-        supervisors.forEach((person) => boss.add(new Option(person.name, String(person.id)))); bossLabel.appendChild(boss);
+        supervisors.forEach((person) => boss.add(new Option(`${person.name} · ${communicationAreaLabel(({ JEFE_SALON: "SALON", JEFE_BARRA: "BARRA", JEFE_COCINA: "COCINA" })[person.role])}`, String(person.id)))); bossLabel.appendChild(boss);
         const scoreLabel = checkinNode("label", "", "Calificación · 1 a 5");
         const score = checkinNode("select"); [["", "Selecciona"], ["1", "1 · Necesita mejorar"], ["2", "2 · Regular"], ["3", "3 · Bien"], ["4", "4 · Muy bien"], ["5", "5 · Excelente"]].forEach(([value, label]) => score.add(new Option(label, value))); score.required = true; scoreLabel.appendChild(score);
         const submit = checkinButton("Enviar evaluación", null, "primary-button"); submit.type = "submit";
         form.append(bossLabel, scoreLabel, submit); body.append(form);
-        body.prepend(checkinNode("p", "communication-route-note", `Puedes enviar una evaluación por mes para ${communicationAreaLabel(capabilities.area)}. La administración verá los resultados agrupados, sin nombres de quienes respondieron.`));
+        body.prepend(checkinNode("p", "communication-route-note", `Puedes evaluar una vez al mes a cada jefatura activa de Salón, Barra o Cocina. Solo Administración podrá consultar los resultados.`));
         form.addEventListener("submit", async (event) => {
             event.preventDefault(); submit.disabled = true;
             try {
                 await apiRequest("/api/comunicacion/evaluaciones", { method: "POST", body: JSON.stringify({ jefeUsuario: Number(boss.value), puntaje: Number(score.value) }) });
-                capabilities.evaluacionEnviada = true;
-                body.replaceChildren(checkinNode("p", "communication-route-note", "Tu evaluación quedó registrada. Podrás volver a evaluar el próximo mes."));
+                capabilities.evaluacionesEnviadas = [...(capabilities.evaluacionesEnviadas || []), Number(boss.value)];
+                body.replaceChildren(checkinNode("p", "communication-route-note", "Tu evaluación quedó registrada. Puedes evaluar a otra jefatura, si aún no la has evaluado este mes."));
+                renderEvaluation();
             } catch (error) { window.alert(`No se pudo guardar la evaluación: ${error.message}`); }
             finally { submit.disabled = false; }
         });
