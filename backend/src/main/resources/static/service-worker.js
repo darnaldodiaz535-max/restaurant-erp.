@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-checkin-estados-20261103-9';
+const CACHE_NAME='marigex-shell-checkin-panel-20261103-10';
 const DEVICE_CACHE='marigex-device';
 const IMAGE_ASSETS=['/images/santiago-costanera-loading.jpg','/images/marigex-login-restaurant.jpg'];
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/app-updates.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];

@@ -182,3 +182,11 @@ Se actualiza al completar tareas, al volver a primer plano y cada minuto con la 
 ## Estados resaltados
 
 Cada tarea muestra una etiqueta independiente del texto secundario: Completada en verde con un visto, Pendiente en ámbar con un reloj. Aparece debajo del tipo de tarea en las vistas de tareas e historial y en los detalles semanales. Se conserva el responsable y la fecha, y se adapta a móvil y modo oscuro. Verificado visualmente con datos de muestra en escritorio y a 390 px; comprobación sintáctica de JavaScript y git diff --check aprobadas. No requiere cambios de backend ni SQL.
+
+## Panel visual de cumplimiento
+
+Se aplicó la propuesta aprobada mediante componentes HTML/CSS/SVG: círculo de porcentaje, contadores de previstas/completadas/pendientes, tarjetas por área con barras animadas e iconos, y detalles desplegables. Las tareas también muestran un círculo con el mismo conteo que ya presentaban. Los filtros existentes se encuentran bajo «Elegir semana o área». Se conservan los endpoints, parámetros de consulta, reglas de fechas, porcentajes, orden por pendientes, permisos, evidencias, mensajes y notificaciones. No hay cambios Java ni SQL en esta entrega visual.
+
+Validación: comprobación sintáctica de scrip.js y service-worker.js; git diff --check. Vista de muestra en escritorio y 390 px sin desbordamiento horizontal; administrador con 4 tarjetas, jefe de Salón con solo su tarjeta y trabajador sin acceso al resumen ni acciones de confirmación. Se comprobaron el filtro de área y Ver detalle con tareas/responsables/estados. Los datos de las capturas son de ejemplo y no se enviaron acciones a la aplicación publicada.
+
+Archivos de esta entrega: backend/src/main/resources/static/scrip.js, style.css, index.html, service-worker.js y esta guía. Actualización de versión de caché para recibir el diseño al publicar.

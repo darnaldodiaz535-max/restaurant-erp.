@@ -576,7 +576,7 @@ async function renderTeamCommunicationModule() {
     otherModule.appendChild(checkinHeader("Comunicación del equipo", "Envía inquietudes a la jefatura de tu área y revisa los mensajes que recibes."));
     const section = checkinNode("section", "generic-data team-communication-data");
     section.appendChild(checkinNode("p", "communication-route-note", "Los trabajadores escriben a la jefatura de su área. Las jefaturas elevan los mensajes a Administración. Las evaluaciones llegan solo a Administración."));
-    const tabs = checkinNode("div", "checkin-tabs");
+    const tabs = checkinNode("div", "checkin-tabs checkin-area-tabs");
     const body = checkinNode("div", "communication-panel");
     section.append(tabs, body); otherModule.appendChild(section);
     let capabilities;
@@ -730,18 +730,22 @@ async function renderCheckinModule(selectedArea = null, view = "dia") {
     dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
     otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--checkin-diario";
     const area = selectedArea || checkinBossArea() || "COCINA", admin = checkinAdmin(), boss = checkinBossArea();
-    otherModule.appendChild(checkinHeader("Check-in", "Limpieza semanal: del lunes al domingo a las 23:59 (hora de Chile). El lunes se publica el resumen de la semana anterior."));
+    const header = checkinHeader(view === "semanal" ? "Resumen semanal de Check-in" : "Check-in", "Limpieza semanal: del lunes al domingo a las 23:59 (hora de Chile). El lunes se publica el resumen de la semana anterior.");
     const section = checkinNode("section", "generic-data checkin-data"), tabs = checkinNode("div", "checkin-tabs");
     checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code), area === code ? "primary-button" : "secondary-button")));
-    section.appendChild(tabs);
-    const nav = checkinNode("div", "checkin-tabs");
+    const nav = checkinNode("div", "checkin-tabs checkin-view-tabs");
     nav.appendChild(checkinButton("Tareas e historial", () => void renderCheckinModule(area)));
     if (admin || boss) {
         const reportArea = admin ? area : boss;
         nav.appendChild(checkinButton("Resumen semanal de Check-in", () => void renderCheckinModule(reportArea, "semanal")));
         nav.appendChild(checkinButton(admin ? "Mensajes a jefes de área" : "Buzón de administración", () => void renderCheckinModule(reportArea, "observaciones")));
     }
-    section.append(nav, checkinNode("h3", "checkin-area-title", checkinAreaNames[area]));
+    [...nav.children].forEach((button, index) => {
+        const active = index === (view === "semanal" ? 1 : view === "observaciones" ? 2 : 0);
+        button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active));
+    });
+    section.append(nav, header, tabs);
+    if (view !== "semanal") section.appendChild(checkinNode("h3", "checkin-area-title", checkinAreaNames[area]));
     const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "status"); section.appendChild(feedback);
     otherModule.appendChild(section);
     try {
@@ -749,6 +753,49 @@ async function renderCheckinModule(selectedArea = null, view = "dia") {
         else if (view === "observaciones") await renderAreaCheckinObservations(section, area, revision, feedback);
         else await renderAreaCheckinDay(section, area, revision, feedback);
     } catch (error) { if (revision === screenRevision) feedback.textContent = error.message; }
+}
+function checkinProgressSummary(total, completed, label) {
+    const percent = total ? Math.round(completed * 100 / total) : null;
+    const card = checkinNode("div", "checkin-progress-summary");
+    const ring = checkinNode("div", "checkin-progress-ring");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 128 128"); svg.setAttribute("aria-hidden", "true");
+    for (const kind of ["track", "value"]) {
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", "64"); circle.setAttribute("cy", "64"); circle.setAttribute("r", "54");
+        circle.setAttribute("class", "checkin-ring-" + kind);
+        if (kind === "value") { circle.setAttribute("stroke-dasharray", "339.292"); circle.setAttribute("stroke-dashoffset", String(339.292 * (1 - Math.max(0, Math.min(100, percent || 0)) / 100))); }
+        svg.appendChild(circle);
+    }
+    const center = checkinNode("div", "checkin-ring-label");
+    center.append(checkinNode("strong", "", percent == null ? "—" : percent + "%"), checkinNode("span", "", label));
+    ring.setAttribute("role", "img"); ring.setAttribute("aria-label", label + ": " + (percent == null ? "sin tareas previstas" : percent + "%"));
+    center.appendChild(checkinNode("small", "checkin-ring-total", total + " tareas"));
+    ring.append(svg, center);
+    const stats = checkinNode("div", "checkin-progress-stats");
+    [[total, "previstas", "total"], [completed, "completadas", "done"], [total - completed, "pendientes", "pending"]].forEach(([number, text, kind]) => {
+        const stat = checkinNode("div", "checkin-progress-stat is-" + kind);
+        stat.append(checkinNode("strong", "", String(number)), checkinNode("span", "", text)); stats.appendChild(stat);
+    });
+    card.append(ring, stats); return card;
+}
+function checkinAreaProgressCard(report) {
+    const card = checkinNode("article", "checkin-area-progress-card");
+    const heading = checkinNode("div", "checkin-area-progress-heading");
+    const icon = checkinNode("span", "checkin-area-symbol"); icon.setAttribute("aria-hidden", "true");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24");
+    const paths = { COCINA: "M7 14a5 5 0 0 1-1-10 6 6 0 0 1 12 0 5 5 0 0 1-1 10v7H7zM7 17h10", SALON: "M5 3v6a3 3 0 0 0 6 0V3M8 3v18M19 3c-4 3-4 8 0 9V3Zm0 9v9", COPERIA: "M3 6c0-4 18-4 18 0s-18 4-18 0Zm0 0v6c0 4 18 4 18 0V6M3 12v6c0 4 18 4 18 0v-6", BARRA: "M3 3h18L12 13 3 3Zm9 10v8m-5 0h10M6 6h12" };
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("d", paths[report.area] || paths.COCINA); svg.appendChild(path); icon.appendChild(svg);
+    const state = report.total === 0 ? "Sin tareas" : report.pending === 0 ? "Completada" : report.closed ? "Semana cerrada" : "En progreso";
+    const badge = checkinNode("span", "checkin-area-state" + (report.pending && report.closed ? " is-pending" : ""), state);
+    heading.append(icon, checkinNode("h3", "", checkinAreaNames[report.area]), badge, checkinNode("strong", "checkin-area-percent", report.percent == null ? "—" : report.percent + "%"));
+    const track = checkinNode("div", "checkin-area-track"), bar = checkinNode("span", "checkin-area-fill");
+    track.setAttribute("role", "progressbar"); track.setAttribute("aria-label", "Cumplimiento de " + checkinAreaNames[report.area]);
+    track.setAttribute("aria-valuemin", "0"); track.setAttribute("aria-valuemax", "100"); track.setAttribute("aria-valuenow", String(report.percent || 0));
+    if (report.percent == null) track.setAttribute("aria-valuetext", "Sin tareas previstas");
+    bar.style.width = Math.max(0, Math.min(100, report.percent || 0)) + "%"; track.appendChild(bar);
+    const counts = checkinNode("p", "checkin-area-counts", `${report.completed} completadas · ${report.pending} ${report.pending === 1 ? "pendiente" : "pendientes"}`);
+    card.append(heading, track, counts); return card;
 }
 function checkinAction(label, icon, handler, variant = "quiet") {
     const button = checkinButton("", handler, "checkin-action checkin-action--" + variant);
@@ -851,7 +898,7 @@ async function renderAreaCheckinDay(section, area, revision, feedback) {
         const completed = day.tasks.filter(t => t.status === "REALIZADA").length;
         container.replaceChildren();
         if (day.deadline) container.appendChild(checkinDeadlineNotice(day.deadline));
-        container.append(checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.canManage ? "Puedes confirmar las tareas de tu área." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.canManage, load, feedback));
+        container.append(checkinProgressSummary(day.tasks.length, completed, "Cumplimiento de " + checkinAreaNames[area]), checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.canManage ? "Puedes confirmar las tareas de tu área." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.canManage, load, feedback));
     };
     date.addEventListener("change", () => void load().catch(e => { feedback.textContent = e.message; })); await load();
     const lifecycle = new AbortController();
@@ -863,7 +910,7 @@ async function renderAreaCheckinDay(section, area, revision, feedback) {
     document.addEventListener("visibilitychange", refreshIfActive, { signal: lifecycle.signal });
 }
 async function renderAreaCheckinReports(section, area, revision) {
-    const controls = checkinNode("div", "checkin-tabs"), label = checkinNode("label", "", "Semana (lunes) "), week = checkinNode("input");
+    const controls = checkinNode("div", "checkin-tabs checkin-report-controls"), label = checkinNode("label", "", "Semana (lunes) "), week = checkinNode("input");
     week.type = "date"; week.value = checkinWeekStart(); label.appendChild(week); controls.appendChild(label);
     const scope = checkinNode("select"); scope.setAttribute("aria-label", "Área del resumen");
     if (checkinAdmin()) scope.add(new Option("Resumen general", ""));
@@ -872,19 +919,29 @@ async function renderAreaCheckinReports(section, area, revision) {
     const history = checkinNode("select"); history.setAttribute("aria-label", "Semanas anteriores"); history.add(new Option("Historial de semanas", ""));
     const weeks = await apiRequest("/api/checkin/gestion/semanas?area=" + area);
     weeks.forEach(w => history.add(new Option(w, w))); controls.appendChild(history);
-    section.appendChild(controls); const container = checkinNode("div"); section.appendChild(container);
+    const filters = checkinNode("details", "checkin-report-filters");
+    filters.append(checkinNode("summary", "", "Elegir semana o área"), controls);
+    section.appendChild(filters); const container = checkinNode("div"); section.appendChild(container);
     let request = 0;
     const load = async () => {
         const ticket = ++request, reports = await apiRequest(`/api/checkin/gestion/semanal?semana=${encodeURIComponent(week.value)}${scope.value ? "&area=" + scope.value : ""}`);
         if (revision !== screenRevision || ticket !== request) return;
         container.replaceChildren();
         const total = reports.reduce((n,r) => n+r.total,0), completed = reports.reduce((n,r) => n+r.completed,0);
-        container.appendChild(checkinNode("h3", "", `Cumplimiento: ${total ? Math.round(completed*100/total)+"%" : "Sin tareas"} · ${completed}/${total} completadas · ${total-completed} pendientes`));
+        const caption = checkinNode("div", "checkin-report-caption");
+        const formatDate = value => value.split("-").reverse().join("/");
+        if (reports.length) caption.appendChild(checkinNode("p", "", `Semana del ${formatDate(reports[0].weekStart)} al ${formatDate(reports[0].weekEnd)}`));
+        container.append(caption, checkinProgressSummary(total, completed, checkinAdmin() && !scope.value ? "Cumplimiento general" : "Cumplimiento de " + checkinAreaNames[scope.value || area]));
+        if (reports.some(report => !report.closed)) {
+            const reminder = checkinNode("aside", "checkin-deadline checkin-report-deadline");
+            reminder.append(checkinNode("span", "checkin-deadline-icon", "◷"), checkinNode("strong", "", "Plazo: domingo a las 23:59 · El lunes se publica el resumen anterior"));
+            container.appendChild(reminder);
+        }
+        const grid = checkinNode("div", "checkin-area-progress-grid"); container.appendChild(grid);
         [...reports].sort((a,b) => b.pending-a.pending).forEach(report => {
-            const card = checkinNode("div", "checkin-summary-card");
-            card.append(checkinNode("h3", "", `${checkinAreaNames[report.area]} · ${report.weekStart} al ${report.weekEnd}`), checkinNode("p", "", `${report.closed ? "Semana cerrada" : "Semana en curso"} · ${report.completed}/${report.total} completadas · ${report.pending} pendientes · ${report.percent == null ? "Sin tareas" : report.percent+"%"}`));
+            const card = checkinAreaProgressCard(report);
             if (report.zeroCompletion) card.appendChild(checkinNode("p", "checkin-feedback", "Atención: no se registraron tareas completadas en esta área."));
-            const details = checkinNode("details"), summary = checkinNode("summary", "", "Tareas, responsables y fotografías");
+            const details = checkinNode("details", "checkin-report-details"), summary = checkinNode("summary", "", "Ver detalle");
             details.append(summary, checkinTaskList(report.tasks, false)); card.appendChild(details);
             const pending = report.tasks.filter(t => t.status !== "REALIZADA");
             if (pending.length) {
@@ -892,8 +949,9 @@ async function renderAreaCheckinReports(section, area, revision) {
                 pending.forEach(t => alerts.appendChild(checkinNode("p", "", `${t.date} · ${t.title}${t.method === "FOTO" && !t.photoId ? " · sin fotografía obligatoria" : ""}`)));
                 card.appendChild(alerts);
             }
-            container.appendChild(card);
+            grid.appendChild(card);
         });
+        container.appendChild(checkinNode("p", "checkin-update-caption", "Se actualiza al consultar el resumen. Cada tarea conserva su responsable y sus fotografías."));
     };
     const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "alert"); section.appendChild(feedback);
     const reload = () => void load().catch(e => { feedback.textContent = e.message; });

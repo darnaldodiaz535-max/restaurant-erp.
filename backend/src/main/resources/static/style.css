@@ -2439,3 +2439,118 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .theme-dark .checkin-task .checkin-status--done { color:#bcf5cf; background:#174a33; border-color:#38885a; }
 .theme-dark .checkin-task .checkin-status--pending { color:#ffe0a1; background:#4a351a; border-color:#92703a; }
 @media(max-width:600px) { .checkin-task .checkin-status { font-size:13px; padding:7px 12px; } }
+
+/* Check-in visual dashboard: the same task/report data, displayed as progress. */
+.module-screen--checkin-diario { --checkin-ink:#14233f; --checkin-green:#079447; }
+.module-screen--checkin-diario .checkin-header { background:transparent; box-shadow:none; border:0; padding:8px 0 20px; }
+.module-screen--checkin-diario .checkin-header h2 { color:var(--checkin-ink); font-size:29px; letter-spacing:-.6px; }
+.module-screen--checkin-diario .checkin-header .module-icon { display:none; }
+.module-screen--checkin-diario .checkin-data { border-radius:18px; padding:24px; background:#f7f9fc; border:1px solid #e4eaf1; box-shadow:none; gap:18px; }
+.module-screen--checkin-diario .checkin-view-tabs { border-bottom:1px solid #dce3ed; padding:0; gap:22px; }
+.module-screen--checkin-diario .checkin-view-tabs button { border-radius:0; background:transparent; border-bottom:3px solid transparent; color:#42536e; padding:12px 2px; font-size:14px; font-weight:600; }
+.module-screen--checkin-diario .checkin-view-tabs .is-active { border-bottom-color:#2563eb; color:#1d4ed8; }
+.module-screen--checkin-diario .checkin-area-title { color:var(--checkin-ink); }
+.checkin-report-controls { align-items:end; gap:12px; padding:15px 0; }
+.checkin-report-controls label { display:grid; gap:6px; color:#566780; font-size:12px; }
+.checkin-report-controls input,.checkin-report-controls select { min-height:42px; padding:9px 12px; border:1px solid #d6dfea; border-radius:10px; background:#fff; color:#243854; font:inherit; max-width:100%; box-sizing:border-box; }
+.checkin-report-caption p { color:#64748b; font-size:14px; margin:4px 0 14px; }
+.checkin-progress-summary { display:flex; align-items:center; gap:36px; padding:26px 32px; border:1px solid #d9e2ec; border-radius:18px; background:#fff; margin:12px 0 22px; box-shadow:0 3px 12px #14233f03; }
+.checkin-progress-ring { position:relative; width:210px; height:210px; flex:0 0 210px; }
+.checkin-progress-ring svg { width:100%; height:100%; transform:rotate(-90deg); overflow:visible; }
+.checkin-progress-ring circle { fill:none; stroke-width:10; }
+.checkin-ring-track { stroke:#e0e6ee; }
+.checkin-ring-value { stroke:var(--checkin-green,#079447); stroke-linecap:round; animation:checkin-ring-reveal .65s ease-out; }
+@keyframes checkin-ring-reveal { from { stroke-dashoffset:339.292; } }
+.checkin-ring-label { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:26px; }
+.checkin-ring-label strong { color:#13213b; font-size:46px; letter-spacing:-1.5px; line-height:1.15; }
+.checkin-ring-label span { color:#384963; font-size:14px; line-height:1.35; margin-top:7px; }
+.checkin-ring-total { display:none; }
+.checkin-progress-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); flex:1; border-left:1px solid #dbe3ed; }
+.checkin-progress-stat { text-align:center; padding:12px; border-right:1px solid #e5eaf0; }
+.checkin-progress-stat:last-child { border:0; }
+.checkin-progress-stat strong { display:block; color:#14233f; font-size:40px; font-weight:750; letter-spacing:-1px; line-height:1.3; }
+.checkin-progress-stat span { display:block; color:#52617a; font-size:15px; margin-top:4px; }
+.checkin-progress-stat.is-done strong { color:#078640; }
+.checkin-progress-stat.is-pending strong { color:#bf770d; }
+.checkin-area-progress-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:start; }
+.checkin-area-progress-card { padding:20px; border:1px solid #d9e2ec; border-radius:16px; background:#fff; min-width:0; transition:box-shadow .18s,border-color .18s; }
+.checkin-area-progress-card:hover { border-color:#b9cdbf; box-shadow:0 5px 16px #14233f08; }
+.checkin-area-progress-heading { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.checkin-area-progress-heading h3 { margin:0; font-size:17px; color:#152540; }
+.checkin-area-symbol { width:33px; height:33px; flex:0 0 33px; border-radius:9px; background:#dff4e6; color:#176039; display:grid; place-items:center; }
+.checkin-area-symbol svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linejoin:round; stroke-linecap:round; }
+.checkin-area-state { color:#1a663d; background:#ddf3e5; border-radius:20px; padding:4px 9px; font-size:11px; font-weight:650; }
+.checkin-area-state.is-pending { color:#87500d; background:#fff0d0; }
+.checkin-area-percent { margin-left:auto; color:#14233f; font-size:23px; letter-spacing:-.5px; }
+.checkin-area-track { height:11px; background:#e0e6ee; border-radius:20px; overflow:hidden; margin:17px 0 12px; }
+.checkin-area-fill { display:block; height:100%; border-radius:20px; background:linear-gradient(90deg,#07883c,#0caf54); animation:checkin-bar-reveal .65s ease-out; }
+@keyframes checkin-bar-reveal { from { transform:scaleX(0); transform-origin:left; } to { transform:scaleX(1); transform-origin:left; } }
+.checkin-area-counts { margin:0; color:#53627b; font-size:13px; }
+.checkin-report-details { margin-top:14px; }
+.checkin-report-details > summary { color:#2563eb; font-weight:600; font-size:13px; cursor:pointer; padding:6px 0; }
+.checkin-report-details[open] { grid-column:1 / -1; }
+.checkin-area-progress-card:has(.checkin-report-details[open]) { grid-column:1 / -1; }
+.checkin-update-caption { color:#697891; font-size:12px; margin-top:18px; }
+.theme-dark .module-screen--checkin-diario { --checkin-ink:#e5edf8; }
+.theme-dark .module-screen--checkin-diario .checkin-data { background:#142033; border-color:#334155; }
+.theme-dark .checkin-progress-summary,.theme-dark .checkin-area-progress-card,.theme-dark .checkin-report-controls input,.theme-dark .checkin-report-controls select { background:#1e293b; border-color:#475569; color:#e2e8f0; }
+.theme-dark .checkin-ring-label strong,.theme-dark .checkin-area-percent,.theme-dark .checkin-area-progress-heading h3,.theme-dark .checkin-progress-stat.is-total strong { color:#eef4fc; }
+.theme-dark .checkin-ring-label span,.theme-dark .checkin-progress-stat span,.theme-dark .checkin-area-counts { color:#becbdf; }
+.theme-dark .checkin-progress-stat.is-done strong { color:#64d99a; }
+.theme-dark .checkin-progress-stat.is-pending strong { color:#f3c36f; }
+.theme-dark .checkin-ring-track,.theme-dark .checkin-area-track { stroke:#3d4b61; background:#3d4b61; }
+@media(max-width:900px) { .checkin-progress-summary { gap:18px; padding:22px; } .checkin-progress-ring { width:170px; height:170px; flex-basis:170px; } .checkin-progress-stat strong { font-size:32px; } .checkin-progress-stat span { font-size:13px; } .checkin-ring-label strong { font-size:37px; } }
+@media(max-width:600px) {
+    .module-screen--checkin-diario .checkin-data { padding:14px; border-radius:14px; }
+    .module-screen--checkin-diario .checkin-header h2 { font-size:24px; }
+    .module-screen--checkin-diario .checkin-view-tabs { gap:14px; flex-wrap:wrap; }
+    .module-screen--checkin-diario .checkin-view-tabs button { font-size:12px; text-align:left; padding:10px 0; min-height:44px; }
+    .checkin-progress-summary { padding:16px 12px; gap:12px; margin-bottom:16px; border-radius:14px; }
+    .checkin-progress-ring { width:140px; height:140px; flex-basis:140px; }
+    .checkin-ring-label { padding:17px; }
+    .checkin-ring-label strong { font-size:32px; }
+    .checkin-ring-label span { font-size:11px; margin-top:4px; }
+    .checkin-ring-total { display:block; font-size:10px; color:#76839a; margin-top:4px; }
+    .checkin-progress-stats { grid-template-columns:1fr; gap:14px; }
+    .checkin-progress-stat { border:0; padding:0 0 0 12px; text-align:left; }
+    .checkin-progress-stat.is-total { display:none; }
+    .checkin-progress-stat strong { font-size:26px; }
+    .checkin-progress-stat span { font-size:12px; margin-top:0; }
+    .checkin-area-progress-grid { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .checkin-area-progress-card { padding:15px; border-radius:13px; }
+    .checkin-area-progress-heading { gap:8px; }
+    .checkin-area-progress-heading h3 { font-size:16px; }
+    .checkin-area-symbol { width:29px; height:29px; flex-basis:29px; }
+    .checkin-area-state { font-size:10px; padding:4px 7px; }
+    .checkin-area-percent { font-size:20px; }
+    .checkin-report-controls { display:grid; grid-template-columns:minmax(0,1fr); }
+    .checkin-report-controls > * { width:100%; box-sizing:border-box; }
+}
+@media(prefers-reduced-motion:reduce) { .checkin-ring-value,.checkin-area-fill { animation:none; } }
+
+#other-module.module-screen--checkin-diario .checkin-header { border:0; border-radius:0; background:transparent; padding:8px 0; margin:0; box-shadow:none; }
+#other-module.module-screen--checkin-diario .checkin-header h2 { color:var(--checkin-ink); font-size:29px; letter-spacing:-.6px; }
+#other-module.module-screen--checkin-diario .checkin-data { gap:14px; padding:0; margin-top:0; background:transparent; border:0; box-shadow:none; }
+.module-screen--checkin-diario .checkin-feedback:empty { display:none; }
+.checkin-area-progress-card > details:not(.checkin-report-details) { font-size:12px; color:#64748b; margin-top:10px; }
+@media(max-width:600px) { #other-module.module-screen--checkin-diario .checkin-header h2 { font-size:23px; } #other-module.module-screen--checkin-diario .checkin-data { gap:12px; } }
+
+.checkin-report-filters { justify-self:end; margin:0; max-width:100%; }
+.checkin-report-filters > summary { cursor:pointer; border:1px solid #d6dfea; border-radius:10px; background:#fff; color:#334760; padding:11px 15px; font-size:13px; font-weight:600; }
+.checkin-report-filters[open] { width:100%; justify-self:stretch; }
+.theme-dark .checkin-report-filters > summary { background:#1e293b; border-color:#475569; color:#dbeafe; }
+@media(max-width:600px) { .checkin-report-filters { justify-self:stretch; } }
+
+.checkin-report-deadline { background:#fff3d7; border-color:#f2dfb0; color:#90500e; align-items:center; }
+.checkin-report-deadline .checkin-deadline-icon { background:#ffedbf; }
+.checkin-report-deadline strong { font-size:14px; }
+.theme-dark .checkin-report-deadline { background:#43341e; border-color:#7a5e32; color:#ffe0a1; }
+
+.module-screen--checkin-diario .checkin-deadline { width:100%; max-width:100%; box-sizing:border-box; position:static; top:auto; height:auto; max-height:none; overflow:visible; align-self:stretch; }
+@media(max-width:600px) {
+    .module-screen--checkin-diario .checkin-area-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+    .module-screen--checkin-diario .checkin-area-tabs button { font-size:12px; padding:9px 4px; min-width:0; }
+    .module-screen--checkin-diario .checkin-view-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+    .module-screen--checkin-diario .checkin-view-tabs:has(button:only-child) { grid-template-columns:1fr; }
+    .module-screen--checkin-diario .checkin-view-tabs button { font-size:11px; line-height:1.5; }
+}
