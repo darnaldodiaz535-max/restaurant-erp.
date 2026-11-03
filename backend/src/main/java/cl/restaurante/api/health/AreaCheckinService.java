@@ -62,25 +62,31 @@ public class AreaCheckinService {
     private List<Task> tasks(String area, LocalDate from, LocalDate until) {
         return jdbc.query("SELECT R.*, F.ID_FOTO FROM APP_CHECKIN_REGISTRO R "
                 + "LEFT JOIN APP_CHECKIN_EVIDENCIA F ON F.ID_REGISTRO=R.ID_REGISTRO "
-                + "WHERE R.AREA=? AND R.FECHA>=? AND R.FECHA<? ORDER BY R.FECHA,R.ID_REGISTRO",
+                + "WHERE R.AREA=? AND R.FECHA<? AND (R.FECHA>=? OR (R.FRECUENCIA='SEMANAL' AND R.FECHA+7>?)) ORDER BY R.FECHA,R.ID_REGISTRO",
                 (rs, n) -> new Task(rs.getLong("ID_REGISTRO"), rs.getDate("FECHA").toLocalDate().toString(),
-                        rs.getString("AREA"), rs.getString("TAREA"), rs.getString("METODO"), rs.getString("ESTADO"),
+                        rs.getString("AREA"), rs.getString("TAREA"), rs.getString("METODO"), rs.getString("ESTADO"), rs.getString("FRECUENCIA"),
                         rs.getString("RESPONSABLE"), rs.getTimestamp("REALIZADA_EN") == null ? null : rs.getTimestamp("REALIZADA_EN").toLocalDateTime().toString(),
                         rs.getObject("ID_FOTO") == null ? null : rs.getLong("ID_FOTO")),
-                area, Date.valueOf(from), Date.valueOf(until));
+                area, Date.valueOf(until), Date.valueOf(from), Date.valueOf(from));
     }
 
     @Transactional
     public void complete(RoleAccessService.User user, long id, byte[] bytes, String claimedType, String filename) {
         String own = managedArea(user);
         if (own == null) throw error(HttpStatus.FORBIDDEN, "Solo el jefe del área puede confirmar tareas.");
-        var rows = jdbc.query("SELECT AREA,FECHA,METODO,ESTADO FROM APP_CHECKIN_REGISTRO WHERE ID_REGISTRO=? FOR UPDATE",
-                (rs, n) -> new String[]{rs.getString(1), rs.getDate(2).toLocalDate().toString(), rs.getString(3), rs.getString(4)}, id);
+        // Serialize confirmations with the weekly closure, including across midnight.
+        jdbc.queryForObject("SELECT INICIO FROM APP_CHECKIN_CONFIG WHERE ID=1 FOR UPDATE", Date.class);
+        var rows = jdbc.query("SELECT AREA,FECHA,METODO,ESTADO,FRECUENCIA FROM APP_CHECKIN_REGISTRO WHERE ID_REGISTRO=? FOR UPDATE",
+                (rs, n) -> new String[]{rs.getString(1), rs.getDate(2).toLocalDate().toString(), rs.getString(3), rs.getString(4), rs.getString(5)}, id);
         if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "La tarea no existe.");
         String[] task = rows.getFirst();
         if (!own.equals(task[0])) throw error(HttpStatus.FORBIDDEN, "No puedes modificar tareas de otra área.");
-        if (!CheckinService.operationalDate().toString().equals(task[1]) || !"PENDIENTE".equals(task[3]))
-            throw error(HttpStatus.CONFLICT, "Solo se pueden completar tareas pendientes del día actual.");
+        LocalDate today = CheckinService.operationalDate();
+        LocalDate start = LocalDate.parse(task[1]);
+        boolean inPeriod = "SEMANAL".equals(task[4])
+                ? !today.isBefore(start) && today.isBefore(start.plusDays(7)) : today.equals(start);
+        if (!inPeriod || !"PENDIENTE".equals(task[3]))
+            throw error(HttpStatus.CONFLICT, "Solo se pueden completar tareas pendientes de su período actual.");
         if ("FOTO".equals(task[2])) {
             if (bytes == null || bytes.length == 0 || bytes.length > 4 * 1024 * 1024)
                 throw error(HttpStatus.BAD_REQUEST, "Adjunta una fotografía válida de hasta 4 MB.");
@@ -178,13 +184,16 @@ public class AreaCheckinService {
         // Finalized weeks are immutable. Revisit only unclosed dates after downtime.
         for (LocalDate date = activation; !date.isAfter(today); date = date.plusDays(1)) {
             try {
-                jdbc.update("INSERT INTO APP_CHECKIN_REGISTRO(ID_PLANTILLA,FECHA,AREA,TAREA,METODO) "
-                        + "SELECT P.ID_PLANTILLA,?,P.AREA,P.TAREA,P.METODO_COMPLETADO FROM APP_CHECKIN_PLANTILLA P "
+                jdbc.update("INSERT INTO APP_CHECKIN_REGISTRO(ID_PLANTILLA,FECHA,AREA,TAREA,METODO,FRECUENCIA) "
+                        + "SELECT P.ID_PLANTILLA,CASE WHEN P.FRECUENCIA='SEMANAL' THEN ? ELSE ? END,P.AREA,P.TAREA,P.METODO_COMPLETADO,P.FRECUENCIA FROM APP_CHECKIN_PLANTILLA P "
                         + "WHERE P.AREA IN ('COCINA','SALON','BARRA','COPERIA') AND P.ACTIVA='S' "
                         + "AND P.VIGENTE_DESDE<=? AND (P.VIGENTE_HASTA IS NULL OR P.VIGENTE_HASTA>=?) "
-                        + "AND NOT EXISTS(SELECT 1 FROM APP_CHECKIN_REGISTRO R WHERE R.ID_PLANTILLA=P.ID_PLANTILLA AND R.FECHA=?) "
+                        + "AND NOT EXISTS(SELECT 1 FROM APP_CHECKIN_REGISTRO R WHERE R.ID_PLANTILLA=P.ID_PLANTILLA AND R.FECHA=CASE WHEN P.FRECUENCIA='SEMANAL' THEN ? ELSE ? END) "
                         + "AND NOT EXISTS(SELECT 1 FROM APP_CHECKIN_RESUMEN S WHERE S.AREA=P.AREA AND S.SEMANA<=? AND S.SEMANA+7>?)",
-                        Date.valueOf(date), Date.valueOf(date), Date.valueOf(date), Date.valueOf(date), Date.valueOf(date), Date.valueOf(date));
+                        Date.valueOf(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))), Date.valueOf(date),
+                        Date.valueOf(date), Date.valueOf(date),
+                        Date.valueOf(date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))), Date.valueOf(date),
+                        Date.valueOf(date), Date.valueOf(date));
             } catch (DuplicateKeyException concurrent) { /* unique (template,date) */ }
         }
         LocalDate current = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
@@ -210,7 +219,7 @@ public class AreaCheckinService {
 
     private static ResponseStatusException error(HttpStatus status, String message) { return new ResponseStatusException(status, message); }
     private record Recipient(long id, String name) {}
-    public record Task(long id, String date, String area, String title, String method, String status, String responsible, String completedAt, Long photoId) {}
+    public record Task(long id, String date, String area, String title, String method, String status, String frequency, String responsible, String completedAt, Long photoId) {}
     public record Day(String date, String area, boolean canManage, List<Task> tasks) {}
     public record Report(String area, String weekStart, String weekEnd, int total, int completed, int pending,
                          Integer percent, boolean zeroCompletion, boolean closed, List<Task> tasks) {}

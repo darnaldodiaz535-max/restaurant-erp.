@@ -730,7 +730,7 @@ async function renderCheckinModule(selectedArea = null, view = "dia") {
     dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
     otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--checkin-diario";
     const area = selectedArea || checkinBossArea() || "COCINA", admin = checkinAdmin(), boss = checkinBossArea();
-    otherModule.appendChild(checkinHeader("Check-in", "Tareas, evidencias y seguimiento de las cuatro áreas."));
+    otherModule.appendChild(checkinHeader("Check-in", "Tareas diarias y limpieza profunda semanal de las cuatro áreas."));
     const section = checkinNode("section", "generic-data checkin-data"), tabs = checkinNode("div", "checkin-tabs");
     checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code), area === code ? "primary-button" : "secondary-button")));
     section.appendChild(tabs);
@@ -756,7 +756,7 @@ function checkinTaskList(tasks, canManage, refresh, feedback) {
     tasks.forEach(task => {
         const done = task.status === "REALIZADA", row = checkinNode("article", "checkin-task" + (done ? " is-done" : ""));
         const copy = checkinNode("div", "checkin-task-copy");
-        copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", `${checkinAreaNames[task.area]} · ${task.date} · ${task.method === "FOTO" ? "Fotografía" : "Checklist"} · ${done ? "Completada" : "Pendiente"}`));
+        copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", `${checkinAreaNames[task.area]} · ${task.frequency === "SEMANAL" ? "Semana del " : ""}${task.date} · ${task.method === "FOTO" ? "Fotografía" : "Checklist"} · ${done ? "Completada" : "Pendiente"}`));
         if (task.completedAt) copy.appendChild(checkinNode("small", "", `${task.responsible || ""} · ${task.completedAt.replace("T", " ")} (hora del servidor)`));
         row.appendChild(copy);
         if (task.photoId) row.appendChild(checkinButton("Ver fotografía", () => window.open("/api/checkin/gestion/fotos/" + task.photoId, "_blank", "noopener")));
@@ -785,7 +785,7 @@ function checkinTaskList(tasks, canManage, refresh, feedback) {
     }); return list;
 }
 async function renderAreaCheckinDay(section, area, revision, feedback) {
-    const dateLabel = checkinNode("label", "", "Fecha del registro "), date = checkinNode("input");
+    const dateLabel = checkinNode("label", "", "Fecha de consulta "), date = checkinNode("input");
     date.type = "date"; date.value = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" }); date.max = date.value;
     dateLabel.appendChild(date); section.appendChild(dateLabel);
     const container = checkinNode("div"); section.appendChild(container);

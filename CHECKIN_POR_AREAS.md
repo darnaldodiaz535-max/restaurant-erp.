@@ -5,18 +5,22 @@ Implementación del 3 de noviembre de 2026 en `C:\Users\darna\OneDrive\Desktop\v
 ## Funcionamiento
 
 - Cuatro áreas independientes: Cocina, Salón, Barra y Copería.
-- Una tarea por plantilla, área y fecha; no se multiplica por cada trabajador.
+- Una tarea por plantilla, área y período; no se multiplica por cada trabajador. Las tareas DIARIA se generan por fecha y las SEMANAL una vez por semana de lunes a domingo.
 - Todos los usuarios autenticados pueden consultar tareas, fechas anteriores y fotografías de las cuatro áreas.
 - Solo JEFE_COCINA, JEFE_SALON, JEFE_BARRA y JEFE_COPERIA confirman las tareas de su área. ADMIN/EMPRESA supervisan y envían observaciones.
 - SIMPLE: confirmación de checklist. FOTO: seleccionar el archivo y pulsar «Enviar evidencia y completar». La foto y la confirmación se guardan en una misma transacción. No se completa sin evidencia válida.
 - JPG, PNG y WebP hasta 4 MB, con validación de firma y tipo. Se registra cuenta, nombre del responsable y fecha/hora. Los instantes se muestran con la hora registrada por el servidor/base.
-- Solo se modifican tareas pendientes del día actual en America/Santiago. Las semanas anteriores no se reabren.
+- Las tareas DIARIA se confirman solo en su fecha. Las SEMANAL pueden confirmarse durante su semana completa en America/Santiago. Los períodos anteriores no se reabren.
 - Reportes semanales de lunes a domingo, permanentes, con total, completadas, pendientes, porcentaje, responsables y fotografías. Administración puede consultar el conjunto o un área y ve primero las áreas con más pendientes. Cada jefe solo consulta su propia área.
 - El cierre guarda un resumen por área y semana. El detalle usa los registros diarios persistentes; las plantillas no cambian el contenido de registros ya generados. No se agregan tareas a semanas cerradas.
 - Se destacan las áreas con tareas asignadas y ninguna completada; las áreas sin plantillas muestran «Sin tareas», sin inventar incumplimientos.
 - Los pendientes y las tareas sin fotografía obligatoria aparecen en los reportes. Una tarea pendiente al cerrar la semana permanece pendiente/incumplida, nunca se completa por el paso del tiempo.
 - Sugerencias con remitente, destinatario, fecha y contenido; se conserva historial por área. Si hay varios jefes activos del mismo rol, cada uno recibe un registro y aviso. Sin jefe activo, el envío se rechaza para evitar perder el mensaje.
 - Avisos internos de reportes e incumplimientos (incluidos en el detalle del resumen) y observaciones. Este flujo no encola correo ni Push ni depende de preferencias de servicios externos.
+
+## Limpieza profunda semanal KALI
+
+Ver LIMPIEZA_SEMANAL_KALI.md para las 31 tareas y sus marcas. Para esta ampliación: ejecutar primero la migración 22 (esquema), publicar manualmente el backend semanal y después ejecutar la migración 23 (tareas). Este orden evita que la versión diaria anterior genere copias diarias de estas tareas.
 
 ## Oracle: aplicar antes de usar esta versión
 
@@ -32,7 +36,7 @@ El script crea APP_CHECKIN_CONFIG, APP_CHECKIN_REGISTRO, APP_CHECKIN_EVIDENCIA, 
 
 ### Cargar las tareas definitivas
 
-Se reutiliza APP_CHECKIN_PLANTILLA y su recurrencia diaria existente. No se insertaron tareas de ejemplo en la aplicación ni se asignaron requisitos de fotografía. Las únicas tareas de prueba están en H2 efímero.
+Se reutiliza APP_CHECKIN_PLANTILLA. La lista real de limpieza profunda semanal y sus requisitos de fotografía están transcritos en LIMPIEZA_SEMANAL_KALI.md y migrations/23_limpieza_profunda_semanal_kali.sql. No se ejecutó esa carga contra Oracle desde el agente. Las tareas de prueba solo se insertan en H2 efímero.
 
 Usar los valores reales como parámetros, por ejemplo:
 
@@ -43,7 +47,7 @@ VALUES
   (:area,:nombre_real,:metodo,TO_DATE(:desde,'YYYY-MM-DD'),NULL,:posicion,'S');
 ```
 
-`:area`: COCINA, SALON, BARRA o COPERIA. `:metodo`: SIMPLE o FOTO, según tu lista. No cambiar retrospectivamente plantillas de períodos cerrados. Para otra frecuencia se necesitan las reglas definitivas de las tareas; actualmente se conserva la frecuencia diaria del módulo anterior.
+`:area`: COCINA, SALON, BARRA o COPERIA. `:metodo`: SIMPLE o FOTO, según tu lista. No cambiar retrospectivamente plantillas de períodos cerrados. La columna FRECUENCIA admite DIARIA (predeterminada para registros anteriores) y SEMANAL. La limpieza profunda KALI usa SEMANAL.
 
 Se reutilizan COPERIA y JEFE_COPERIA del resto de MariGex. La migración 21 corrige el nombre usado por error en la migración 20, conservando los registros.
 
@@ -71,14 +75,14 @@ El frontend que empaqueta Spring Boot está en `backend/src/main/resources/stati
 
 Java 25; compilación del backend y pruebas con H2 en modo Oracle, perfiles test y trabajos programados desactivados. Nunca se usan las credenciales de application-local.properties.
 
-- AreaCheckinIntegrationTest: 5 pruebas aprobadas. Incluyen acceso a las cuatro áreas, permisos de los cuatro roles, prohibición de escritura antigua, foto obligatoria/válida, autoría, cierre e idempotencia, conservación de evidencias, historial, reportes limitados por área y observaciones internas con destinatarios.
+- AreaCheckinIntegrationTest: 7 pruebas aprobadas, incluidas periodicidad semanal y carga idempotente de las 31 tareas reales con los 19 requisitos de fotografía. Incluyen acceso a las cuatro áreas, permisos de los cuatro roles, prohibición de escritura antigua, foto obligatoria/válida, autoría, cierre e idempotencia, conservación de evidencias, historial, reportes limitados por área y observaciones internas con destinatarios.
 - WebPushEncryptionTest: 1 prueba aprobada.
 - Suite completa: las 36 pruebas de PermissionsIntegrationTest tienen 2 fallos y 9 errores. Se ejecutó también una copia limpia del HEAD anterior en una carpeta temporal: los mismos 11 casos y errores ya existían. Nueve dependen de APP_NOTIF_MODULO_PREF ausente en el esquema de esa suite; dos esperan 200/403 en endpoints de otros módulos que ya devuelven 410. No se cambiaron esos módulos ni se ocultaron los fallos.
 - `node --check backend/src/main/resources/static/scrip.js`: aprobado.
 - `git diff --check`: aprobado.
 - Empaquetado `mvn -f backend/pom.xml package -DskipTests`: aprobado después de ejecutar las pruebas seleccionadas. JAR Spring Boot generado correctamente.
 - No se ejecutó la migración PL/SQL en Oracle real. El esquema CREATE TABLE nuevo se prueba en H2 Oracle; eso no sustituye verificar el script completo en Oracle de prueba.
-- No se hicieron pruebas visuales ni despliegues en Render. El flujo de negocio está probado mediante MockMvc; la lista definitiva de tareas sigue pendiente de tus datos.
+- No se hicieron pruebas visuales ni despliegues en Render. El flujo de negocio está probado mediante MockMvc; la lista KALI fue proporcionada y su carga se verifica en H2.
 
 Maven no estaba en PATH. Se descargó Maven 3.9.11 a una carpeta temporal. La verificación inicial en línea encontró un problema de certificados Java; se ejecutaron las pruebas en modo offline con las dependencias existentes y un archivo settings temporal que reconoce los dos identificadores de repositorio de la caché. No se desactivó TLS ni se cambió el pom o configuración del proyecto para resolverlo.
 
