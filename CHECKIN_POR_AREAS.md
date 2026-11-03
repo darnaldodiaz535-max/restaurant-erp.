@@ -178,3 +178,7 @@ Se sustituyeron los bloques azules de las tareas por botones con iconos y bordes
 Dentro del Check-in de su propia área y en la consulta actual, cada jefe ve un aviso con el plazo del domingo, días restantes y cantidad de tareas semanales pendientes. El cálculo se realiza en el backend usando America/Santiago: lunes 6, martes 5, sábado 1 y domingo «Hoy vence el plazo». Excluye tareas diarias y semanas anteriores. Si termina todas, se muestra una confirmación de cumplimiento. Personal, administrador y jefes consultando otra área no reciben este recordatorio de responsabilidad.
 
 Se actualiza al completar tareas, al volver a primer plano y cada minuto con la vista abierta. No se reemplaza una fotografía seleccionada sin enviar. Las consultas históricas se conservan. Es un aviso en el apartado Check-in, sin añadir envíos Push diarios ni nuevas tablas. No requiere SQL adicional.
+
+## Estados resaltados
+
+Cada tarea muestra una etiqueta independiente del texto secundario: Completada en verde con un visto, Pendiente en ámbar con un reloj. Aparece debajo del tipo de tarea en las vistas de tareas e historial y en los detalles semanales. Se conserva el responsable y la fecha, y se adapta a móvil y modo oscuro. Verificado visualmente con datos de muestra en escritorio y a 390 px; comprobación sintáctica de JavaScript y git diff --check aprobadas. No requiere cambios de backend ni SQL.

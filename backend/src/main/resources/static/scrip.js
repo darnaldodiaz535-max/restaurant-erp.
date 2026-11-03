@@ -765,7 +765,12 @@ function checkinTaskList(tasks, canManage, refresh, feedback) {
     tasks.forEach(task => {
         const done = task.status === "REALIZADA", row = checkinNode("article", "checkin-task" + (done ? " is-done" : ""));
         const copy = checkinNode("div", "checkin-task-copy");
-        copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", `${checkinAreaNames[task.area]} · ${task.frequency === "SEMANAL" ? "Semana del " : ""}${task.date} · ${task.method === "FOTO" ? "Fotografía" : "Checklist"} · ${done ? "Completada" : "Pendiente"}`));
+        copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", `${checkinAreaNames[task.area]} · ${task.frequency === "SEMANAL" ? "Semana del " : ""}${task.date} · ${task.method === "FOTO" ? "Fotografía" : "Checklist"}`));
+        const status = checkinNode("span", "checkin-status " + (done ? "checkin-status--done" : "checkin-status--pending"));
+        const statusIcon = checkinNode("span", "checkin-status-icon", done ? "✓" : "◷");
+        statusIcon.setAttribute("aria-hidden", "true");
+        status.append(statusIcon, checkinNode("span", "", done ? "Completada" : "Pendiente"));
+        copy.appendChild(status);
         if (task.completedAt) copy.appendChild(checkinNode("small", "", `${task.responsible || ""} · ${task.completedAt.replace("T", " ")} (hora del servidor)`));
         row.appendChild(copy);
         if (task.photoId) row.appendChild(checkinAction("Ver fotografía", "image", () => window.open("/api/checkin/gestion/fotos/" + task.photoId, "_blank", "noopener")));

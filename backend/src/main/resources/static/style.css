@@ -2430,3 +2430,12 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .theme-dark .checkin-deadline { background:#1e293b; border-color:#475569; color:#dbeafe; }
 .theme-dark .checkin-deadline-icon { background:#334155; }
 @media(max-width:600px) { .checkin-deadline { padding:14px; gap:10px; } .checkin-deadline strong { font-size:14px; } }
+
+/* Task state remains explicit in text as well as color, on every Check-in view. */
+.checkin-task .checkin-status { display:inline-flex; align-items:center; justify-self:start; width:fit-content; max-width:100%; box-sizing:border-box; gap:7px; margin-top:5px; padding:6px 11px; border:1px solid; border-radius:999px; font-size:12px; font-weight:750; line-height:1.4; letter-spacing:.01em; }
+.checkin-task .checkin-status--done { color:#116039; background:#d5f3df; border-color:#91d4aa; }
+.checkin-task .checkin-status--pending { color:#874409; background:#fff0cb; border-color:#eac26f; }
+.checkin-status-icon { font-size:15px; line-height:1; }
+.theme-dark .checkin-task .checkin-status--done { color:#bcf5cf; background:#174a33; border-color:#38885a; }
+.theme-dark .checkin-task .checkin-status--pending { color:#ffe0a1; background:#4a351a; border-color:#92703a; }
+@media(max-width:600px) { .checkin-task .checkin-status { font-size:13px; padding:7px 12px; } }
