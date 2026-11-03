@@ -706,10 +706,10 @@ async function renderTeamCommunicationModule() {
     }
 }
 
-const checkinAreas = ["COCINA", "SALON", "BARRA", "COOPERATIVA"];
-const checkinAreaNames = { COCINA: "Cocina", SALON: "Salón", BARRA: "Barra", COOPERATIVA: "Cooperativa" };
+const checkinAreas = ["COCINA", "SALON", "BARRA", "COPERIA"];
+const checkinAreaNames = { COCINA: "Cocina", SALON: "Salón", BARRA: "Barra", COPERIA: "Copería" };
 const checkinAdmin = () => ["ADMIN", "EMPRESA"].includes(accessRole());
-const checkinBossArea = () => ({ JEFE_COCINA: "COCINA", JEFE_SALON: "SALON", JEFE_BARRA: "BARRA", JEFE_COOPERATIVA: "COOPERATIVA" })[accessRole()] || "";
+const checkinBossArea = () => ({ JEFE_COCINA: "COCINA", JEFE_SALON: "SALON", JEFE_BARRA: "BARRA", JEFE_COPERIA: "COPERIA" })[accessRole()] || "";
 function checkinNode(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; }
 function checkinButton(label, handler, cls = "secondary-button") { const button = checkinNode("button", cls, label); button.type = "button"; if (handler) button.addEventListener("click", handler); return button; }
 function checkinWeekStart() {
@@ -2540,7 +2540,7 @@ function setAuthError(message) {
 function fillProfile(profile) {
     currentProfile = profile;
     document.getElementById("currentUserName").textContent = profile.name;
-    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_COOPERATIVA: "Jefe de cooperativa", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
+    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
     document.getElementById("currentUserRole").textContent = roleLabels[profile.role] || profile.position;
 }
 async function enterApplication(profile) {
@@ -2625,7 +2625,7 @@ async function openProfile() {
     document.getElementById("profile-area").textContent = currentProfile.area;
     document.getElementById("profile-area-detail").textContent = currentProfile.area || "Sin área asignada";
     document.getElementById("profile-username").textContent = currentProfile.username;
-    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_COOPERATIVA: "Jefe de cooperativa", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
+    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
     document.getElementById("profile-role").textContent = roleLabels[currentProfile.role] || currentProfile.position;
     const avatar = document.getElementById("profileAvatar");
     const avatarKey = `marigex-profile-photo-${currentProfile.employeeId}`;

@@ -1,0 +1,40 @@
+-- Corrección: el área real es COPERIA, con el rol JEFE_COPERIA existente.
+-- Ejecutar después de la migración 20. No elimina registros ni fotografías.
+-- No es necesario repetir la migración 20 si ya terminó correctamente.
+DECLARE
+  n NUMBER;
+  PROCEDURE drop_check(t VARCHAR2, c VARCHAR2) IS
+    found NUMBER;
+  BEGIN
+    SELECT COUNT(*) INTO found FROM USER_CONSTRAINTS WHERE TABLE_NAME=t AND CONSTRAINT_NAME=c;
+    IF found>0 THEN EXECUTE IMMEDIATE 'ALTER TABLE '||t||' DROP CONSTRAINT '||c; END IF;
+  END;
+  PROCEDURE allow_coperia(t VARCHAR2, old_c VARCHAR2, new_c VARCHAR2) IS
+  BEGIN
+    -- Transitional constraint accepts both values while preserving validation.
+    drop_check(t,old_c);
+    drop_check(t,new_c);
+    EXECUTE IMMEDIATE 'ALTER TABLE '||t||' ADD CONSTRAINT '||new_c||
+      q'~ CHECK(AREA IN ('COCINA','SALON','BARRA','COPERIA','COOPERATIVA')) ENABLE VALIDATE~';
+  END;
+BEGIN
+  -- Never merge or overwrite two existing weekly summaries silently.
+  SELECT COUNT(*) INTO n FROM APP_CHECKIN_RESUMEN A JOIN APP_CHECKIN_RESUMEN B
+    ON A.SEMANA=B.SEMANA WHERE A.AREA='COPERIA' AND B.AREA='COOPERATIVA';
+  IF n>0 THEN
+    RAISE_APPLICATION_ERROR(-20021,'Hay resumenes de ambas areas para la misma semana. Revisarlos antes de convertir; no se cambiaron datos.');
+  END IF;
+  allow_coperia('APP_CHECKIN_REGISTRO','CK_CHECKIN_REG_AREA','CK_CHECKIN_REG_AREA_V2');
+  allow_coperia('APP_CHECKIN_RESUMEN','CK_CHECKIN_RES_AREA','CK_CHECKIN_RES_AREA_V2');
+  allow_coperia('APP_CHECKIN_OBSERVACION','CK_CHECKIN_OBS_AREA','CK_CHECKIN_OBS_AREA_V2');
+
+  UPDATE APP_CHECKIN_PLANTILLA SET AREA='COPERIA' WHERE AREA='COOPERATIVA';
+  UPDATE APP_CHECKIN_REGISTRO SET AREA='COPERIA' WHERE AREA='COOPERATIVA';
+  UPDATE APP_CHECKIN_RESUMEN SET AREA='COPERIA' WHERE AREA='COOPERATIVA';
+  UPDATE APP_CHECKIN_OBSERVACION SET AREA='COPERIA' WHERE AREA='COOPERATIVA';
+  UPDATE APP_USUARIO SET ROL='JEFE_COPERIA' WHERE ROL='JEFE_COOPERATIVA';
+END;
+/
+COMMIT;
+SELECT AREA,COUNT(*) REGISTROS FROM APP_CHECKIN_REGISTRO GROUP BY AREA;
+SELECT ROL,COUNT(*) CUENTAS FROM APP_USUARIO WHERE ROL='JEFE_COPERIA' GROUP BY ROL;

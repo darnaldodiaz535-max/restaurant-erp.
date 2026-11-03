@@ -44,7 +44,7 @@ class AreaCheckinIntegrationTest {
             for (String ddl : new String(input.readAllBytes(),StandardCharsets.UTF_8).split(";")) if (!ddl.isBlank()) jdbc.execute(ddl);
         }
         jdbc.update("INSERT INTO APP_CHECKIN_CONFIG VALUES(1,?)",Date.valueOf(today));
-        String[] roles={"ADMIN","TRABAJADOR","JEFE_COCINA","JEFE_SALON","JEFE_BARRA","JEFE_COOPERATIVA","JEFE_COPERIA"};
+        String[] roles={"ADMIN","TRABAJADOR","JEFE_COCINA","JEFE_SALON","JEFE_BARRA","JEFE_COPERIA","JEFE_LOCAL"};
         for (int i=0;i<roles.length;i++) {
             jdbc.update("INSERT INTO APP_EMPLEADO VALUES(?,?)",i+1,"Persona "+(i+1));
             jdbc.update("INSERT INTO APP_USUARIO VALUES(?,?,?,?, 'S')",i+1,i+1,"usuario"+(i+1),roles[i]);
@@ -92,14 +92,14 @@ class AreaCheckinIntegrationTest {
     @Test void weeklyClosureRetainsPhotographicEvidenceAndAuthor() throws Exception {
         LocalDate week=today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
         jdbc.update("UPDATE APP_CHECKIN_CONFIG SET INICIO=?",Date.valueOf(week));
-        template(1,"COOPERATIVA","FOTO",week);
-        jdbc.update("INSERT INTO APP_CHECKIN_REGISTRO(ID_PLANTILLA,FECHA,AREA,TAREA,METODO,ESTADO,ID_RESPONSABLE,RESPONSABLE,REALIZADA_EN) VALUES(?,?,'COOPERATIVA','Evidencia histórica de prueba','FOTO','REALIZADA',6,'Persona 6',CURRENT_TIMESTAMP)",1,Date.valueOf(week));
+        template(1,"COPERIA","FOTO",week);
+        jdbc.update("INSERT INTO APP_CHECKIN_REGISTRO(ID_PLANTILLA,FECHA,AREA,TAREA,METODO,ESTADO,ID_RESPONSABLE,RESPONSABLE,REALIZADA_EN) VALUES(?,?,'COPERIA','Evidencia histórica de prueba','FOTO','REALIZADA',6,'Persona 6',CURRENT_TIMESTAMP)",1,Date.valueOf(week));
         long id=task(1,week);
         jdbc.update("INSERT INTO APP_CHECKIN_EVIDENCIA(ID_REGISTRO,NOMBRE_ARCHIVO,TIPO_CONTENIDO,FOTO) VALUES(?,'test.png','image/png',?)",id,png);
         service.reconcile(); service.reconcile();
         long photo=jdbc.queryForObject("SELECT ID_FOTO FROM APP_CHECKIN_EVIDENCIA",Long.class);
         mvc.perform(get("/api/checkin/gestion/fotos/"+photo).session(session(2))).andExpect(status().isOk()).andExpect(content().bytes(png));
-        mvc.perform(get("/api/checkin/gestion/semanal").param("area","COOPERATIVA").param("semana",week.toString()).session(session(6)))
+        mvc.perform(get("/api/checkin/gestion/semanal").param("area","COPERIA").param("semana",week.toString()).session(session(6)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].completed").value(1)).andExpect(jsonPath("$[0].tasks[0].responsible").value("Persona 6")).andExpect(jsonPath("$[0].tasks[0].photoId").value(photo));
     }
 
@@ -122,11 +122,11 @@ class AreaCheckinIntegrationTest {
     }
 
     @Test void observationsPersistRecipientsAndNotifyInternallyOnly() throws Exception {
-        String body="{\"area\":\"COOPERATIVA\",\"message\":\"Observación de prueba\"}";
+        String body="{\"area\":\"COPERIA\",\"message\":\"Observación de prueba\"}";
         mvc.perform(post("/api/checkin/gestion/observaciones").contentType("application/json").content(body).session(session(2))).andExpect(status().isForbidden());
         mvc.perform(post("/api/checkin/gestion/observaciones").contentType("application/json").content(body).session(session(1))).andExpect(status().isOk());
-        mvc.perform(get("/api/checkin/gestion/observaciones").param("area","COOPERATIVA").session(session(6))).andExpect(status().isOk()).andExpect(jsonPath("$[0].recipientId").value(6)).andExpect(jsonPath("$[0].sender").value("Persona 1"));
-        mvc.perform(get("/api/checkin/gestion/observaciones").param("area","COOPERATIVA").session(session(3))).andExpect(status().isForbidden());
+        mvc.perform(get("/api/checkin/gestion/observaciones").param("area","COPERIA").session(session(6))).andExpect(status().isOk()).andExpect(jsonPath("$[0].recipientId").value(6)).andExpect(jsonPath("$[0].sender").value("Persona 1"));
+        mvc.perform(get("/api/checkin/gestion/observaciones").param("area","COPERIA").session(session(3))).andExpect(status().isForbidden());
         assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION WHERE ID_USUARIO=6 AND VISIBLE='S'",Integer.class));
         org.mockito.Mockito.verifyNoInteractions(transport);
         jdbc.update("UPDATE APP_USUARIO SET ACTIVO='N' WHERE ID_USUARIO=6");

@@ -15,7 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 /** Area-wide Check-in. Legacy personal records remain in APP_CHECKIN_DIA. */
 @Service
 public class AreaCheckinService {
-    public static final List<String> AREAS = List.of("COCINA", "SALON", "BARRA", "COOPERATIVA");
+    public static final List<String> AREAS = List.of("COCINA", "SALON", "BARRA", "COPERIA");
     private final JdbcTemplate jdbc;
     private final NotificationService notifications;
 
@@ -26,7 +26,7 @@ public class AreaCheckinService {
 
     public static String area(String value) {
         String code = AreaService.normalize(value);
-        if (!AREAS.contains(code)) throw error(HttpStatus.BAD_REQUEST, "Selecciona Cocina, Salón, Barra o Cooperativa.");
+        if (!AREAS.contains(code)) throw error(HttpStatus.BAD_REQUEST, "Selecciona Cocina, Salón, Barra o Copería.");
         return code;
     }
 
@@ -39,7 +39,7 @@ public class AreaCheckinService {
             case "JEFE_COCINA" -> "COCINA";
             case "JEFE_SALON" -> "SALON";
             case "JEFE_BARRA" -> "BARRA";
-            case "JEFE_COOPERATIVA" -> "COOPERATIVA";
+            case "JEFE_COPERIA" -> "COPERIA";
             default -> null;
         };
     }
@@ -180,7 +180,7 @@ public class AreaCheckinService {
             try {
                 jdbc.update("INSERT INTO APP_CHECKIN_REGISTRO(ID_PLANTILLA,FECHA,AREA,TAREA,METODO) "
                         + "SELECT P.ID_PLANTILLA,?,P.AREA,P.TAREA,P.METODO_COMPLETADO FROM APP_CHECKIN_PLANTILLA P "
-                        + "WHERE P.AREA IN ('COCINA','SALON','BARRA','COOPERATIVA') AND P.ACTIVA='S' "
+                        + "WHERE P.AREA IN ('COCINA','SALON','BARRA','COPERIA') AND P.ACTIVA='S' "
                         + "AND P.VIGENTE_DESDE<=? AND (P.VIGENTE_HASTA IS NULL OR P.VIGENTE_HASTA>=?) "
                         + "AND NOT EXISTS(SELECT 1 FROM APP_CHECKIN_REGISTRO R WHERE R.ID_PLANTILLA=P.ID_PLANTILLA AND R.FECHA=?) "
                         + "AND NOT EXISTS(SELECT 1 FROM APP_CHECKIN_RESUMEN S WHERE S.AREA=P.AREA AND S.SEMANA<=? AND S.SEMANA+7>?)",

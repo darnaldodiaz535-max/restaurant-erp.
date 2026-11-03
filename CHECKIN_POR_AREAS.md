@@ -4,10 +4,10 @@ Implementación del 3 de noviembre de 2026 en `C:\Users\darna\OneDrive\Desktop\v
 
 ## Funcionamiento
 
-- Cuatro áreas independientes: Cocina, Salón, Barra y Cooperativa.
+- Cuatro áreas independientes: Cocina, Salón, Barra y Copería.
 - Una tarea por plantilla, área y fecha; no se multiplica por cada trabajador.
 - Todos los usuarios autenticados pueden consultar tareas, fechas anteriores y fotografías de las cuatro áreas.
-- Solo JEFE_COCINA, JEFE_SALON, JEFE_BARRA y JEFE_COOPERATIVA confirman las tareas de su área. ADMIN/EMPRESA supervisan y envían observaciones.
+- Solo JEFE_COCINA, JEFE_SALON, JEFE_BARRA y JEFE_COPERIA confirman las tareas de su área. ADMIN/EMPRESA supervisan y envían observaciones.
 - SIMPLE: confirmación de checklist. FOTO: seleccionar el archivo y pulsar «Enviar evidencia y completar». La foto y la confirmación se guardan en una misma transacción. No se completa sin evidencia válida.
 - JPG, PNG y WebP hasta 4 MB, con validación de firma y tipo. Se registra cuenta, nombre del responsable y fecha/hora. Los instantes se muestran con la hora registrada por el servidor/base.
 - Solo se modifican tareas pendientes del día actual en America/Santiago. Las semanas anteriores no se reabren.
@@ -23,9 +23,9 @@ Implementación del 3 de noviembre de 2026 en `C:\Users\darna\OneDrive\Desktop\v
 No se ejecutó ningún SQL contra Oracle ni se accedió a datos de producción.
 
 1. En Oracle Database Actions, con el propietario del esquema APP_, comprobar que ya están aplicadas las migraciones 08 y 17 y que existe APP_NOTIFICACION con DETALLE, LEIDA y VISIBLE.
-2. Ejecutar `migrations/20_checkin_por_areas.sql` como script completo, incluidos los bloques PL/SQL y `/`.
+2. Ejecutar `migrations/20_checkin_por_areas.sql` y luego `migrations/21_checkin_coperia.sql` como scripts completos, incluidos los bloques PL/SQL y `/`. Si ya se ejecutó la 20, solo falta la 21.
 3. Revisar los SELECT finales. APP_CHECKIN_CONFIG.INICIO fija la fecha de activación en America/Santiago. El nuevo historial comienza en esa fecha; no convierte el cumplimiento personal antiguo en cumplimiento por área.
-4. Crear/asignar las cuentas de los jefes. Personal → Crear cuenta incluye ahora «Jefe de cooperativa». Las cuentas existentes no cambian de rol automáticamente.
+4. Crear/asignar las cuentas de los jefes. Personal → Crear cuenta utiliza «Jefe de copería». La migración 21 convierte únicamente el rol JEFE_COOPERATIVA creado con el nombre incorrecto a JEFE_COPERIA; conserva las demás cuentas.
 5. Incorporar las tareas reales a APP_CHECKIN_PLANTILLA cuando se disponga de la lista definitiva.
 
 El script crea APP_CHECKIN_CONFIG, APP_CHECKIN_REGISTRO, APP_CHECKIN_EVIDENCIA, APP_CHECKIN_RESUMEN y APP_CHECKIN_OBSERVACION, con sus restricciones e índices. Amplía las restricciones de plantillas y roles. Su reejecución no borra datos ni reinicia la fecha de activación. Oracle confirma DDL implícitamente: aplicar primero en una copia de prueba. El bloque también confirma la fila de configuración con COMMIT.
@@ -43,9 +43,9 @@ VALUES
   (:area,:nombre_real,:metodo,TO_DATE(:desde,'YYYY-MM-DD'),NULL,:posicion,'S');
 ```
 
-`:area`: COCINA, SALON, BARRA o COOPERATIVA. `:metodo`: SIMPLE o FOTO, según tu lista. No cambiar retrospectivamente plantillas de períodos cerrados. Para otra frecuencia se necesitan las reglas definitivas de las tareas; actualmente se conserva la frecuencia diaria del módulo anterior.
+`:area`: COCINA, SALON, BARRA o COPERIA. `:metodo`: SIMPLE o FOTO, según tu lista. No cambiar retrospectivamente plantillas de períodos cerrados. Para otra frecuencia se necesitan las reglas definitivas de las tareas; actualmente se conserva la frecuencia diaria del módulo anterior.
 
-Cooperativa es distinta de Copería: COPERIA y JEFE_COPERIA siguen disponibles en los otros módulos y en el archivo anterior. No se renombraron personas, horarios ni tareas de Copería automáticamente.
+Se reutilizan COPERIA y JEFE_COPERIA del resto de MariGex. La migración 21 corrige el nombre usado por error en la migración 20, conservando los registros.
 
 ## Generación automática e historial anterior
 
@@ -100,6 +100,7 @@ Nuevos:
 - backend/src/test/java/cl/restaurante/api/health/AreaCheckinIntegrationTest.java
 - backend/src/test/resources/checkin-area-schema.sql
 - migrations/20_checkin_por_areas.sql
+- migrations/21_checkin_coperia.sql
 - CHECKIN_POR_AREAS.md
 
 Modificados:

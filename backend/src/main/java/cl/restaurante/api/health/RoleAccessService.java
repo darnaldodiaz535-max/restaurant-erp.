@@ -67,7 +67,7 @@ public class RoleAccessService {
         if (role == null) return "TRABAJADOR";
         String value = role.trim().toUpperCase(Locale.ROOT);
         return switch (value) {
-            case "ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_COOPERATIVA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO" -> value;
+            case "ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO" -> value;
             default -> "TRABAJADOR";
         };
     }
