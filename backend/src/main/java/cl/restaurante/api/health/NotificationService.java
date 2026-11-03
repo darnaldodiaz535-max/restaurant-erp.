@@ -110,11 +110,24 @@ private void notifyWithDetail(
         },keys);
         delivery.enqueue(keys.getKey().longValue(),user,p);
     }
-    /** Required internal Check-in notices; do not enqueue email or push delivery. */
+    /** Always preserve the in-app notice; optionally queue Push using existing device preferences. */
     @org.springframework.transaction.annotation.Transactional
-    public void checkinInternal(long user, String preview, String detail) {
-        jdbc.update("INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE,DETALLE,LEIDA,VISIBLE) VALUES(?,'Check-in Diario',?,?,'N','S')",
-                user, preview, detail);
+    public void checkinNotice(long user, String preview, String detail) {
+        var keys = new org.springframework.jdbc.support.GeneratedKeyHolder();
+        jdbc.update(connection -> {
+            var statement = connection.prepareStatement(
+                    "INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE,DETALLE,LEIDA,VISIBLE) VALUES(?,'Check-in Diario',?,?,'N','S')",
+                    new String[]{"ID_NOTIFICACION"});
+            statement.setLong(1, user);
+            statement.setString(2, preview.substring(0, Math.min(preview.length(), 900)));
+            statement.setCharacterStream(3, new StringReader(detail), detail.length());
+            return statement;
+        }, keys);
+        var preference = preferences.get(user);
+        if (preference.push() && preferences.isModuleEnabled(user, "Check-in Diario")) {
+            delivery.enqueue(keys.getKey().longValue(), user,
+                    new NotificationPreferences.Preferences(true, true, false, ""));
+        }
     }
     public List<Long> validateRecipients(List<Long> ids) {
         if(ids==null) return List.of();

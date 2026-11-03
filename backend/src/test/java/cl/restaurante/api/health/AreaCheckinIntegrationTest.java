@@ -27,6 +27,7 @@ class AreaCheckinIntegrationTest {
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
     @Autowired AreaCheckinService service;
+    @Autowired NotificationDelivery delivery;
     @org.springframework.test.context.bean.override.mockito.MockitoBean NotificationTransport transport;
     MockMvc mvc;
     LocalDate today = CheckinService.operationalDate();
@@ -43,6 +44,11 @@ class AreaCheckinIntegrationTest {
         try (var input=getClass().getResourceAsStream("/checkin-area-schema.sql")) {
             for (String ddl : new String(input.readAllBytes(),StandardCharsets.UTF_8).split(";")) if (!ddl.isBlank()) jdbc.execute(ddl);
         }
+        try (var input=getClass().getResourceAsStream("/marigex-test-schema.sql")) {
+            String notificationsSchema=new String(input.readAllBytes(),StandardCharsets.UTF_8).split("ALTER TABLE")[0];
+            for (String ddl:notificationsSchema.split(";")) if (!ddl.isBlank()) jdbc.execute(ddl);
+        }
+        jdbc.execute("CREATE TABLE APP_NOTIF_MODULO_PREF(ID_USUARIO NUMBER,MODULO VARCHAR2(60),HABILITADA CHAR(1),PRIMARY KEY(ID_USUARIO,MODULO))");
         jdbc.update("INSERT INTO APP_CHECKIN_CONFIG VALUES(1,?)",Date.valueOf(today));
         String[] roles={"ADMIN","TRABAJADOR","JEFE_COCINA","JEFE_SALON","JEFE_BARRA","JEFE_COPERIA","JEFE_LOCAL"};
         for (int i=0;i<roles.length;i++) {
@@ -166,5 +172,48 @@ class AreaCheckinIntegrationTest {
         org.mockito.Mockito.verifyNoInteractions(transport);
         jdbc.update("UPDATE APP_USUARIO SET ACTIVO='N' WHERE ID_USUARIO=6");
         mvc.perform(post("/api/checkin/gestion/observaciones").contentType("application/json").content(body).session(session(1))).andExpect(status().isConflict());
+    }
+
+    void enablePush(long user) {
+        jdbc.update("INSERT INTO APP_NOTIF_PREFERENCIA(ID_USUARIO,PUSH,CORREO,EMAIL) VALUES(?,'S','S','test@example.invalid')",user);
+        jdbc.update("INSERT INTO APP_PUSH_SUSCRIPCION(ID_USUARIO,ENDPOINT,ENDPOINT_HASH,P256DH,AUTH) VALUES(?,? ,?,'key','auth')",
+                user,"https://push.example.invalid/"+user,"device-"+user);
+    }
+
+    @Test void administratorMessageQueuesPushOnlyForTheAreaChiefAndDeliversIt() throws Exception {
+        enablePush(3); enablePush(6);
+        mvc.perform(post("/api/checkin/gestion/observaciones").contentType("application/json")
+                .content("{\"area\":\"COPERIA\",\"message\":\"Revisar la limpieza semanal\"}").session(session(1))).andExpect(status().isOk());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO WHERE CANAL='PUSH'",Integer.class));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO WHERE CANAL='EMAIL'",Integer.class));
+        assertEquals(6,jdbc.queryForObject("SELECT N.ID_USUARIO FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION",Integer.class));
+        org.mockito.Mockito.verifyNoInteractions(transport); // queued only, never network inside the send transaction
+        org.mockito.Mockito.when(transport.pushReady()).thenReturn(true);
+        org.mockito.Mockito.when(transport.push(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString())).thenReturn(201);
+        delivery.deliver();
+        assertEquals("ENVIADO",jdbc.queryForObject("SELECT ESTADO FROM APP_NOTIF_ENVIO",String.class));
+        org.mockito.Mockito.verify(transport).push(org.mockito.ArgumentMatchers.eq("https://push.example.invalid/6"),org.mockito.ArgumentMatchers.eq("key"),org.mockito.ArgumentMatchers.eq("auth"),
+                org.mockito.ArgumentMatchers.contains("Nuevo mensaje de administración"));
+    }
+
+    @Test void disabledPushStillKeepsTheMessageAndInternalNotification() throws Exception {
+        enablePush(6);
+        jdbc.update("INSERT INTO APP_NOTIF_MODULO_PREF VALUES(6,'Check-in Diario','N')");
+        mvc.perform(post("/api/checkin/gestion/observaciones").contentType("application/json")
+                .content("{\"area\":\"COPERIA\",\"message\":\"Mensaje al buzón\"}").session(session(1))).andExpect(status().isOk());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_OBSERVACION",Integer.class));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION WHERE VISIBLE='S'",Integer.class));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO",Integer.class));
+    }
+
+    @Test void weeklyClosureQueuesAreaReportsForAdministratorAndOwnChiefOnly() {
+        enablePush(1); enablePush(3);
+        LocalDate week=today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
+        jdbc.update("UPDATE APP_CHECKIN_CONFIG SET INICIO=?",Date.valueOf(week));
+        template(1,"COCINA","SIMPLE",week);
+        service.reconcile(); service.reconcile();
+        assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE N.ID_USUARIO=1",Integer.class));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE N.ID_USUARIO=3 AND N.MENSAJE LIKE '%COCINA'",Integer.class));
+        assertEquals(5,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO",Integer.class));
     }
 }

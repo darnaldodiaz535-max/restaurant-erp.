@@ -164,7 +164,7 @@ public class AreaCheckinService {
         for (Recipient recipient : recipients) {
             jdbc.update("INSERT INTO APP_CHECKIN_OBSERVACION(AREA,MENSAJE,ID_REMITENTE,REMITENTE,ID_DESTINATARIO,DESTINATARIO) VALUES(?,?,?,?,?,?)",
                     area, message.trim(), user.id(), user.name(), recipient.id(), recipient.name());
-            notifications.checkinInternal(recipient.id(), "Nueva observación de administración · " + area, message.trim());
+            notifications.checkinNotice(recipient.id(), "Nuevo mensaje de administración · " + area, message.trim());
         }
     }
 
@@ -209,11 +209,12 @@ public class AreaCheckinService {
                     area, Date.valueOf(week), report.total(), report.completed(), report.pending());
         } catch (DuplicateKeyException saved) { return; }
         String detail = area + " · " + week + " al " + week.plusDays(6) + "\nCompletadas: " + report.completed()
-                + "/" + report.total() + "\nPendientes/incumplidas: " + report.pending()
+                + "/" + report.total() + "\nCumplimiento: " + (report.percent() == null ? "Sin tareas" : report.percent() + "%")
+                + "\nPendientes/incumplidas: " + report.pending()
                 + (report.zeroCompletion() ? "\nATENCIÓN: ninguna tarea completada." : "");
         for (String role : List.of("ADMIN", "EMPRESA", "JEFE_" + area)) {
             for (Recipient recipient : recipients(role))
-                notifications.checkinInternal(recipient.id(), "Resumen semanal de Check-in disponible · " + area, detail);
+                notifications.checkinNotice(recipient.id(), "Resumen semanal de Check-in disponible · " + area, detail);
         }
     }
 

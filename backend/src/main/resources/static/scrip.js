@@ -730,7 +730,7 @@ async function renderCheckinModule(selectedArea = null, view = "dia") {
     dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
     otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--checkin-diario";
     const area = selectedArea || checkinBossArea() || "COCINA", admin = checkinAdmin(), boss = checkinBossArea();
-    otherModule.appendChild(checkinHeader("Check-in", "Tareas diarias y limpieza profunda semanal de las cuatro áreas."));
+    otherModule.appendChild(checkinHeader("Check-in", "Limpieza semanal: del lunes al domingo a las 23:59 (hora de Chile). El lunes se publica el resumen de la semana anterior."));
     const section = checkinNode("section", "generic-data checkin-data"), tabs = checkinNode("div", "checkin-tabs");
     checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code), area === code ? "primary-button" : "secondary-button")));
     section.appendChild(tabs);
@@ -739,7 +739,7 @@ async function renderCheckinModule(selectedArea = null, view = "dia") {
     if (admin || boss) {
         const reportArea = admin ? area : boss;
         nav.appendChild(checkinButton("Resumen semanal de Check-in", () => void renderCheckinModule(reportArea, "semanal")));
-        nav.appendChild(checkinButton("Sugerencias y observaciones", () => void renderCheckinModule(reportArea, "observaciones")));
+        nav.appendChild(checkinButton(admin ? "Mensajes a jefes de área" : "Buzón de administración", () => void renderCheckinModule(reportArea, "observaciones")));
     }
     section.append(nav, checkinNode("h3", "checkin-area-title", checkinAreaNames[area]));
     const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "status"); section.appendChild(feedback);
@@ -838,25 +838,33 @@ async function renderAreaCheckinReports(section, area, revision) {
     scope.addEventListener("change", reload); await load();
 }
 async function renderAreaCheckinObservations(section, area, revision, feedback) {
+    section.appendChild(checkinNode("h3", "", checkinAdmin() ? "Mensajes a jefes de área" : "Buzón de administración"));
+    section.appendChild(checkinNode("p", "checkin-note", checkinAdmin()
+        ? "Envía mensajes, sugerencias o solicitudes. El jefe los recibe en su buzón, con un aviso dentro de MariGex y un Push si tiene las notificaciones del teléfono activadas."
+        : "Aquí encontrarás los mensajes, sugerencias y solicitudes que administración envía a tu área. Se conserva el historial."));
     const list = checkinNode("div");
     const load = async () => {
         const rows = await apiRequest("/api/checkin/gestion/observaciones?area=" + area);
         if (revision !== screenRevision) return; list.replaceChildren();
-        if (!rows.length) list.appendChild(checkinNode("p", "empty-state", "Sin observaciones para esta área."));
+        if (!rows.length) list.appendChild(checkinNode("p", "empty-state", checkinAdmin() ? "Todavía no has enviado mensajes a esta área." : "Tu área aún no ha recibido mensajes de administración."));
         rows.forEach(row => { const card = checkinNode("article", "checkin-summary-card"); card.append(checkinNode("strong", "", `${row.sender} → ${row.recipient} · ${row.createdAt.replace("T", " ")}`), checkinNode("p", "checkin-observation-message", row.message)); list.appendChild(card); });
     };
     if (checkinAdmin()) {
         const form = checkinNode("form", "checkin-observation-form"), label = checkinNode("label", "", "Área destinataria "), select = checkinNode("select");
         checkinAreas.forEach(a => select.add(new Option(checkinAreaNames[a], a))); select.value = area;
         select.addEventListener("change", () => void renderCheckinModule(select.value, "observaciones")); label.appendChild(select);
-        const textLabel = checkinNode("label", "", "Sugerencia u observación "), text = checkinNode("textarea"); text.required = true; text.maxLength = 2000; text.rows = 4; textLabel.appendChild(text);
+        const textLabel = checkinNode("label", "", "Mensaje, sugerencia o solicitud "), text = checkinNode("textarea"); text.required = true; text.maxLength = 2000; text.rows = 4; textLabel.appendChild(text);
         const button = checkinNode("button", "primary-button", "Enviar al jefe del área"); button.type = "submit";
         form.append(label, textLabel, button);
         form.addEventListener("submit", async e => { e.preventDefault(); button.disabled = true;
-            try { await apiRequest("/api/checkin/gestion/observaciones", { method: "POST", body: JSON.stringify({ area, message: text.value }) }); text.value = ""; feedback.textContent = "Observación enviada y notificada dentro de MariGex."; await load(); }
+            try { await apiRequest("/api/checkin/gestion/observaciones", { method: "POST", body: JSON.stringify({ area, message: text.value }) }); text.value = ""; feedback.textContent = "Mensaje enviado al buzón del jefe y notificado dentro de MariGex."; await load(); }
             catch (e) { feedback.textContent = e.message; } finally { button.disabled = false; }
         }); section.appendChild(form);
     }
+    section.appendChild(checkinNode("h4", "", checkinAdmin() ? "Historial de mensajes enviados al área" : "Mensajes recibidos"));
+    section.appendChild(checkinButton("Actualizar mensajes", async () => {
+        try { await load(); } catch (error) { feedback.textContent = error.message; }
+    }));
     section.appendChild(list); await load();
 }
 
