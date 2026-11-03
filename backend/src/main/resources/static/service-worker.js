@@ -1,9 +1,9 @@
-const CACHE_NAME='marigex-shell-checkin-push-20261103-5';
+const CACHE_NAME='marigex-shell-checkin-actions-20261103-7';
 const DEVICE_CACHE='marigex-device';
 const IMAGE_ASSETS=['/images/santiago-costanera-loading.jpg','/images/marigex-login-restaurant.jpg'];
-const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];
+const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/app-updates.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',event=>{
-    event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)));
+    event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL.map(path=>new Request(path,{cache:"reload"})))));
     self.skipWaiting();
 });
 self.addEventListener('activate',event=>{
@@ -29,7 +29,7 @@ self.addEventListener('fetch',event=>{
     event.respondWith((async()=>{
         const cache=await caches.open(CACHE_NAME);
         try{
-            const response=await fetch(event.request);
+            const response=await fetch(event.request,{cache:"no-cache"});
             if(response.ok && !response.redirected && SHELL.includes(url.pathname))await cache.put(url.pathname,response.clone());
             return response;
         }catch{

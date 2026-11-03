@@ -160,3 +160,15 @@ Para recibir en el teléfono: ingresar con la cuenta del jefe, activar las notif
 Ciclo semanal: inicio el lunes a las 00:00, límite el domingo al finalizar el día, cierre y resumen desde el lunes siguiente (America/Santiago). El trabajo comprueba el estado cada minuto mientras el servidor está activo; recupera cierres pendientes si Render estuvo detenido. No se promete entrega Push a una hora exacta.
 
 Validación del Push del buzón: 10 pruebas de integración Check-in y 1 de cifrado aprobadas, más empaquetado del JAR. Se verifica el destinatario exacto, ausencia de correo, respeto de preferencias, conservación del aviso interno y envío de Push mediante transporte simulado. La recepción física en el teléfono debe comprobarse después de publicar y activar los permisos del dispositivo.
+
+## Actualización de la aplicación instalada en teléfonos
+
+Las capturas recibidas mostraban la interfaz personal anterior («Mi check-in», «Busca tu nombre», «Marcar día LIBRE»), no una variante adaptable del nuevo Check-in. Una app abierta desde el icono puede mantener la página anterior en memoria; también debe comprobarse que el enlace coincida y que Render haya terminado de publicar.
+
+Se añadió StaticAssetsConfiguration para revalidar los recursos estáticos con Cache-Control: no-cache, se evita reutilizar la caché HTTP al instalar el shell y se solicita revalidación al obtenerlo por red. app-updates.js revisa nuevas versiones al volver a primer plano y muestra «Actualizar» cuando cambia el service worker. No recarga automáticamente una foto o un mensaje sin enviar. Se conservan la caché de dispositivo de Push, cookies y datos del servidor; las API y evidencias siguen fuera de la caché del shell.
+
+Después de publicar: cerrar MariGex por completo desde las aplicaciones abiertas y volver a entrar con conexión. Si aún muestra la pantalla antigua, abrir el mismo enlace en Safari y comprobar qué versión recibe. La primera página antigua necesita una recarga manual para recibir este nuevo mecanismo. No se comprobó el enlace público ni la recepción en el iPhone desde el agente; falta esa validación con el dispositivo del usuario. No requiere SQL adicional.
+
+## Botones de tareas
+
+Se sustituyeron los bloques azules de las tareas por botones con iconos y bordes suaves: Adjuntar foto, Enviar y completar, Completar tarea y Ver fotografía. El selector nativo queda oculto detrás de un botón accesible; una imagen válida habilita el envío y muestra nombre/vista previa. Los archivos inválidos limpian la selección. En pantallas pequeñas se apilan los controles sin desbordamiento. Comprobación visual con datos de muestra a 1280 px y 390 px y comprobación sintáctica JavaScript. No se cambian permisos ni endpoints, ni se requiere SQL.

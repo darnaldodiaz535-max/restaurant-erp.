@@ -2389,3 +2389,32 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
 .checkin-observation-message { white-space: pre-wrap; overflow-wrap: anywhere; }
 .checkin-tabs { flex-wrap: wrap; }
 .checkin-summary-card details { margin-block: 12px; }
+
+/* Quiet, touch-friendly actions scoped to Check-in task cards. */
+.checkin-task { padding: 18px; gap: 18px; align-items: center; }
+.checkin-task .checkin-task-copy { min-width: 0; flex: 1 1 280px; overflow-wrap: anywhere; }
+.checkin-task-copy strong { line-height: 1.5; }
+.checkin-task-copy small { line-height: 1.5; }
+.checkin-task .checkin-action { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 11px 16px; border: 1px solid #dce3e8; border-radius: 12px; background: #fff; color: #475569; font: inherit; font-size: 13px; font-weight: 650; line-height: 1.3; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px #0f172a05; transition: background .15s, border-color .15s, box-shadow .15s; }
+.checkin-task .checkin-action svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.checkin-task .checkin-action:hover:not(:disabled) { background: #f8fafc; border-color: #94a3b8; }
+.checkin-task .checkin-action--complete { color: #16654b; background: #edf7f2; border-color: #cce7d9; }
+.checkin-task .checkin-action--complete:hover:not(:disabled) { background: #dff1e7; border-color: #95c9ad; }
+.checkin-task .checkin-action:focus-visible { outline: 3px solid #86bba7; outline-offset: 3px; }
+.checkin-task .checkin-action:disabled { background: #f5f6f7; color: #94a3b8; border-color: #e8ebef; cursor: default; box-shadow: none; opacity: 1; }
+.checkin-photo-actions { display: grid; grid-template-columns: auto auto; gap: 10px; align-items: center; max-width: 100%; }
+.checkin-photo-selection { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; max-width: 360px; padding: 10px; border: 1px solid #e5e9ee; border-radius: 10px; background: #f8fafc; }
+.checkin-photo-selection[hidden], .checkin-photo-preview[hidden] { display: none; }
+.checkin-photo-preview { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.checkin-photo-filename { font-size: 12px; color: #64748b; overflow-wrap: anywhere; min-width: 0; }
+.theme-dark .checkin-task .checkin-action { background: #1e293b; color: #cbd5e1; border-color: #475569; }
+.theme-dark .checkin-task .checkin-action--complete { background: #173b31; color: #a7e4c5; border-color: #315e4c; }
+.theme-dark .checkin-task .checkin-action:disabled { background: #202b3b; color: #718096; border-color: #334155; }
+.theme-dark .checkin-photo-selection { background: #1e293b; border-color: #334155; }
+@media (max-width: 600px) {
+    .checkin-task { padding: 15px; gap: 14px; align-items: stretch; }
+    .checkin-task .checkin-task-copy { flex: initial; width: 100%; }
+    .checkin-photo-actions { width: 100%; grid-template-columns: minmax(0,1fr); gap: 9px; }
+    .checkin-task .checkin-action { width: 100%; min-height: 46px; box-sizing: border-box; font-size: 14px; white-space: normal; }
+    .checkin-photo-selection { max-width: none; }
+}

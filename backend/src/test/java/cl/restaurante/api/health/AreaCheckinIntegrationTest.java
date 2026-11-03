@@ -63,6 +63,20 @@ class AreaCheckinIntegrationTest {
         return jdbc.queryForObject("SELECT ID_REGISTRO FROM APP_CHECKIN_REGISTRO WHERE ID_PLANTILLA=? AND FECHA=?",Long.class,template,Date.valueOf(date));
     }
 
+    @Test void installedAppAssetsRevalidateAndExposeTheCurrentCheckin() throws Exception {
+        mvc.perform(get("/index.html")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control","no-cache"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("app-updates.js?v=installed-app-20261103-6")));
+        mvc.perform(get("/scrip.js")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control","no-cache"))
+                .andExpect(result -> assertTrue(result.getResponse().getContentAsString(StandardCharsets.UTF_8).contains("Buzón de administración")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Busca tu nombre y completa solo tu propio check-in"))));
+        mvc.perform(get("/service-worker.js")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control","no-cache"));
+        mvc.perform(get("/app-updates.js")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control","no-cache"));
+    }
+
     @Test void weeklyTasksStayVisibleAllWeekAndAreCountedOnce() throws Exception {
         LocalDate monday=today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate previous=monday.minusWeeks(1);

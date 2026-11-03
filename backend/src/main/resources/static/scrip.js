@@ -750,6 +750,15 @@ async function renderCheckinModule(selectedArea = null, view = "dia") {
         else await renderAreaCheckinDay(section, area, revision, feedback);
     } catch (error) { if (revision === screenRevision) feedback.textContent = error.message; }
 }
+function checkinAction(label, icon, handler, variant = "quiet") {
+    const button = checkinButton("", handler, "checkin-action checkin-action--" + variant);
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+    const paths = { check: "m5 12 4 4L19 6", camera: "M14 4h-4L8 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0", send: "M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4", image: "M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm-1 14 6-6 4 4 3-3 5 5M8 7h.01" };
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", paths[icon] || paths.check); svg.appendChild(path);
+    button.append(svg, checkinNode("span", "", label)); return button;
+}
 function checkinTaskList(tasks, canManage, refresh, feedback) {
     const list = checkinNode("div", "checkin-day");
     if (!tasks.length) list.appendChild(checkinNode("p", "empty-state", "Aún no hay tareas configuradas para este período."));
@@ -759,26 +768,48 @@ function checkinTaskList(tasks, canManage, refresh, feedback) {
         copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", `${checkinAreaNames[task.area]} · ${task.frequency === "SEMANAL" ? "Semana del " : ""}${task.date} · ${task.method === "FOTO" ? "Fotografía" : "Checklist"} · ${done ? "Completada" : "Pendiente"}`));
         if (task.completedAt) copy.appendChild(checkinNode("small", "", `${task.responsible || ""} · ${task.completedAt.replace("T", " ")} (hora del servidor)`));
         row.appendChild(copy);
-        if (task.photoId) row.appendChild(checkinButton("Ver fotografía", () => window.open("/api/checkin/gestion/fotos/" + task.photoId, "_blank", "noopener")));
+        if (task.photoId) row.appendChild(checkinAction("Ver fotografía", "image", () => window.open("/api/checkin/gestion/fotos/" + task.photoId, "_blank", "noopener")));
         if (!done && canManage) {
             if (task.method === "FOTO") {
-                const label = checkinNode("label", "checkin-photo-button", "Adjuntar fotografía"), input = checkinNode("input");
-                input.type = "file"; input.accept = "image/jpeg,image/png,image/webp"; input.setAttribute("aria-label", "Fotografía para " + task.title);
-                const confirm = checkinButton("Enviar evidencia y completar", async () => {
-                    const file = input.files?.[0];
-                    if (!file || file.size > 4 * 1024 * 1024) { feedback.textContent = "Selecciona una foto de hasta 4 MB."; return; }
-                    confirm.disabled = true;
-                    const form = new FormData(); form.append("foto", file);
+                const actions = checkinNode("div", "checkin-photo-actions"), input = checkinNode("input");
+                input.type = "file"; input.accept = "image/jpeg,image/png,image/webp"; input.hidden = true;
+                input.setAttribute("aria-label", "Fotografía para " + task.title);
+                const picker = checkinAction("Adjuntar foto", "camera", () => input.click());
+                picker.setAttribute("aria-label", "Adjuntar fotografía para " + task.title);
+                const selection = checkinNode("div", "checkin-photo-selection"); selection.hidden = true;
+                const preview = checkinNode("img", "checkin-photo-preview"); preview.alt = "Vista previa de la fotografía seleccionada";
+                const filename = checkinNode("span", "checkin-photo-filename"); selection.append(preview, filename);
+                let selectedFile = null, selectionVersion = 0;
+                const confirm = checkinAction("Enviar y completar", "send", async () => {
+                    if (!selectedFile) return;
+                    confirm.disabled = picker.disabled = true;
+                    confirm.querySelector("span").textContent = "Enviando…";
+                    const form = new FormData(); form.append("foto", selectedFile);
                     try { await uploadRequest("/api/checkin/gestion/tareas/" + task.id + "/foto", form); feedback.textContent = "Evidencia y responsable guardados."; await refresh(); }
-                    catch (e) { feedback.textContent = e.message; confirm.disabled = false; }
-                }, "primary-button");
-                label.appendChild(input); row.append(label, confirm);
+                    catch (e) { feedback.textContent = e.message; confirm.disabled = picker.disabled = false; confirm.querySelector("span").textContent = "Reintentar envío"; }
+                }, "complete");
+                confirm.disabled = true;
+                input.addEventListener("change", () => {
+                    const file = input.files?.[0]; if (!file) return;
+                    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 4 * 1024 * 1024) {
+                        feedback.textContent = "Selecciona una foto JPG, PNG o WebP de hasta 4 MB.";
+                        selectedFile = null; ++selectionVersion; confirm.disabled = true; selection.hidden = true;
+                        picker.querySelector("span").textContent = "Adjuntar foto"; input.value = ""; return;
+                    }
+                    selectedFile = file; confirm.disabled = false; selection.hidden = false;
+                    filename.textContent = file.name; picker.querySelector("span").textContent = "Cambiar foto";
+                    feedback.textContent = "Foto lista. Revísala antes de enviarla.";
+                    preview.hidden = true; const version = ++selectionVersion, reader = new FileReader();
+                    reader.addEventListener("load", () => { if (version === selectionVersion) { preview.src = reader.result; preview.hidden = false; } });
+                    reader.readAsDataURL(file);
+                });
+                actions.append(picker, confirm, input, selection); row.appendChild(actions);
             } else {
-                const button = checkinButton("Marcar completada", async () => {
+                const button = checkinAction("Completar tarea", "check", async () => {
                     button.disabled = true;
                     try { await apiRequest("/api/checkin/gestion/tareas/" + task.id + "/hecha", { method: "POST" }); feedback.textContent = "Cumplimiento guardado."; await refresh(); }
                     catch (e) { feedback.textContent = e.message; button.disabled = false; }
-                }, "primary-button"); row.appendChild(button);
+                }, "complete"); row.appendChild(button);
             }
         }
         list.appendChild(row);
