@@ -706,128 +706,158 @@ async function renderTeamCommunicationModule() {
     }
 }
 
-const checkinAreas = ["SALON", "COPERIA", "COCINA", "BARRA"];
-const checkinAreaNames = { SALON: "Salón", COPERIA: "Copería", COCINA: "Cocina", BARRA: "Barra" };
+const checkinAreas = ["COCINA", "SALON", "BARRA", "COOPERATIVA"];
+const checkinAreaNames = { COCINA: "Cocina", SALON: "Salón", BARRA: "Barra", COOPERATIVA: "Cooperativa" };
 const checkinAdmin = () => ["ADMIN", "EMPRESA"].includes(accessRole());
+const checkinBossArea = () => ({ JEFE_COCINA: "COCINA", JEFE_SALON: "SALON", JEFE_BARRA: "BARRA", JEFE_COOPERATIVA: "COOPERATIVA" })[accessRole()] || "";
 function checkinNode(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; }
 function checkinButton(label, handler, cls = "secondary-button") { const button = checkinNode("button", cls, label); button.type = "button"; if (handler) button.addEventListener("click", handler); return button; }
-function checkinAreaForProfile() {
-    const raw = String(currentProfile?.area || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-    if (raw.includes("COPER")) return "COPERIA"; if (raw.includes("SALON")) return "SALON";
-    if (raw.includes("COCINA")) return "COCINA"; if (raw.includes("BARRA")) return "BARRA"; return "";
-}
 function checkinWeekStart() {
     const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
         timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit"
     }).formatToParts(new Date()).map(part => [part.type, part.value]));
     const d = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), 12));
-    d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7 - 7);
+    d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
     return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
 }
 function checkinHeader(title, subtitle) {
     const h = checkinNode("div", "module-header checkin-header"), heading = checkinNode("div", "module-heading"), copy = checkinNode("div");
     heading.appendChild(checkinNode("span", "module-icon", "📋")); copy.append(checkinNode("h2", "", title), checkinNode("p", "", subtitle)); heading.appendChild(copy); h.appendChild(heading); return h;
 }
-async function renderCheckinModule(selectedArea = null, adminView = false) {
-    const revision = ++screenRevision; dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
-    otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--checkin-diario"; otherModule.style.setProperty("--module-accent", "#2563eb");
-    const admin = checkinAdmin(), area = selectedArea || checkinAreaForProfile();
-    otherModule.appendChild(checkinHeader(adminView ? "Check-in administrador" : "Check-in Diario", adminView ? "Resumen del equipo por plaza." : "Busca tu nombre y completa solo tu propio check-in."));
+
+async function renderCheckinModule(selectedArea = null, view = "dia") {
+    const revision = ++screenRevision;
+    dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
+    otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--checkin-diario";
+    const area = selectedArea || checkinBossArea() || "COCINA", admin = checkinAdmin(), boss = checkinBossArea();
+    otherModule.appendChild(checkinHeader("Check-in", "Tareas, evidencias y seguimiento de las cuatro áreas."));
     const section = checkinNode("section", "generic-data checkin-data"), tabs = checkinNode("div", "checkin-tabs");
-    if (admin) {
-        tabs.appendChild(checkinButton("Mi check-in", () => void renderCheckinModule()));
-        tabs.appendChild(checkinButton("Check-in administrador", () => void renderCheckinModule(area || "COCINA", true), adminView ? "primary-button" : "secondary-button"));
+    checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code), area === code ? "primary-button" : "secondary-button")));
+    section.appendChild(tabs);
+    const nav = checkinNode("div", "checkin-tabs");
+    nav.appendChild(checkinButton("Tareas e historial", () => void renderCheckinModule(area)));
+    if (admin || boss) {
+        const reportArea = admin ? area : boss;
+        nav.appendChild(checkinButton("Resumen semanal de Check-in", () => void renderCheckinModule(reportArea, "semanal")));
+        nav.appendChild(checkinButton("Sugerencias y observaciones", () => void renderCheckinModule(reportArea, "observaciones")));
     }
-    if (!area && !adminView) {
-        checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code), "checkin-area-button")));
-        section.append(tabs, checkinNode("p", "empty-state", "Elige tu plaza para buscar tu nombre. Solo podrás abrir tu propio check-in.")); otherModule.appendChild(section); return;
-    }
-    if (adminView) checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code, true), area === code ? "primary-button" : "secondary-button")));
-    section.appendChild(tabs); const code = area || checkinAreaForProfile();
-    if (!code) { section.appendChild(checkinNode("p", "empty-state", "Tu usuario no tiene una plaza compatible.")); otherModule.appendChild(section); return; }
-    section.appendChild(checkinNode("h3", "checkin-area-title", checkinAreaNames[code]));
+    section.append(nav, checkinNode("h3", "checkin-area-title", checkinAreaNames[area]));
     const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "status"); section.appendChild(feedback);
-    if (adminView) await renderCheckinAdminArea(section, code, revision, feedback); else await renderCheckinWorkerArea(section, code, revision, feedback);
-    if (revision === screenRevision) otherModule.appendChild(section);
-}
-async function renderCheckinWorkerArea(section, area, revision, feedback) {
+    otherModule.appendChild(section);
     try {
-        const roster = await apiRequest("/api/checkin/areas/" + encodeURIComponent(area) + "/personas"); if (revision !== screenRevision) return;
-        const list = checkinNode("div", "checkin-roster");
-        roster.forEach(person => {
-            const row = checkinNode("div", "checkin-roster-row" + (person.self ? " is-self" : ""));
-            row.appendChild(checkinNode("span", "", person.name));
-            if (person.canOpen) row.appendChild(checkinButton("Abrir mi check-in", async () => { try { await renderCheckinWorkerDay(section, feedback); } catch (e) { feedback.textContent = e.message; } }, "primary-button"));
-            else row.appendChild(checkinNode("span", "checkin-private-label", "Privado")); list.appendChild(row);
-        });
-        section.appendChild(list); if (!roster.some(p => p.self)) feedback.textContent = "Tu nombre no aparece en esta plaza; solo puedes acceder a tu área.";
-    } catch (e) { feedback.textContent = "No se pudo cargar el equipo: " + e.message; return; }
-    try {
-        const date = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" });
-        const day = await apiRequest("/api/checkin/me/dia?fecha=" + encodeURIComponent(date));
-        if (day.employeeName) await renderCheckinDay(section, feedback, day);
-        await renderCheckinPersonalSummary(section);
-    } catch (e) { feedback.textContent = "No se pudo cargar tu check-in: " + e.message; }
+        if (view === "semanal") await renderAreaCheckinReports(section, area, revision);
+        else if (view === "observaciones") await renderAreaCheckinObservations(section, area, revision, feedback);
+        else await renderAreaCheckinDay(section, area, revision, feedback);
+    } catch (error) { if (revision === screenRevision) feedback.textContent = error.message; }
 }
-async function renderCheckinWorkerDay(section, feedback) { const day = await apiRequest("/api/checkin/me"); await renderCheckinDay(section, feedback, day); }
-async function renderCheckinDay(section, feedback, day) {
-    section.querySelector(".checkin-day")?.remove(); const card = checkinNode("div", "checkin-day"), title = checkinNode("div", "checkin-day-title");
-    title.append(checkinNode("div", "", day.employeeName + " · " + day.date), checkinNode("span", "checkin-percent", day.dayStatus === "LIBRE" ? "Día libre" : day.compliancePercent + "%")); card.appendChild(title);
-    const actionUrl = day.dayStatus === "LIBRE" ? "/api/checkin/me/trabajando" : "/api/checkin/me/libre";
-    card.appendChild(checkinButton(day.dayStatus === "LIBRE" ? "Cambiar a día trabajado" : "Marcar día LIBRE", async () => {
-        if (day.dayStatus !== "LIBRE" && !confirm("¿Marcar hoy como día libre? No contará como incumplimiento.")) return;
-        try { await renderCheckinDay(section, feedback, await apiRequest(actionUrl, { method: "PUT" })); } catch (e) { feedback.textContent = e.message; }
-    }));
-    if (day.dayStatus === "LIBRE") card.appendChild(checkinNode("p", "checkin-note", "Este día no afecta tu porcentaje semanal."));
-    else if (!day.tasks.length) card.appendChild(checkinNode("p", "empty-state", "Aún no hay tareas configuradas para tu plaza."));
-    day.tasks.forEach(task => {
-        const row = checkinNode("article", "checkin-task" + (task.status === "REALIZADA" ? " is-done" : ""));
-        const copy = checkinNode("div", "checkin-task-copy"), state = task.status === "REALIZADA" ? "Hecha" : task.method === "FOTO" ? "Pendiente · requiere foto" : "Pendiente";
-        copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", state + (task.completedAt ? " · " + task.completedAt.replace("T", " ") : ""))); row.appendChild(copy);
-        if (task.photoId) row.appendChild(checkinButton("Ver foto", () => window.open("/api/checkin/fotos/" + task.photoId, "_blank", "noopener")));
-        if (task.status !== "REALIZADA" && day.dayStatus !== "LIBRE") {
+function checkinTaskList(tasks, canManage, refresh, feedback) {
+    const list = checkinNode("div", "checkin-day");
+    if (!tasks.length) list.appendChild(checkinNode("p", "empty-state", "Aún no hay tareas configuradas para este período."));
+    tasks.forEach(task => {
+        const done = task.status === "REALIZADA", row = checkinNode("article", "checkin-task" + (done ? " is-done" : ""));
+        const copy = checkinNode("div", "checkin-task-copy");
+        copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", `${checkinAreaNames[task.area]} · ${task.date} · ${task.method === "FOTO" ? "Fotografía" : "Checklist"} · ${done ? "Completada" : "Pendiente"}`));
+        if (task.completedAt) copy.appendChild(checkinNode("small", "", `${task.responsible || ""} · ${task.completedAt.replace("T", " ")} (hora del servidor)`));
+        row.appendChild(copy);
+        if (task.photoId) row.appendChild(checkinButton("Ver fotografía", () => window.open("/api/checkin/gestion/fotos/" + task.photoId, "_blank", "noopener")));
+        if (!done && canManage) {
             if (task.method === "FOTO") {
-                const label = checkinNode("label", "checkin-photo-button", "Subir foto"), input = checkinNode("input"); input.type = "file"; input.accept = "image/jpeg,image/png,image/webp"; input.hidden = true;
-                input.addEventListener("change", async () => { if (!input.files?.[0]) return; const form = new FormData(); form.append("foto", input.files[0]); try { const updated = await uploadRequest("/api/checkin/tareas/" + task.id + "/foto", form); feedback.textContent = "Evidencia guardada."; await renderCheckinDay(section, feedback, updated); } catch (e) { feedback.textContent = e.message; } });
-                label.appendChild(input); row.appendChild(label);
-            } else row.appendChild(checkinButton("Hecho", async () => { try { const updated = await apiRequest("/api/checkin/tareas/" + task.id + "/hecha", { method: "POST" }); feedback.textContent = "Tarea guardada."; await renderCheckinDay(section, feedback, updated); } catch (e) { feedback.textContent = e.message; } }, "primary-button"));
+                const label = checkinNode("label", "checkin-photo-button", "Adjuntar fotografía"), input = checkinNode("input");
+                input.type = "file"; input.accept = "image/jpeg,image/png,image/webp"; input.setAttribute("aria-label", "Fotografía para " + task.title);
+                const confirm = checkinButton("Enviar evidencia y completar", async () => {
+                    const file = input.files?.[0];
+                    if (!file || file.size > 4 * 1024 * 1024) { feedback.textContent = "Selecciona una foto de hasta 4 MB."; return; }
+                    confirm.disabled = true;
+                    const form = new FormData(); form.append("foto", file);
+                    try { await uploadRequest("/api/checkin/gestion/tareas/" + task.id + "/foto", form); feedback.textContent = "Evidencia y responsable guardados."; await refresh(); }
+                    catch (e) { feedback.textContent = e.message; confirm.disabled = false; }
+                }, "primary-button");
+                label.appendChild(input); row.append(label, confirm);
+            } else {
+                const button = checkinButton("Marcar completada", async () => {
+                    button.disabled = true;
+                    try { await apiRequest("/api/checkin/gestion/tareas/" + task.id + "/hecha", { method: "POST" }); feedback.textContent = "Cumplimiento guardado."; await refresh(); }
+                    catch (e) { feedback.textContent = e.message; button.disabled = false; }
+                }, "primary-button"); row.appendChild(button);
+            }
         }
-        card.appendChild(row);
-    });
-    section.appendChild(card);
+        list.appendChild(row);
+    }); return list;
 }
-async function renderCheckinPersonalSummary(section) {
-    const week = await apiRequest("/api/checkin/me/semanal?semana=" + encodeURIComponent(checkinWeekStart()));
-    const trend = await apiRequest("/api/checkin/me/tendencia"), card = checkinNode("div", "checkin-summary-card");
-    card.appendChild(checkinNode("h3", "", "Mi semana · " + week.weekStart + " al " + week.weekEnd)); const stats = checkinNode("div", "checkin-stats");
-    [["Días trabajados", week.daysWorked], ["Días libres", week.daysFree], ["Tareas asignadas", week.assignedTasks], ["Realizadas", week.completedTasks], ["No realizadas", week.incompleteTasks], ["Cumplimiento", week.compliancePercent == null ? "—" : week.compliancePercent + "%"]].forEach(pair => { const item = checkinNode("div", "checkin-stat"); item.append(checkinNode("small", "", pair[0]), checkinNode("strong", "", String(pair[1]))); stats.appendChild(item); });
-    card.append(stats, checkinTrendChart(trend, false)); section.appendChild(card);
+async function renderAreaCheckinDay(section, area, revision, feedback) {
+    const dateLabel = checkinNode("label", "", "Fecha del registro "), date = checkinNode("input");
+    date.type = "date"; date.value = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" }); date.max = date.value;
+    dateLabel.appendChild(date); section.appendChild(dateLabel);
+    const container = checkinNode("div"); section.appendChild(container);
+    let request = 0;
+    const load = async () => {
+        const ticket = ++request, day = await apiRequest(`/api/checkin/gestion/areas/${area}?fecha=${encodeURIComponent(date.value)}`);
+        if (revision !== screenRevision || ticket !== request) return;
+        const completed = day.tasks.filter(t => t.status === "REALIZADA").length;
+        container.replaceChildren(checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.canManage ? "Puedes confirmar las tareas de tu área." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.canManage, load, feedback));
+    };
+    date.addEventListener("change", () => void load().catch(e => { feedback.textContent = e.message; })); await load();
 }
-function checkinTrendChart(points, admin) {
-    const chart = checkinNode("div", "checkin-trend"); chart.appendChild(checkinNode("h3", "", admin ? "Cumplimiento semanal por trabajador" : "Mi cumplimiento por semana"));
-    if (!points || !points.length) { chart.appendChild(checkinNode("p", "empty-state", "Aún no hay semanas con resultados.")); return chart; }
-    points.forEach(point => {
-        const row = checkinNode("div", "checkin-trend-row"), value = point.compliancePercent, label = admin ? point.name + " · " + (checkinAreaNames[point.area] || point.area) + " · " + point.weekStart : point.weekStart;
-        row.appendChild(checkinNode("span", "checkin-trend-label", label)); const track = checkinNode("div", "checkin-progress"), bar = checkinNode("span", "checkin-progress-bar" + (value != null && value > 90 ? " is-excellent" : ""));
-        bar.style.width = Math.max(0, Math.min(100, value || 0)) + "%"; track.appendChild(bar); row.appendChild(track); row.appendChild(checkinNode("strong", "checkin-trend-value", value == null ? "—" : value + "%")); chart.appendChild(row);
-    }); return chart;
+async function renderAreaCheckinReports(section, area, revision) {
+    const controls = checkinNode("div", "checkin-tabs"), label = checkinNode("label", "", "Semana (lunes) "), week = checkinNode("input");
+    week.type = "date"; week.value = checkinWeekStart(); label.appendChild(week); controls.appendChild(label);
+    const scope = checkinNode("select"); scope.setAttribute("aria-label", "Área del resumen");
+    if (checkinAdmin()) scope.add(new Option("Resumen general", ""));
+    (checkinAdmin() ? checkinAreas : [checkinBossArea()]).forEach(a => scope.add(new Option(checkinAreaNames[a], a)));
+    scope.value = checkinAdmin() ? "" : area; controls.appendChild(scope);
+    const history = checkinNode("select"); history.setAttribute("aria-label", "Semanas anteriores"); history.add(new Option("Historial de semanas", ""));
+    const weeks = await apiRequest("/api/checkin/gestion/semanas?area=" + area);
+    weeks.forEach(w => history.add(new Option(w, w))); controls.appendChild(history);
+    section.appendChild(controls); const container = checkinNode("div"); section.appendChild(container);
+    let request = 0;
+    const load = async () => {
+        const ticket = ++request, reports = await apiRequest(`/api/checkin/gestion/semanal?semana=${encodeURIComponent(week.value)}${scope.value ? "&area=" + scope.value : ""}`);
+        if (revision !== screenRevision || ticket !== request) return;
+        container.replaceChildren();
+        const total = reports.reduce((n,r) => n+r.total,0), completed = reports.reduce((n,r) => n+r.completed,0);
+        container.appendChild(checkinNode("h3", "", `Cumplimiento: ${total ? Math.round(completed*100/total)+"%" : "Sin tareas"} · ${completed}/${total} completadas · ${total-completed} pendientes`));
+        [...reports].sort((a,b) => b.pending-a.pending).forEach(report => {
+            const card = checkinNode("div", "checkin-summary-card");
+            card.append(checkinNode("h3", "", `${checkinAreaNames[report.area]} · ${report.weekStart} al ${report.weekEnd}`), checkinNode("p", "", `${report.closed ? "Semana cerrada" : "Semana en curso"} · ${report.completed}/${report.total} completadas · ${report.pending} pendientes · ${report.percent == null ? "Sin tareas" : report.percent+"%"}`));
+            if (report.zeroCompletion) card.appendChild(checkinNode("p", "checkin-feedback", "Atención: no se registraron tareas completadas en esta área."));
+            const details = checkinNode("details"), summary = checkinNode("summary", "", "Tareas, responsables y fotografías");
+            details.append(summary, checkinTaskList(report.tasks, false)); card.appendChild(details);
+            const pending = report.tasks.filter(t => t.status !== "REALIZADA");
+            if (pending.length) {
+                const alerts = checkinNode("details"); alerts.appendChild(checkinNode("summary", "", "Pendientes e incumplimientos"));
+                pending.forEach(t => alerts.appendChild(checkinNode("p", "", `${t.date} · ${t.title}${t.method === "FOTO" && !t.photoId ? " · sin fotografía obligatoria" : ""}`)));
+                card.appendChild(alerts);
+            }
+            container.appendChild(card);
+        });
+    };
+    const feedback = checkinNode("p", "checkin-feedback"); feedback.setAttribute("role", "alert"); section.appendChild(feedback);
+    const reload = () => void load().catch(e => { feedback.textContent = e.message; });
+    controls.appendChild(checkinButton("Consultar", reload, "primary-button"));
+    history.addEventListener("change", () => { if (history.value) { week.value = history.value; reload(); } });
+    scope.addEventListener("change", reload); await load();
 }
-async function renderCheckinAdminArea(section, area, revision, feedback) {
-    try {
-        const results = await Promise.all([
-            apiRequest("/api/checkin/admin/area/" + encodeURIComponent(area)),
-            apiRequest("/api/checkin/admin/semanal?semana=" + encodeURIComponent(checkinWeekStart())),
-            apiRequest("/api/checkin/admin/tendencia")
-        ]);
-        if (revision !== screenRevision) return; const today = results[0], report = results[1], trend = results[2];
-        const daily = checkinNode("div", "checkin-summary-card"); daily.appendChild(checkinNode("h3", "", "Estado de hoy"));
-        if (!today.length) daily.appendChild(checkinNode("p", "empty-state", "No hay trabajadores activos con usuario en esta plaza."));
-        today.forEach(person => { const row = checkinNode("div", "checkin-admin-person"); row.append(checkinNode("strong", "", person.name), checkinNode("span", "", person.dayStatus === "LIBRE" ? "LIBRE" : person.completedTasks + "/" + person.assignedTasks + " tareas · " + (person.compliancePercent == null ? "—" : person.compliancePercent + "%"))); daily.appendChild(row); }); section.appendChild(daily);
-        const weekly = checkinNode("div", "checkin-summary-card"); weekly.appendChild(checkinNode("h3", "", "Reporte semanal global · " + report.weekStart + " al " + report.weekEnd)); const stats = checkinNode("div", "checkin-stats");
-        [["Cumplimiento general", report.compliancePercent == null ? "—" : report.compliancePercent + "%"], ["Días trabajados", report.daysWorked], ["Días libres", report.daysFree], ["Tareas asignadas", report.assignedTasks], ["Realizadas", report.completedTasks], ["No realizadas", report.incompleteTasks]].forEach(pair => { const item = checkinNode("div", "checkin-stat"); item.append(checkinNode("small", "", pair[0]), checkinNode("strong", "", String(pair[1]))); stats.appendChild(item); }); weekly.appendChild(stats);
-        (report.employees || []).filter(p => p.area === area).forEach(person => { const row = checkinNode("div", "checkin-admin-person"); row.append(checkinNode("strong", "", person.name), checkinNode("span", "", (person.compliancePercent == null ? "—" : person.compliancePercent + "%") + " · " + person.completedTasks + "/" + person.assignedTasks + " hechas · " + person.daysFree + " libres")); weekly.appendChild(row); });
-        section.append(weekly, checkinTrendChart(trend, true));
-    } catch (e) { feedback.textContent = "No se pudo cargar el reporte administrativo: " + e.message; }
+async function renderAreaCheckinObservations(section, area, revision, feedback) {
+    const list = checkinNode("div");
+    const load = async () => {
+        const rows = await apiRequest("/api/checkin/gestion/observaciones?area=" + area);
+        if (revision !== screenRevision) return; list.replaceChildren();
+        if (!rows.length) list.appendChild(checkinNode("p", "empty-state", "Sin observaciones para esta área."));
+        rows.forEach(row => { const card = checkinNode("article", "checkin-summary-card"); card.append(checkinNode("strong", "", `${row.sender} → ${row.recipient} · ${row.createdAt.replace("T", " ")}`), checkinNode("p", "checkin-observation-message", row.message)); list.appendChild(card); });
+    };
+    if (checkinAdmin()) {
+        const form = checkinNode("form", "checkin-observation-form"), label = checkinNode("label", "", "Área destinataria "), select = checkinNode("select");
+        checkinAreas.forEach(a => select.add(new Option(checkinAreaNames[a], a))); select.value = area;
+        select.addEventListener("change", () => void renderCheckinModule(select.value, "observaciones")); label.appendChild(select);
+        const textLabel = checkinNode("label", "", "Sugerencia u observación "), text = checkinNode("textarea"); text.required = true; text.maxLength = 2000; text.rows = 4; textLabel.appendChild(text);
+        const button = checkinNode("button", "primary-button", "Enviar al jefe del área"); button.type = "submit";
+        form.append(label, textLabel, button);
+        form.addEventListener("submit", async e => { e.preventDefault(); button.disabled = true;
+            try { await apiRequest("/api/checkin/gestion/observaciones", { method: "POST", body: JSON.stringify({ area, message: text.value }) }); text.value = ""; feedback.textContent = "Observación enviada y notificada dentro de MariGex."; await load(); }
+            catch (e) { feedback.textContent = e.message; } finally { button.disabled = false; }
+        }); section.appendChild(form);
+    }
+    section.appendChild(list); await load();
 }
 
 function getAttendancePosition() {
@@ -2510,7 +2540,7 @@ function setAuthError(message) {
 function fillProfile(profile) {
     currentProfile = profile;
     document.getElementById("currentUserName").textContent = profile.name;
-    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
+    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_COOPERATIVA: "Jefe de cooperativa", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
     document.getElementById("currentUserRole").textContent = roleLabels[profile.role] || profile.position;
 }
 async function enterApplication(profile) {
@@ -2595,7 +2625,7 @@ async function openProfile() {
     document.getElementById("profile-area").textContent = currentProfile.area;
     document.getElementById("profile-area-detail").textContent = currentProfile.area || "Sin área asignada";
     document.getElementById("profile-username").textContent = currentProfile.username;
-    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
+    const roleLabels = { ADMIN: "Administrador", EMPRESA: "Jefe de empresa", JEFE_SALON: "Jefe de salón", JEFE_COCINA: "Jefe de cocina", JEFE_BARRA: "Jefe de barra", JEFE_COPERIA: "Jefe de copería", JEFE_COOPERATIVA: "Jefe de cooperativa", JEFE_LOCAL: "Jefe de local", TRABAJADOR: "Trabajador", EMPLEADO: "Trabajador" };
     document.getElementById("profile-role").textContent = roleLabels[currentProfile.role] || currentProfile.position;
     const avatar = document.getElementById("profileAvatar");
     const avatarKey = `marigex-profile-photo-${currentProfile.employeeId}`;

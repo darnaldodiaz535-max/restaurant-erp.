@@ -10,9 +10,9 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "marigex.jobs.enabled", havingValue = "true", matchIfMissing = true)
 public class CheckinJobs {
     private static final Logger log = LoggerFactory.getLogger(CheckinJobs.class);
-    private final CheckinService checkin;
+    private final AreaCheckinService checkin;
 
-    public CheckinJobs(CheckinService checkin) {
+    public CheckinJobs(AreaCheckinService checkin) {
         this.checkin = checkin;
     }
 

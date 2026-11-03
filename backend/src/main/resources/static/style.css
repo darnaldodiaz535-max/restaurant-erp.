@@ -2378,3 +2378,14 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .schedule-insight-row { grid-template-columns:minmax(108px,125px) minmax(45px,1fr) 24px; gap:8px; }
     .schedule-insight-label { font-size:.76rem; }
 }
+
+/* Check-in por áreas */
+.checkin-task { flex-wrap: wrap; gap: 12px; }
+.checkin-task-copy { min-width: 180px; flex: 1; }
+.checkin-photo-button input { display: block; max-width: 100%; }
+.checkin-observation-form { display: grid; gap: 12px; margin-block: 16px; }
+.checkin-observation-form label { display: grid; gap: 6px; }
+.checkin-observation-form textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.checkin-observation-message { white-space: pre-wrap; overflow-wrap: anywhere; }
+.checkin-tabs { flex-wrap: wrap; }
+.checkin-summary-card details { margin-block: 12px; }

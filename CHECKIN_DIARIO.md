@@ -1,3 +1,5 @@
+> **Actualización 2026-11-03:** esta guía describe el Check-in personal anterior. El módulo vigente se documenta en [CHECKIN_POR_AREAS.md](CHECKIN_POR_AREAS.md). Los endpoints antiguos de escritura están bloqueados y el trabajo programado usa los registros por área. Las evidencias conservadas ya no se purgan automáticamente. Los reportes personales anteriores quedan restringidos a administración.
+
 # Check-in Diario
 
 El módulo es independiente de **Tareas diarias**. Las tareas se leen de `APP_CHECKIN_PLANTILLA`; cuando se comparta la lista definitiva, se insertan ahí como plantillas recurrentes por plaza (`SALON`, `COPERIA`, `COCINA`, `BARRA`). Una plantilla usa `METODO_COMPLETADO='SIMPLE'` para marcar **Hecho** o `FOTO` para exigir evidencia.
@@ -10,7 +12,7 @@ El módulo es independiente de **Tareas diarias**. Las tareas se leen de `APP_CH
 
 Los usuarios activos enlazados con `APP_EMPLEADO.ID_EMPLEADO` aparecen en la lista de su plaza. El backend deriva el trabajador autenticado de la sesión y limita los cambios al check-in propio. Solo `ADMIN` y `EMPRESA` tienen acceso a los endpoints de reporte global.
 
-Las fotos se guardan como BLOB y se purgan al finalizar el envío de reportes de su semana; los registros de tareas y estados quedan como historial. `APP_NOTIFICACION.DETALLE` guarda el detalle completo de los resúmenes; el Push usa un texto corto.
+Las fotos se guardan como BLOB. La versión anterior las purgaba al cerrar los reportes; esa purga se ha retirado. Las fotografías ya eliminadas antes de esta actualización no se pueden recuperar desde estos registros. `APP_NOTIFICACION.DETALLE` guarda el detalle completo de los resúmenes; el Push usa un texto corto.
 
 ## Verificación local
 

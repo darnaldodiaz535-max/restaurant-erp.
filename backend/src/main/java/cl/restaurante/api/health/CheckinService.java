@@ -218,6 +218,7 @@ public class CheckinService {
     }
 
     public WeeklyPerson myWeekly(RoleAccessService.User user, LocalDate weekStart) {
+        requireAdministrator(user);
         LocalDate start = requireMonday(weekStart);
         List<WeeklyPerson> rows = weeklyRows(
                 start,
@@ -227,6 +228,7 @@ public class CheckinService {
     }
 
     public List<WeeklyPoint> myTrend(RoleAccessService.User user) {
+        requireAdministrator(user);
         LocalDate currentWeek = operationalDate()
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         List<WeeklyPoint> trend = new ArrayList<>();
@@ -385,7 +387,7 @@ public class CheckinService {
                 materializeTasks(day);
             }
             deliverWeek(week);
-            purgeWeekPhotosIfReportsSaved(week);
+
             week = week.plusWeeks(1);
         }
     }
@@ -473,24 +475,6 @@ public class CheckinService {
                         + "AND TIPO_REPORTE=? AND DESTINATARIO_CLAVE=? "
                         + "AND ESTADO_ENVIO='PENDIENTE'",
                 Date.valueOf(week), type, recipientKey);
-    }
-
-    private void purgeWeekPhotosIfReportsSaved(LocalDate week) {
-        Integer pending = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM APP_CHECKIN_ENVIO_SEMANAL "
-                        + "WHERE SEMANA_INICIO=? "
-                        + "AND ESTADO_ENVIO<>'ENVIADO'",
-                Integer.class, Date.valueOf(week));
-        if (pending != null && pending == 0) {
-            jdbc.update(
-                    "UPDATE APP_CHECKIN_FOTO F SET FOTO=NULL,ELIMINADA_EN=SYSTIMESTAMP "
-                            + "WHERE EXISTS ("
-                            + "SELECT 1 FROM APP_CHECKIN_TAREA T "
-                            + "JOIN APP_CHECKIN_DIA D ON D.ID_CHECKIN_DIA=T.ID_CHECKIN_DIA "
-                            + "WHERE T.ID_CHECKIN_TAREA=F.ID_CHECKIN_TAREA "
-                            + "AND D.FECHA_OPERATIVA>=? AND D.FECHA_OPERATIVA<?)",
-                    Date.valueOf(week), Date.valueOf(week.plusDays(7)));
-        }
     }
 
     private void sendDailyNotices(LocalDate day) {

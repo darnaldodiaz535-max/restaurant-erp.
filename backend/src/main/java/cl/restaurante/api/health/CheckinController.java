@@ -54,19 +54,19 @@ public class CheckinController {
 
     @PutMapping("/me/libre")
     public CheckinService.DayView markFree(HttpSession session) {
-        return checkin.markFree(access.current(session));
+        throw legacyWriteDenied(session);
     }
 
     @PutMapping("/me/trabajando")
     public CheckinService.DayView markWorking(HttpSession session) {
-        return checkin.markWorking(access.current(session));
+        throw legacyWriteDenied(session);
     }
 
     @PostMapping("/tareas/{id}/hecha")
     public CheckinService.DayView completeTask(
             @PathVariable long id,
             HttpSession session) {
-        return checkin.completeTask(access.current(session), id);
+        throw legacyWriteDenied(session);
     }
 
     @PostMapping(value = "/tareas/{id}/foto",
@@ -75,16 +75,7 @@ public class CheckinController {
             @PathVariable long id,
             @RequestParam MultipartFile foto,
             HttpSession session) throws IOException {
-        if (foto == null || foto.isEmpty() || foto.getSize() > MAX_PHOTO_BYTES) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Adjunta una foto JPG, PNG o WebP de hasta 4 MB.");
-        }
-        return checkin.submitPhoto(
-                access.current(session),
-                id,
-                foto.getBytes(),
-                foto.getContentType(),
-                foto.getOriginalFilename());
+        throw legacyWriteDenied(session);
     }
 
     @GetMapping("/fotos/{id}")
@@ -137,6 +128,12 @@ public class CheckinController {
     @GetMapping("/admin/tendencia")
     public List<CheckinService.TrendEmployee> adminTrend(HttpSession session) {
         return checkin.adminTrend(access.current(session));
+    }
+
+    private ResponseStatusException legacyWriteDenied(HttpSession session) {
+        access.current(session);
+        return new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "El Check-in se gestiona por área. Usa el nuevo módulo; los registros personales son históricos.");
     }
 
     private static LocalDate defaultWeek() {

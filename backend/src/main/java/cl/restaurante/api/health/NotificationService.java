@@ -110,6 +110,12 @@ private void notifyWithDetail(
         },keys);
         delivery.enqueue(keys.getKey().longValue(),user,p);
     }
+    /** Required internal Check-in notices; do not enqueue email or push delivery. */
+    @org.springframework.transaction.annotation.Transactional
+    public void checkinInternal(long user, String preview, String detail) {
+        jdbc.update("INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE,DETALLE,LEIDA,VISIBLE) VALUES(?,'Check-in Diario',?,?,'N','S')",
+                user, preview, detail);
+    }
     public List<Long> validateRecipients(List<Long> ids) {
         if(ids==null) return List.of();
         if(ids.size()>200 || ids.stream().anyMatch(id->id==null || id<=0)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Selecciona destinatarios válidos (máximo 200).");
