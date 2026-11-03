@@ -86,13 +86,34 @@ class AreaCheckinIntegrationTest {
         service.reconcile(); service.reconcile();
         assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_REGISTRO",Integer.class));
         mvc.perform(get("/api/checkin/gestion/areas/COCINA").session(session(3)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.tasks.length()").value(1)).andExpect(jsonPath("$.tasks[0].frequency").value("SEMANAL"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.tasks.length()").value(1)).andExpect(jsonPath("$.tasks[0].frequency").value("SEMANAL"))
+                .andExpect(jsonPath("$.deadline.pending").value(1));
+        mvc.perform(get("/api/checkin/gestion/areas/COCINA").session(session(4)))
+                .andExpect(jsonPath("$.deadline").value(org.hamcrest.Matchers.nullValue()));
         mvc.perform(post("/api/checkin/gestion/tareas/"+task(1,monday)+"/hecha").session(session(3))).andExpect(status().isOk());
         mvc.perform(get("/api/checkin/gestion/areas/COCINA").session(session(2)))
                 .andExpect(jsonPath("$.tasks[0].status").value("REALIZADA"));
         mvc.perform(post("/api/checkin/gestion/tareas/"+task(1,previous)+"/hecha").session(session(3))).andExpect(status().isConflict());
         mvc.perform(get("/api/checkin/gestion/semanal").param("area","COCINA").param("semana",previous.toString()).session(session(3)))
                 .andExpect(jsonPath("$[0].total").value(1)).andExpect(jsonPath("$[0].pending").value(1));
+    }
+
+    @Test void remainingDaysFollowTheChileanWeekAndCountOnlyWeeklyPendingTasks() {
+        LocalDate monday=LocalDate.of(2026,11,2);
+        var pending=new AreaCheckinService.Task(1,monday.toString(),"COCINA","Semanal","SIMPLE","PENDIENTE","SEMANAL",null,null,null);
+        var complete=new AreaCheckinService.Task(2,monday.toString(),"COCINA","Terminada","SIMPLE","REALIZADA","SEMANAL","Jefe","2026-11-03T10:00:00",null);
+        var daily=new AreaCheckinService.Task(3,monday.toString(),"COCINA","Diaria","SIMPLE","PENDIENTE","DIARIA",null,null,null);
+        var tasks=java.util.List.of(pending,complete,daily);
+        assertEquals(6,AreaCheckinService.deadline(tasks,monday).daysRemaining());
+        var tuesday=AreaCheckinService.deadline(tasks,monday.plusDays(1));
+        assertEquals(5,tuesday.daysRemaining());
+        assertEquals("2026-11-08",tuesday.dueDate());
+        assertEquals(1,tuesday.pending());
+        assertEquals(2,tuesday.total());
+        assertEquals(1,AreaCheckinService.deadline(tasks,monday.plusDays(5)).daysRemaining());
+        assertEquals(0,AreaCheckinService.deadline(tasks,monday.plusDays(6)).daysRemaining());
+        assertNull(AreaCheckinService.deadline(tasks,monday.plusWeeks(1)));
+        assertEquals(0,AreaCheckinService.deadline(java.util.List.of(complete),monday.plusDays(1)).pending());
     }
 
     @Test void realKaliChecklistMatchesPhotographAndSeedIsIdempotent() throws Exception {

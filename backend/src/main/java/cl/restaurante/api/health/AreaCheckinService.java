@@ -56,7 +56,18 @@ public class AreaCheckinService {
             throw error(HttpStatus.BAD_REQUEST, "Selecciona una fecha válida, sin fechas futuras.");
         reconcile();
         List<Task> tasks = tasks(area, date, date.plusDays(1));
-        return new Day(date.toString(), area, area.equals(managedArea(user)) && date.equals(CheckinService.operationalDate()), tasks);
+        LocalDate today = CheckinService.operationalDate();
+        boolean canManage = area.equals(managedArea(user)) && date.equals(today);
+        return new Day(date.toString(), area, canManage, tasks, canManage ? deadline(tasks, today) : null);
+    }
+
+    static Deadline deadline(List<Task> tasks, LocalDate today) {
+        LocalDate monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        var weekly = tasks.stream().filter(t -> "SEMANAL".equals(t.frequency()) && monday.toString().equals(t.date())).toList();
+        if (weekly.isEmpty()) return null;
+        int pending = (int) weekly.stream().filter(t -> !"REALIZADA".equals(t.status())).count();
+        LocalDate sunday = monday.plusDays(6);
+        return new Deadline(sunday.toString(), (int) java.time.temporal.ChronoUnit.DAYS.between(today, sunday), pending, weekly.size());
     }
 
     private List<Task> tasks(String area, LocalDate from, LocalDate until) {
@@ -221,7 +232,8 @@ public class AreaCheckinService {
     private static ResponseStatusException error(HttpStatus status, String message) { return new ResponseStatusException(status, message); }
     private record Recipient(long id, String name) {}
     public record Task(long id, String date, String area, String title, String method, String status, String frequency, String responsible, String completedAt, Long photoId) {}
-    public record Day(String date, String area, boolean canManage, List<Task> tasks) {}
+    public record Day(String date, String area, boolean canManage, List<Task> tasks, Deadline deadline) {}
+    public record Deadline(String dueDate, int daysRemaining, int pending, int total) {}
     public record Report(String area, String weekStart, String weekEnd, int total, int completed, int pending,
                          Integer percent, boolean zeroCompletion, boolean closed, List<Task> tasks) {}
     public record Suggestion(long id, String area, String message, String sender, long recipientId, String recipient, String createdAt) {}

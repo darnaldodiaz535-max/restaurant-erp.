@@ -815,19 +815,47 @@ function checkinTaskList(tasks, canManage, refresh, feedback) {
         list.appendChild(row);
     }); return list;
 }
+function checkinDeadlineNotice(deadline) {
+    const complete = deadline.pending === 0;
+    const notice = checkinNode("aside", "checkin-deadline" + (complete ? " is-complete" : deadline.daysRemaining <= 1 ? " is-urgent" : ""));
+    notice.setAttribute("role", "status");
+    const icon = checkinNode("span", "checkin-deadline-icon", complete ? "✓" : "◷"); icon.setAttribute("aria-hidden", "true");
+    const copy = checkinNode("div");
+    const title = complete ? "¡Tu área completó todas las tareas semanales!"
+        : deadline.daysRemaining === 0 ? "Hoy vence el plazo para completar las tareas"
+        : deadline.daysRemaining === 1 ? "Te queda 1 día para completar las tareas"
+        : `Te quedan ${deadline.daysRemaining} días para completar las tareas`;
+    const due = deadline.dueDate.split("-").reverse().join("/");
+    copy.append(checkinNode("strong", "", title), checkinNode("p", "", complete
+        ? `${deadline.total} de ${deadline.total} completadas. El resumen estará disponible el lunes.`
+        : `${deadline.pending} ${deadline.pending === 1 ? "tarea pendiente" : "tareas pendientes"} de tu área · Hasta el domingo ${due}, a las 23:59 (hora de Chile).`));
+    notice.append(icon, copy); return notice;
+}
 async function renderAreaCheckinDay(section, area, revision, feedback) {
     const dateLabel = checkinNode("label", "", "Fecha de consulta "), date = checkinNode("input");
     date.type = "date"; date.value = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" }); date.max = date.value;
     dateLabel.appendChild(date); section.appendChild(dateLabel);
     const container = checkinNode("div"); section.appendChild(container);
-    let request = 0;
+    let request = 0, lastToday = date.value;
     const load = async () => {
+        const today = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Santiago" });
+        if (date.value === lastToday) date.value = today;
+        date.max = today; lastToday = today;
         const ticket = ++request, day = await apiRequest(`/api/checkin/gestion/areas/${area}?fecha=${encodeURIComponent(date.value)}`);
         if (revision !== screenRevision || ticket !== request) return;
         const completed = day.tasks.filter(t => t.status === "REALIZADA").length;
-        container.replaceChildren(checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.canManage ? "Puedes confirmar las tareas de tu área." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.canManage, load, feedback));
+        container.replaceChildren();
+        if (day.deadline) container.appendChild(checkinDeadlineNotice(day.deadline));
+        container.append(checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.canManage ? "Puedes confirmar las tareas de tu área." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.canManage, load, feedback));
     };
     date.addEventListener("change", () => void load().catch(e => { feedback.textContent = e.message; })); await load();
+    const lifecycle = new AbortController();
+    const refreshIfActive = () => {
+        if (!currentProfile || revision !== screenRevision) { clearInterval(timer); lifecycle.abort(); return; }
+        if (document.visibilityState !== "hidden" && !container.querySelector(".checkin-photo-selection:not([hidden])")) void load().catch(() => {});
+    };
+    const timer = setInterval(refreshIfActive, 60000);
+    document.addEventListener("visibilitychange", refreshIfActive, { signal: lifecycle.signal });
 }
 async function renderAreaCheckinReports(section, area, revision) {
     const controls = checkinNode("div", "checkin-tabs"), label = checkinNode("label", "", "Semana (lunes) "), week = checkinNode("input");

@@ -172,3 +172,9 @@ Después de publicar: cerrar MariGex por completo desde las aplicaciones abierta
 ## Botones de tareas
 
 Se sustituyeron los bloques azules de las tareas por botones con iconos y bordes suaves: Adjuntar foto, Enviar y completar, Completar tarea y Ver fotografía. El selector nativo queda oculto detrás de un botón accesible; una imagen válida habilita el envío y muestra nombre/vista previa. Los archivos inválidos limpian la selección. En pantallas pequeñas se apilan los controles sin desbordamiento. Comprobación visual con datos de muestra a 1280 px y 390 px y comprobación sintáctica JavaScript. No se cambian permisos ni endpoints, ni se requiere SQL.
+
+## Aviso de días restantes para los jefes
+
+Dentro del Check-in de su propia área y en la consulta actual, cada jefe ve un aviso con el plazo del domingo, días restantes y cantidad de tareas semanales pendientes. El cálculo se realiza en el backend usando America/Santiago: lunes 6, martes 5, sábado 1 y domingo «Hoy vence el plazo». Excluye tareas diarias y semanas anteriores. Si termina todas, se muestra una confirmación de cumplimiento. Personal, administrador y jefes consultando otra área no reciben este recordatorio de responsabilidad.
+
+Se actualiza al completar tareas, al volver a primer plano y cada minuto con la vista abierta. No se reemplaza una fotografía seleccionada sin enviar. Las consultas históricas se conservan. Es un aviso en el apartado Check-in, sin añadir envíos Push diarios ni nuevas tablas. No requiere SQL adicional.

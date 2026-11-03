@@ -2418,3 +2418,15 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .checkin-task .checkin-action { width: 100%; min-height: 46px; box-sizing: border-box; font-size: 14px; white-space: normal; }
     .checkin-photo-selection { max-width: none; }
 }
+
+.checkin-deadline { display:flex; gap:13px; align-items:flex-start; padding:17px 19px; margin:14px 0; border:1px solid #d6e5ef; border-radius:14px; background:#f0f7fb; color:#284b63; }
+.checkin-deadline-icon { flex:0 0 32px; width:32px; height:32px; display:grid; place-items:center; border-radius:10px; background:#e0edf5; font-size:21px; }
+.checkin-deadline strong { display:block; line-height:1.5; font-size:15px; }
+.checkin-deadline p { margin:5px 0 0; font-size:13px; line-height:1.6; }
+.checkin-deadline.is-urgent { background:#fff7ed; border-color:#fed7aa; color:#9a4d12; }
+.checkin-deadline.is-urgent .checkin-deadline-icon { background:#ffedd5; }
+.checkin-deadline.is-complete { background:#edf7f2; border-color:#cce7d9; color:#16654b; }
+.checkin-deadline.is-complete .checkin-deadline-icon { background:#dcefe4; }
+.theme-dark .checkin-deadline { background:#1e293b; border-color:#475569; color:#dbeafe; }
+.theme-dark .checkin-deadline-icon { background:#334155; }
+@media(max-width:600px) { .checkin-deadline { padding:14px; gap:10px; } .checkin-deadline strong { font-size:14px; } }
