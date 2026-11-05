@@ -65,6 +65,30 @@ class AreaCheckinIntegrationTest {
         return jdbc.queryForObject("SELECT ID_REGISTRO FROM APP_CHECKIN_REGISTRO WHERE ID_PLANTILLA=? AND FECHA=?",Long.class,template,Date.valueOf(date));
     }
 
+    @Test void retentionPurgesExpiredPhotosAndSummariesWithoutResettingTasks() throws Exception {
+        template(1,"COCINA","FOTO",today);
+        service.reconcile();
+        long id=task(1,today);
+        jdbc.update("UPDATE APP_CHECKIN_REGISTRO SET ESTADO='REALIZADA',ID_RESPONSABLE=3,RESPONSABLE='Persona 3',REALIZADA_EN=SYSTIMESTAMP WHERE ID_REGISTRO=?",id);
+        jdbc.update("INSERT INTO APP_CHECKIN_EVIDENCIA(ID_REGISTRO,NOMBRE_ARCHIVO,TIPO_CONTENIDO,FOTO,CREADO_EN) VALUES(?,'vieja.png','image/png',?,SYSTIMESTAMP - INTERVAL '16' DAY)",id,png);
+        long expired=jdbc.queryForObject("SELECT ID_FOTO FROM APP_CHECKIN_EVIDENCIA",Long.class);
+        mvc.perform(get("/api/checkin/gestion/fotos/"+expired).session(session(2))).andExpect(status().isNotFound());
+        LocalDate old=today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(4);
+        jdbc.update("INSERT INTO APP_CHECKIN_RESUMEN(AREA,SEMANA,TOTAL,COMPLETADAS,PENDIENTES) VALUES('COCINA',?,1,1,0)",Date.valueOf(old));
+        LocalDate recent=old.plusWeeks(3);
+        jdbc.update("INSERT INTO APP_CHECKIN_RESUMEN(AREA,SEMANA,TOTAL,COMPLETADAS,PENDIENTES) VALUES('COCINA',?,0,0,0)",Date.valueOf(recent));
+        service.reconcile();
+        service.reconcile();
+        mvc.perform(get("/api/checkin/gestion/semanal").param("semana",old.toString()).session(session(1))).andExpect(status().isGone());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_RESUMEN WHERE SEMANA=?",Integer.class,Date.valueOf(recent)));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_EVIDENCIA",Integer.class));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_RESUMEN WHERE SEMANA=?",Integer.class,Date.valueOf(old)));
+        assertEquals("REALIZADA",jdbc.queryForObject("SELECT ESTADO FROM APP_CHECKIN_REGISTRO WHERE ID_REGISTRO=?",String.class,id));
+        jdbc.update("INSERT INTO APP_CHECKIN_EVIDENCIA(ID_REGISTRO,NOMBRE_ARCHIVO,TIPO_CONTENIDO,FOTO,CREADO_EN) VALUES(?,'reciente.png','image/png',?,SYSTIMESTAMP - INTERVAL '14' DAY)",id,png);
+        service.reconcile();
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_EVIDENCIA",Integer.class));
+    }
+
     @Test void installedAppAssetsRevalidateAndExposeTheCurrentCheckin() throws Exception {
         mvc.perform(get("/index.html")).andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control","no-cache"))

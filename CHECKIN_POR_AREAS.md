@@ -208,3 +208,14 @@ Antes de publicar, aplicar migrations/25_limpieza_recordatorios.sql. Crea APP_CH
 Verificación: 21 pruebas seleccionadas aprobadas y empaquetado correcto: permisos delegados para checklist/fotos, rechazo fuera de las áreas autorizadas, recordatorios de lunes con fecha simulada, ausencia de recordatorio para administración o en martes, idempotencia, Push, resúmenes y eliminación de personal. JavaScript y git diff --check aprobados. La migración PL/SQL no se ejecutó en Oracle real desde el agente ni se hicieron commit, push o despliegues.
 
 Mensaje de commit sugerido: feat: renombrar limpieza semanal y agregar permisos y avisos de lunes
+
+
+## Conservación de 15 días
+
+Las fotografías de limpieza por áreas se guardan como BLOB en Oracle, en APP_CHECKIN_EVIDENCIA. Se eliminan automáticamente al cumplir 15 días desde CREADO_EN. El enlace deja de servir la foto al caducar, incluso antes del siguiente mantenimiento.
+
+Los resúmenes se conservan 15 días desde el lunes de cierre (el lunes posterior a la semana resumida). Transcurrido ese plazo desaparecen del historial y la API responde 410 para esa semana. No son exactamente dos resúmenes: con un plazo de 15 días pueden coincidir tres durante un día. La semana actual sigue disponible.
+
+El mantenimiento se ejecuta en la reconciliación periódica y al consultar las tareas/resúmenes. Tras una pausa de Render se ejecuta al reanudar. No vuelve a generar semanas caducadas. Se conserva el texto, responsable y estado de las tareas: la eliminación de fotos no reduce el cumplimiento. No elimina mensajes, notificaciones ni fotografías del módulo personal antiguo.
+
+No requiere migración SQL adicional. Al publicar el backend se eliminarán las fotos y resúmenes que ya superen el plazo; esta eliminación es definitiva. Los permisos y avisos de los lunes permanecen iguales.

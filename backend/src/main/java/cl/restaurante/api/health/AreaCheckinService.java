@@ -119,7 +119,7 @@ public class AreaCheckinService {
 
     public Evidence photo(RoleAccessService.User user, long id) {
         // Every authenticated worker may view evidence, including historic evidence.
-        var rows = jdbc.query("SELECT FOTO,TIPO_CONTENIDO,NOMBRE_ARCHIVO FROM APP_CHECKIN_EVIDENCIA WHERE ID_FOTO=?",
+        var rows = jdbc.query("SELECT FOTO,TIPO_CONTENIDO,NOMBRE_ARCHIVO FROM APP_CHECKIN_EVIDENCIA WHERE ID_FOTO=? AND CREADO_EN>SYSTIMESTAMP - INTERVAL '15' DAY",
                 (rs, n) -> new Evidence(rs.getBytes(1), rs.getString(2), rs.getString(3)), id);
         if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "La fotografía no existe.");
         return rows.getFirst();
@@ -138,6 +138,8 @@ public class AreaCheckinService {
             requireReport(user, area);
             selected = List.of(area);
         }
+        if (!start.plusDays(22).isAfter(CheckinService.operationalDate()))
+            throw error(HttpStatus.GONE, "El resumen semanal superó sus 15 días de conservación.");
         reconcile();
         return selected.stream().map(a -> report(a, start)).toList();
     }
@@ -198,6 +200,8 @@ public class AreaCheckinService {
         Date lastClosed = jdbc.queryForObject("SELECT MAX(SEMANA) FROM APP_CHECKIN_RESUMEN", Date.class);
         if (lastClosed != null && lastClosed.toLocalDate().plusWeeks(1).isAfter(activation))
             activation = lastClosed.toLocalDate().plusWeeks(1);
+        LocalDate oldest = today.minusDays(15).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        if (activation.isBefore(oldest)) activation = oldest;
         // Finalized weeks are immutable. Revisit only unclosed dates after downtime.
         for (LocalDate date = activation; !date.isAfter(today); date = date.plusDays(1)) {
             try {
@@ -218,6 +222,16 @@ public class AreaCheckinService {
             for (String area : AREAS) saveReport(area, week);
         }
         sendMondayReminder(today);
+        purgeExpired(today);
+    }
+
+    /** Photos expire 15 days after upload; summaries 15 days after the weekly closure.
+     * Task metadata is retained so expiry never changes completion percentages.
+     * Called while holding the configuration lock used by confirmations/closures.
+     */
+    private void purgeExpired(LocalDate today) {
+        jdbc.update("DELETE FROM APP_CHECKIN_EVIDENCIA WHERE CREADO_EN<=SYSTIMESTAMP - INTERVAL '15' DAY");
+        jdbc.update("DELETE FROM APP_CHECKIN_RESUMEN WHERE SEMANA<=?", Date.valueOf(today.minusDays(22)));
     }
 
     static final String MONDAY_REMINDER = "Hola, le recuerdo registrar la limpieza profunda semanal de cada área. "
