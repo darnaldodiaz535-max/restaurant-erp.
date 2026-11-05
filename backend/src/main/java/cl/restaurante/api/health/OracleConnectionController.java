@@ -26,11 +26,13 @@ public class OracleConnectionController {
     private final JdbcTemplate jdbcTemplate;
     private final ActivityService activity;
     private final RoleAccessService access;
+    private final EmployeeDeletionService deletion;
 
-    public OracleConnectionController(JdbcTemplate jdbcTemplate, ActivityService activity, RoleAccessService access) {
+    public OracleConnectionController(JdbcTemplate jdbcTemplate, ActivityService activity, RoleAccessService access, EmployeeDeletionService deletion) {
         this.jdbcTemplate = jdbcTemplate;
         this.activity = activity;
         this.access = access;
+        this.deletion = deletion;
     }
 
 @GetMapping
@@ -98,25 +100,8 @@ public ResponseEntity<Map<String, String>> update(@PathVariable long id, @Reques
     return ResponseEntity.ok(Map.of("status", "actualizado"));
 }
     @DeleteMapping("/{id}")
-    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<?> delete(@PathVariable long id, HttpSession session) {
-        RoleAccessService.User user = access.current(session);
-        if (!access.isOwner(user)) return ResponseEntity.status(403).body(Map.of("error", "Solo el jefe de empresa puede eliminar personal."));
-        Object userId = session.getAttribute("userId");
-        if (userId instanceof Number number) {
-            Long linkedEmployeeId = jdbcTemplate.queryForObject(
-                    "SELECT ID_EMPLEADO FROM APP_USUARIO WHERE ID_USUARIO = ?", Long.class, number.longValue());
-            if (linkedEmployeeId != null && linkedEmployeeId == id) {
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(Map.of("error", "No puedes eliminar el trabajador asociado a la cuenta que está en uso."));
-            }
-        }
-        jdbcTemplate.execute("ALTER SESSION DISABLE PARALLEL DML");
-        jdbcTemplate.update("DELETE FROM APP_EVIDENCIA_TAREA WHERE ID_EMPLEADO=?", id);
-        jdbcTemplate.update("DELETE FROM APP_FERIADO_USO WHERE ID_EMPLEADO=?", id);
-        int changed = jdbcTemplate.update("DELETE FROM APP_EMPLEADO WHERE ID_EMPLEADO = ?", id);
-        if (changed > 0) activity.record(session, "ELIMINAR", "Personal", "Se eliminó un trabajador");
-        return changed == 0 ? ResponseEntity.notFound().build() : ResponseEntity.noContent().build();
+        return deletion.delete(id, session) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
     private boolean valid(EmployeeRequest request) {
         return request != null

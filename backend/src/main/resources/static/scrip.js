@@ -2648,9 +2648,10 @@ employeeBody?.addEventListener("click", async (event) => {
             await loadDashboardMetrics();
         } catch (error) { alert(`No se pudo cambiar el estado: ${error.message}`); }
     }
-    if (action === "Eliminar" && confirm(`¿Eliminar a ${employee.name}?`)) {
+    if (action === "Eliminar" && confirm(`¿Deseas eliminar definitivamente a ${employee.name}?\n\nSe eliminarán su cuenta de acceso y todos sus registros personales vinculados: asistencias, turnos, tareas asignadas, evidencias, mensajes y notificaciones.\n\nLos datos compartidos del resto del equipo se conservarán. Sus confirmaciones de Check-in se retirarán y esas tareas del área volverán a quedar pendientes.\n\nEsta acción no se puede deshacer. ¿Estás de acuerdo en continuar?`)) {
         try {
             await apiRequest(`${employeesApi}/${id}`, { method: "DELETE" });
+            try { localStorage.removeItem(`marigex-profile-photo-${id}`); } catch { /* Storage can be disabled on this device. */ }
             await loadEmployees();
             await loadDashboardMetrics();
         } catch (error) { alert(`No se pudo eliminar: ${error.message}`); }
