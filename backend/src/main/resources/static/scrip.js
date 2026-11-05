@@ -1,3 +1,6 @@
+// A full reload fetches current data and uses the existing authenticated home screen.
+document.getElementById("refreshHomeButton")?.addEventListener("click", () => window.location.reload());
+
 // Resolve the optional experience script from the SAME release as this entry point.
 // A missing Push dependency must never turn successful authentication into a login error.
 const experienceScriptUrl = new URL('experiencia.js', document.currentScript.src);

@@ -2554,3 +2554,21 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .module-screen--checkin-diario .checkin-view-tabs:has(button:only-child) { grid-template-columns:1fr; }
     .module-screen--checkin-diario .checkin-view-tabs button { font-size:11px; line-height:1.5; }
 }
+
+/* Header title: refresh the application and return to its home screen. */
+.topbar .brand-refresh {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 6px;
+}
+.topbar .brand-refresh svg { flex-shrink: 0; opacity: .65; }
+.topbar .brand-refresh:hover svg { opacity: 1; }
+.topbar .brand-refresh:focus-visible { outline: 2px solid #93c5fd; outline-offset: 4px; }
