@@ -51,7 +51,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "La configuración inicial ya se completó."));
         }
         if (!valid(request.username(), request.password()) || request.employeeId() == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Selecciona tu trabajador e ingresa usuario y contraseña (mínimo 10 caracteres)."));
+            return ResponseEntity.badRequest().body(Map.of("error", "Selecciona tu trabajador e ingresa usuario y contraseña (mínimo 5 caracteres)."));
         }
         try {
             jdbc.update("INSERT INTO APP_USUARIO (ID_EMPLEADO, USUARIO, CLAVE_HASH, ROL, ACTIVO) VALUES (?, ?, ?, 'EMPRESA', 'S')",
@@ -96,7 +96,7 @@ public class AuthController {
     public ResponseEntity<?> createEmployeeUser(@RequestBody UserRequest request, HttpSession session) {
         if (!access.isOwner(access.current(session))) return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Solo el jefe de empresa puede crear accesos."));
         if (request == null || request.employeeId() == null || !valid(request.username(), request.password())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Completa usuario y contraseña (mínimo 10 caracteres)."));
+            return ResponseEntity.badRequest().body(Map.of("error", "Completa usuario y contraseña (mínimo 5 caracteres)."));
         }
         String requestedRole = request.role() == null ? "TRABAJADOR" : request.role().trim().toUpperCase(java.util.Locale.ROOT);
         if (!java.util.Set.of("ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO").contains(requestedRole)) {
@@ -124,8 +124,8 @@ public class AuthController {
         if (!matches(request.currentPassword(), stored)) {
             return ResponseEntity.badRequest().body(Map.of("error", "La contraseña actual es incorrecta."));
         }
-        if (request.newPassword() == null || request.newPassword().length() < 10 || request.newPassword().length() > 200) {
-            return ResponseEntity.badRequest().body(Map.of("error", "La nueva contraseña debe tener entre 10 y 200 caracteres."));
+        if (request.newPassword() == null || request.newPassword().length() < 5 || request.newPassword().length() > 200) {
+            return ResponseEntity.badRequest().body(Map.of("error", "La nueva contraseña debe tener entre 5 y 200 caracteres."));
         }
         if (!request.newPassword().equals(request.confirmPassword())) {
             return ResponseEntity.badRequest().body(Map.of("error", "Las nuevas contraseñas no coinciden."));
@@ -154,7 +154,7 @@ public class AuthController {
 
     private boolean valid(String username, String password) {
         return username != null && username.trim().length() >= 3 && username.trim().length() <= 60
-                && password != null && password.length() >= 10 && password.length() <= 200;
+                && password != null && password.length() >= 5 && password.length() <= 200;
     }
     private String normalize(String username) { return username.trim().toLowerCase(java.util.Locale.ROOT); }
 

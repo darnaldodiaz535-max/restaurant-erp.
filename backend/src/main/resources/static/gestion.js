@@ -47,6 +47,7 @@ function renderTaskAreas() {
 async function renderArea(area) {
     if (!canViewArea(area)) return;
     prepareAreaScreen(areaLabel(area), "Equipo y actividades del área. Las fichas se mantienen en Personal.");
+    registerScreenRefresh(() => renderArea(area));
     const box = element("section", undefined, "data-section area-content");
     const actions = element("div", undefined, "module-controls");
     actions.append(actionButton("Ver tareas del área", () => void renderModule("Tareas diarias", area), true));
@@ -281,6 +282,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
         } catch (error) { feedback.textContent = error.message || "No se pudo cargar tu horario."; }
         finally { showRange.disabled = todayButton.disabled = false; }
     }
+    registerScreenRefresh(load);
     await load();
     const attendanceNoticeTimer = setInterval(() => {
         if (!box.isConnected) { clearInterval(attendanceNoticeTimer); return; }
@@ -388,6 +390,7 @@ async function renderSchedules(container) {
         catch(error) { feedback.textContent = error.message; }
         finally { save.disabled = false; }
     });
+    registerScreenRefresh(load);
     await load();
 }
 
@@ -431,6 +434,7 @@ async function renderPlazas() {
         } catch(error) { feedback.textContent=error.message; }
         finally { save.disabled=false; }
     });
+    registerScreenRefresh(load);
     await load();
 }
 setInterval(() => { if (!document.hidden && currentProfile) void loadDashboardOverview(); }, 60000);

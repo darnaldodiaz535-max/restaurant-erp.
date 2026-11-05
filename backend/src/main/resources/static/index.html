@@ -15,7 +15,7 @@
 
 <link rel="preload" as="image" href="/images/santiago-costanera-loading.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="/images/marigex-login-restaurant.jpg" fetchpriority="low">
-<link rel="stylesheet" href="style.css?v=actualizar-inicio-20261104-1">
+<link rel="stylesheet" href="style.css?v=actualizar-vista-20261104-2">
     <meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -49,8 +49,8 @@
                     <form id="setup-form" class="auth-form" hidden>
                         <label>Tu trabajador<select id="setup-employee" required></select></label>
                         <label>Usuario nuevo<input id="setup-username" autocomplete="username" minlength="3" required></label>
-                        <label>Contraseña nueva<input id="setup-password" type="password" autocomplete="new-password" minlength="10" required></label>
-                        <small>La primera cuenta será administradora. Usa una contraseña de al menos 10 caracteres.</small>
+                        <label>Contraseña nueva<input id="setup-password" type="password" autocomplete="new-password" minlength="5" required></label>
+                        <small>La primera cuenta será administradora. Usa una contraseña de al menos 5 caracteres.</small>
                         <button class="primary-button" type="submit">Crear administrador</button>
                     </form>
                     <p id="auth-error" class="auth-error" role="alert" hidden></p>
@@ -68,7 +68,7 @@
     <header class="topbar">
 
         <button class="logo brand-refresh" id="refreshHomeButton" type="button"
-                title="Actualizar y volver al inicio" aria-label="RESTAURANT ERP: actualizar y volver al inicio">
+                title="Actualizar este apartado" aria-label="RESTAURANT ERP: actualizar este apartado">
             <span>RESTAURANT ERP</span>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/></svg>
         </button>
@@ -930,9 +930,9 @@
                 <input id="employeeAccountUsername" name="username" autocomplete="off" minlength="3" maxlength="60" required>
             </label>
             <label for="employeeAccountPassword">Contraseña
-                <input id="employeeAccountPassword" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="200" required>
+                <input id="employeeAccountPassword" name="password" type="password" autocomplete="new-password" minlength="5" maxlength="200" required>
             </label>
-            <small>Mínimo 10 caracteres. Cada persona tendrá su propia cuenta.</small>
+            <small>Mínimo 5 caracteres. Cada persona tendrá su propia cuenta.</small>
             <label for="employeeAccountRole">Rol
                 <select id="employeeAccountRole" name="role" required>
                     <option value="TRABAJADOR">Trabajador</option>
@@ -1036,12 +1036,12 @@
                 <input id="currentPassword" type="password" autocomplete="current-password" maxlength="200" required>
             </label>
             <label>Nueva contraseña
-                <input id="newPassword" type="password" autocomplete="new-password" minlength="10" maxlength="200" required>
+                <input id="newPassword" type="password" autocomplete="new-password" minlength="5" maxlength="200" required>
             </label>
             <label>Confirmar nueva contraseña
-                <input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="200" required>
+                <input id="confirmPassword" type="password" autocomplete="new-password" minlength="5" maxlength="200" required>
             </label>
-            <small>La nueva contraseña debe tener entre 10 y 200 caracteres y ser diferente de la actual.</small>
+            <small>La nueva contraseña debe tener entre 5 y 200 caracteres y ser diferente de la actual.</small>
             <p id="changePasswordError" class="auth-error" role="alert" aria-live="polite"></p>
             <button id="savePassword" class="primary-button" type="submit">Guardar contraseña</button>
             <button id="cancelPassword" class="secondary-button" type="button">Cancelar</button>
@@ -1049,10 +1049,10 @@
     </dialog>
 <script src="vendor/qrcode-generator.js?v=1.4.4"></script>
 <script src="vendor/jsQR.js?v=1.4.0"></script>
-<script src="scrip.js?v=actualizar-inicio-20261104-1"></script>
+<script src="scrip.js?v=actualizar-vista-20261104-2"></script>
 <script src="notificaciones-horarios.js?v=notificaciones-leer-quitar-20261009-2"></script>
 <script src="experiencia.js?v=horario-personal-20261018-1"></script>
-<script src="gestion.js?v=horario-semana-ciclo-ancla-20261018-3"></script>
+<script src="gestion.js?v=actualizar-vista-20261104-2"></script>
 <script src="app-updates.js?v=installed-app-20261103-6"></script>
 
 

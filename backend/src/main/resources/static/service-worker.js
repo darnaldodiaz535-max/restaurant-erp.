@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-actualizar-inicio-20261104-1';
+const CACHE_NAME='marigex-shell-actualizar-vista-20261104-2';
 const DEVICE_CACHE='marigex-device';
 const IMAGE_ASSETS=['/images/santiago-costanera-loading.jpg','/images/marigex-login-restaurant.jpg'];
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/app-updates.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];

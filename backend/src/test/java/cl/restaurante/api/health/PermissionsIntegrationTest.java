@@ -349,13 +349,24 @@ jdbc.execute("CREATE TABLE APP_INSUMO("
             jdbc.update("DELETE FROM APP_USUARIO WHERE ID_EMPLEADO=50"); jdbc.update("DELETE FROM APP_EMPLEADO WHERE ID_EMPLEADO=50");
         }
     }
+    @Test void fiveCharacterPasswordsCanBeCreatedChangedAndUsedToLogin() throws Exception {
+        jdbc.update("INSERT INTO APP_EMPLEADO (ID_EMPLEADO,NOMBRE,CARGO,AREA,ESTADO) VALUES(50,'Cuenta clave','Mesero','Salón','ACTIVO')");
+        mvc.perform(post("/api/auth/users").session(owner).contentType("application/json")
+            .content("{\"employeeId\":50,\"username\":\"claveusuario\",\"password\":\"12345\",\"role\":\"TRABAJADOR\"}"))
+            .andExpect(status().isCreated());
+        var account=session(jdbc.queryForObject("SELECT ID_USUARIO FROM APP_USUARIO WHERE ID_EMPLEADO=50",Long.class));
+        mvc.perform(post("/api/auth/login").contentType("application/json").content("{\"username\":\"claveusuario\",\"password\":\"12345\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/auth/password").session(account).contentType("application/json").content(passwordBody("12345","abcde","abcde"))).andExpect(status().isOk());
+        mvc.perform(post("/api/auth/login").contentType("application/json").content("{\"username\":\"claveusuario\",\"password\":\"abcde\"}")).andExpect(status().isOk());
+    }
+
     @Test void invalidPasswordChangesLeaveHashUntouched() throws Exception {
         var account=passwordAccount("TRABAJADOR");
         String original=jdbc.queryForObject("SELECT CLAVE_HASH FROM APP_USUARIO WHERE ID_EMPLEADO=50",String.class);
         mvc.perform(post("/api/auth/password").session(account).contentType("application/json")
             .content(passwordBody("Incorrecta123","NuevaSegura456","NuevaSegura456")))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("La contraseña actual es incorrecta."));
-        for(String body:new String[]{"{}",passwordBody("AnteriorSegura123","corta","corta"),passwordBody("AnteriorSegura123","NuevaSegura456","NoCoincide123"),passwordBody("AnteriorSegura123","x".repeat(201),"x".repeat(201)),passwordBody("AnteriorSegura123","AnteriorSegura123","AnteriorSegura123")}) {
+        for(String body:new String[]{"{}",passwordBody("AnteriorSegura123","abcd","abcd"),passwordBody("AnteriorSegura123","NuevaSegura456","NoCoincide123"),passwordBody("AnteriorSegura123","x".repeat(201),"x".repeat(201)),passwordBody("AnteriorSegura123","AnteriorSegura123","AnteriorSegura123")}) {
             mvc.perform(post("/api/auth/password").session(account).contentType("application/json").content(body)).andExpect(status().isBadRequest());
             assertEquals(original,jdbc.queryForObject("SELECT CLAVE_HASH FROM APP_USUARIO WHERE ID_EMPLEADO=50",String.class));
         }

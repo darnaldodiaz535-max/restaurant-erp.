@@ -2555,7 +2555,7 @@ body.logged-out .topbar, body.logged-out .layout, body.logged-out #notificationM
     .module-screen--checkin-diario .checkin-view-tabs button { font-size:11px; line-height:1.5; }
 }
 
-/* Header title: refresh the application and return to its home screen. */
+/* Header title: refresh the current view without navigating away. */
 .topbar .brand-refresh {
     display: flex;
     align-items: center;

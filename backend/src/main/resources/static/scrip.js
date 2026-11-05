@@ -1,5 +1,27 @@
-// A full reload fetches current data and uses the existing authenticated home screen.
-document.getElementById("refreshHomeButton")?.addEventListener("click", () => window.location.reload());
+// Refresh data in place; keep the open view, filters and unsent forms.
+const screenRefreshers = new Map();
+function registerScreenRefresh(load) {
+    for (const [callback, revision] of screenRefreshers) if (revision !== screenRevision) screenRefreshers.delete(callback);
+    screenRefreshers.set(load, screenRevision);
+}
+document.getElementById("refreshHomeButton")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (button.disabled || !currentProfile) return;
+    const revision = screenRevision, position = { left: window.scrollX, top: window.scrollY };
+    const expanded = [...otherModule.querySelectorAll("details")].map(node => node.open);
+    button.disabled = true; button.setAttribute("aria-busy", "true");
+    try {
+        const loads = [...screenRefreshers].filter(([, version]) => version === revision).map(([load]) => load);
+        if (!dashboard.hidden) await loadDashboardMetrics();
+        else if (!personal.hidden) await loadEmployees();
+        else await Promise.all(loads.map(load => load()));
+        if (screenRevision === revision) {
+            otherModule.querySelectorAll("details").forEach((node, index) => { if (index < expanded.length) node.open = expanded[index]; });
+            window.scrollTo(position);
+        }
+    } catch (error) { window.alert(`No se pudo actualizar: ${error.message}`); }
+    finally { button.disabled = false; button.removeAttribute("aria-busy"); }
+});
 
 // Resolve the optional experience script from the SAME release as this entry point.
 // A missing Push dependency must never turn successful authentication into a login error.
@@ -567,6 +589,7 @@ function renderDailyReportsModule() {
             });
         } catch (error) { history.replaceChildren(checkinNode("p", "error-message", `No se pudieron cargar los reportes: ${error.message}`)); }
     }
+    registerScreenRefresh(loadReports);
     void loadReports();
 }
 
@@ -638,6 +661,7 @@ async function renderTeamCommunicationModule() {
 
     async function renderInbox(view) {
         const list = checkinNode("div", "communication-message-list"); body.appendChild(list);
+        registerScreenRefresh(() => load());
         const load = async () => {
             list.replaceChildren(checkinNode("p", "empty-state", "Cargando mensajes…"));
             try {
@@ -814,6 +838,7 @@ function checkinTaskList(tasks, canManage, refresh, feedback) {
     if (!tasks.length) list.appendChild(checkinNode("p", "empty-state", "Aún no hay tareas configuradas para este período."));
     tasks.forEach(task => {
         const done = task.status === "REALIZADA", row = checkinNode("article", "checkin-task" + (done ? " is-done" : ""));
+        row.dataset.taskId = String(task.id);
         const copy = checkinNode("div", "checkin-task-copy");
         copy.append(checkinNode("strong", "", task.title), checkinNode("small", "", `${checkinAreaNames[task.area]} · ${task.frequency === "SEMANAL" ? "Semana del " : ""}${task.date} · ${task.method === "FOTO" ? "Fotografía" : "Checklist"}`));
         const status = checkinNode("span", "checkin-status " + (done ? "checkin-status--done" : "checkin-status--pending"));
@@ -903,6 +928,15 @@ async function renderAreaCheckinDay(section, area, revision, feedback) {
         if (day.deadline) container.appendChild(checkinDeadlineNotice(day.deadline));
         container.append(checkinProgressSummary(day.tasks.length, completed, "Cumplimiento de " + checkinAreaNames[area]), checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.canManage ? "Puedes confirmar las tareas de tu área." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.canManage, load, feedback));
     };
+    registerScreenRefresh(async () => {
+        // Keep the selected photograph and its preview while other tasks refresh.
+        const selections = [...container.querySelectorAll(".checkin-photo-selection:not([hidden])")].map(node => node.closest(".checkin-task"));
+        await load();
+        for (const selected of selections) {
+            const replacement = container.querySelector(`.checkin-task[data-task-id="${selected.dataset.taskId}"]`);
+            if (replacement && !replacement.classList.contains("is-done")) replacement.replaceWith(selected);
+        }
+    });
     date.addEventListener("change", () => void load().catch(e => { feedback.textContent = e.message; })); await load();
     const lifecycle = new AbortController();
     const refreshIfActive = () => {
@@ -960,6 +994,7 @@ async function renderAreaCheckinReports(section, area, revision) {
     const reload = () => void load().catch(e => { feedback.textContent = e.message; });
     controls.appendChild(checkinButton("Consultar", reload, "primary-button"));
     history.addEventListener("change", () => { if (history.value) { week.value = history.value; reload(); } });
+    registerScreenRefresh(load);
     scope.addEventListener("change", reload); await load();
 }
 async function renderAreaCheckinObservations(section, area, revision, feedback) {
@@ -990,6 +1025,7 @@ async function renderAreaCheckinObservations(section, area, revision, feedback) 
     section.appendChild(checkinButton("Actualizar mensajes", async () => {
         try { await load(); } catch (error) { feedback.textContent = error.message; }
     }));
+    registerScreenRefresh(load);
     section.appendChild(list); await load();
 }
 
@@ -1278,6 +1314,7 @@ async function renderAttendanceModule() {
         controls.employee.value = [...controls.employee.options].some(option => option.value === selected) ? selected : "";
     };
     const reload = async () => loadAttendanceReport(section, controls.period.value, controls.from.value, controls.to.value, admin ? controls.employee.value : "", admin ? controls.area.value : "", feedback);
+    registerScreenRefresh(reload);
     controls.period.addEventListener("change", () => { setPeriodDates(controls.period.value, controls.from.value || today); void reload(); });
     controls.from.addEventListener("change", () => void reload()); controls.to.addEventListener("change", () => void reload());
     controls.area.addEventListener("change", () => { controls.employee.value = ""; populateAttendancePeople(); void reload(); }); controls.employee.addEventListener("change", () => void reload());
@@ -2039,6 +2076,7 @@ if (slug === "inventario") {
         catch (error) { records = []; loadError = error.message; }
         draw();
     };
+    registerScreenRefresh(loadRecords);
     add.addEventListener("click", () => {
     form.reset();
     restoreFixedFields();
@@ -2950,7 +2988,7 @@ changePasswordForm.addEventListener("submit", async event => {
     const confirmPassword = document.getElementById("confirmPassword").value;
     const errorBox = document.getElementById("changePasswordError");
     errorBox.textContent = "";
-    if (newPassword.length < 10 || newPassword.length > 200) { errorBox.textContent = "La nueva contraseña debe tener entre 10 y 200 caracteres."; return; }
+    if (newPassword.length < 5 || newPassword.length > 200) { errorBox.textContent = "La nueva contraseña debe tener entre 5 y 200 caracteres."; return; }
     if (newPassword !== confirmPassword) { errorBox.textContent = "Las nuevas contraseñas no coinciden."; return; }
     if (newPassword === currentPassword) { errorBox.textContent = "La nueva contraseña debe ser diferente de la actual."; return; }
     const save = document.getElementById("savePassword");
