@@ -69,11 +69,6 @@ async function performScreenRefresh(operation) {
     return succeeded;
 }
 document.getElementById("refreshHomeButton").addEventListener("click", () => void refreshCurrentScreen());
-document.getElementById("dashboardHomeButton").addEventListener("click", () => {
-    const destination = menuItems.find(link => navLabel(link) === "Dashboard" && !link.hidden);
-    if (destination) showScreen(destination);
-});
-
 // Only claim a deliberate downward gesture begun at the top of the document.
 let pull = null;
 const pullThreshold = 76;
@@ -113,8 +108,3 @@ document.addEventListener("touchend", () => {
     if (ready) void refreshCurrentScreen();
 }, { passive: true });
 document.addEventListener("touchcancel", resetPull, { passive: true });
-
-if (typeof ResizeObserver !== "undefined") {
-    const navigation = document.querySelector(".quick-navigation");
-    new ResizeObserver(() => document.documentElement.style.setProperty("--quick-nav-height", `${navigation.getBoundingClientRect().height}px`)).observe(navigation);
-}

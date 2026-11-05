@@ -4,7 +4,7 @@ const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const staticRoot=path.join(__dirname,'../../main/resources/static');
 function node(){const classes=new Set();return {hidden:true,disabled:false,textContent:'',handlers:{},style:{setProperty(){},removeProperty(){}},classList:{add(x){classes.add(x)},remove(x){classes.delete(x)},toggle(x,on){on?classes.add(x):classes.delete(x)}},addEventListener(k,cb){this.handlers[k]=cb},setAttribute(){},removeAttribute(){}}}
 function fixture(){
- const elements=Object.fromEntries(['refreshHomeButton','dashboardHomeButton','pullRefreshIndicator','screenRefreshStatus'].map(id=>[id,node()]));
+ const elements=Object.fromEntries(['refreshHomeButton','pullRefreshIndicator','screenRefreshStatus'].map(id=>[id,node()]));
  const handlers={};let loads=0,scroll=null;
  const context={Map,Set,Promise,setTimeout:()=>0,clearTimeout(){},console,currentProfile:{id:1},screenRevision:1,
  dashboard:{hidden:true},personal:{hidden:false},otherModule:{querySelectorAll:()=>[]},deletingEmployees:new Set(),
@@ -39,7 +39,6 @@ test('refresh skips stale module callbacks and can return the dashboard to top',
  const f=fixture();f.context.personal.hidden=true;f.context.called=0;
  f.run('registerScreenRefresh(async()=>{called++}); screenRevision++');await f.run('refreshCurrentScreen()');assert.equal(f.context.called,0);
  f.context.dashboard.hidden=false;f.context.window.scrollY=800;await f.run('refreshCurrentScreen({toTop:true})');assert.equal(f.scroll().top,0);
- f.elements.dashboardHomeButton.handlers.click();assert.equal(f.context.destination,'Dashboard');
 });
 test('staff deletion submits once, removes row immediately and is independent of follow-up reloads',async()=>{
  const source=fs.readFileSync(path.join(staticRoot,'scrip.js'),'utf8');

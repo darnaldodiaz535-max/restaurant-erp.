@@ -56,3 +56,8 @@ Commit sugerido: fix: corregir accesos y eliminación de personal y mejorar nave
 Tras hacer push desde VS Code, en Render abrir el servicio restaurant-erp y revisar Events/Logs. El despliegue debe corresponder al nuevo commit y terminar Live. Si Auto-Deploy está deshabilitado, ejecutar Manual Deploy > Deploy latest commit. No usar Clear build cache salvo que un fallo concreto lo justifique.
 
 En la web y aplicación instalada aceptar Actualizar si aparece. Comprobar: una cuenta de prueba con cargo Jefe de Salón y rol de acceso JEFE_SALON inicia sesión; Personal actualiza contadores y conserva la búsqueda; el botón del título mantiene el apartado; Dashboard vuelve arriba incluso desde su propia pantalla; el gesto consulta datos sin perder formularios. No eliminar trabajadores reales como prueba de despliegue. Comprobar una pérdida temporal de conexión: el aviso aparece y la lista sigue visible.
+
+
+## Ajuste visual posterior
+
+Por solicitud del usuario se retiraron el botón Dashboard duplicado y su franja blanca. Se mantiene Dashboard en el menú original y RESTAURANT ERP para actualizar el apartado actual. Los avisos de actualización ahora son temporales y flotantes; no reservan una franja vacía. Se conserva Pull to Refresh. Esta corrección sustituye la descripción anterior del acceso superior adicional.
