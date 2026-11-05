@@ -64,11 +64,25 @@ public class RoleAccessService {
     }
 
     public static String normalize(String role) {
-        if (role == null) return "TRABAJADOR";
-        String value = role.trim().toUpperCase(Locale.ROOT);
+        String known = recognizedRole(role);
+        return known == null ? "TRABAJADOR" : known;
+    }
+
+    public static String recognizedRole(String role) {
+        if (role == null) return null;
+        String value = java.text.Normalizer.normalize(role, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").trim().toUpperCase(Locale.ROOT)
+                .replaceAll("[\\s-]+", "_");
         return switch (value) {
             case "ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO" -> value;
-            default -> "TRABAJADOR";
+            case "ADMINISTRADOR" -> "ADMIN";
+            case "JEFE_DE_SALON", "ENCARGADO_DE_SALON", "ENCARGADO_SALON" -> "JEFE_SALON";
+            case "JEFE_DE_COCINA", "ENCARGADO_DE_COCINA", "ENCARGADO_COCINA" -> "JEFE_COCINA";
+            case "JEFE_DE_BARRA", "ENCARGADO_DE_BARRA", "ENCARGADO_BARRA" -> "JEFE_BARRA";
+            case "JEFE_DE_COPERIA", "ENCARGADO_DE_COPERIA", "ENCARGADO_COPERIA" -> "JEFE_COPERIA";
+            case "JEFE_DE_LOCAL" -> "JEFE_LOCAL";
+            case "JEFE_DE_EMPRESA" -> "EMPRESA";
+            default -> null;
         };
     }
 

@@ -1,7 +1,7 @@
-const CACHE_NAME='marigex-shell-actualizar-vista-20261104-2';
+const CACHE_NAME='marigex-shell-personal-movil-20261105-1';
 const DEVICE_CACHE='marigex-device';
 const IMAGE_ASSETS=['/images/santiago-costanera-loading.jpg','/images/marigex-login-restaurant.jpg'];
-const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/app-updates.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];
+const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/app-updates.js','/app-navigation.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',event=>{
     event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL.map(path=>new Request(path,{cache:"reload"})))));
     self.skipWaiting();

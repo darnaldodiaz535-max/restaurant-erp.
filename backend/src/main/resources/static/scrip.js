@@ -1,28 +1,3 @@
-// Refresh data in place; keep the open view, filters and unsent forms.
-const screenRefreshers = new Map();
-function registerScreenRefresh(load) {
-    for (const [callback, revision] of screenRefreshers) if (revision !== screenRevision) screenRefreshers.delete(callback);
-    screenRefreshers.set(load, screenRevision);
-}
-document.getElementById("refreshHomeButton")?.addEventListener("click", async (event) => {
-    const button = event.currentTarget;
-    if (button.disabled || !currentProfile) return;
-    const revision = screenRevision, position = { left: window.scrollX, top: window.scrollY };
-    const expanded = [...otherModule.querySelectorAll("details")].map(node => node.open);
-    button.disabled = true; button.setAttribute("aria-busy", "true");
-    try {
-        const loads = [...screenRefreshers].filter(([, version]) => version === revision).map(([load]) => load);
-        if (!dashboard.hidden) await loadDashboardMetrics();
-        else if (!personal.hidden) await loadEmployees();
-        else await Promise.all(loads.map(load => load()));
-        if (screenRevision === revision) {
-            otherModule.querySelectorAll("details").forEach((node, index) => { if (index < expanded.length) node.open = expanded[index]; });
-            window.scrollTo(position);
-        }
-    } catch (error) { window.alert(`No se pudo actualizar: ${error.message}`); }
-    finally { button.disabled = false; button.removeAttribute("aria-busy"); }
-});
-
 // Resolve the optional experience script from the SAME release as this entry point.
 // A missing Push dependency must never turn successful authentication into a login error.
 const experienceScriptUrl = new URL('experiencia.js', document.currentScript.src);
@@ -145,20 +120,27 @@ async function uploadRequest(url, formData) {
     return response.json();
 }
 async function apiRequest(url, options = {}) {
-    const response = await fetch(url, {
-        ...options,
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json", ...(options.headers || {}) }
-    });
-    if (!response.ok) {
-        const problem = await response.json().catch(() => ({}));
-        const error = new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`); error.status = response.status; throw error;
+    try {
+        const response = await fetch(url, {
+            ...options, credentials: "same-origin", cache: "no-store",
+            headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+        });
+        if (!response.ok) {
+            const problem = await response.json().catch(() => ({}));
+            const error = new Error(problem.error || problem.message || problem.detail || `Error del servidor (${response.status})`);
+            error.status = response.status; throw error;
+        }
+        return response.status === 204 ? null : await response.json();
+    } catch (error) {
+        if ((!options.method || options.method === "GET") && activeRefreshFailures) activeRefreshFailures.push(error);
+        throw error;
     }
-    return response.status === 204 ? null : response.json();
 }
+
 function buildEmployeeRow(employee) {
     const row = document.createElement("tr");
     row.dataset.id = employee.id;
+    row.dataset.accessRole = employee.accessRole || "";
     [employee.name, employee.role, employee.area].forEach((value) => {
         const cell = document.createElement("td"); cell.textContent = value; row.appendChild(cell);
     });
@@ -172,29 +154,31 @@ function buildEmployeeRow(employee) {
     if (isOwnerRole()) actions.innerHTML += ' <button class="table-button" type="button">Editar</button> <button class="table-button" type="button">Cambiar estado</button>';
     if (isOwnerRole()) actions.innerHTML += ' <button class="table-button" type="button">Eliminar</button>';
     if (isOwnerRole() && !employee.hasAccount) actions.innerHTML += ' <button class="table-button" type="button">Crear acceso</button>';
+    if (deletingEmployees.has(String(employee.id))) actions.querySelectorAll("button").forEach(button => { button.disabled = true; });
     row.appendChild(actions); return row;
 }
+let employeesRequest = 0;
+let employeesSnapshot = [];
+const deletingEmployees = new Set();
+function drawEmployees(employees) {
+    employeesSnapshot = employees;
+    employeeBody.replaceChildren(...employees.map(buildEmployeeRow));
+    filterEmployees();
+    const counts = document.querySelectorAll(".personal-summary .summary-card strong");
+    [employees.length, employees.filter(person => person.active).length, employees.filter(person => !person.active).length]
+        .forEach((count, index) => { if (counts[index]) counts[index].textContent = count; });
+}
 async function loadEmployees() {
+    const request = ++employeesRequest;
     try {
         const employees = await apiRequest(employeesApi);
-        employeeBody.replaceChildren(...employees.map(buildEmployeeRow));
-        filterEmployees();
-        const counts = document.querySelectorAll(".personal-summary .summary-card strong");
-        if (counts.length >= 3) {
-            counts[0].textContent = employees.length;
-            counts[1].textContent = employees.filter((employee) => employee.active).length;
-            counts[2].textContent = employees.filter((employee) => !employee.active).length;
-        }
+        if (request === employeesRequest) drawEmployees(employees);
     } catch (error) {
         console.error("No se pudieron cargar los empleados desde Oracle:", error);
-        document.querySelectorAll(".personal-summary .summary-card strong").forEach(count => { count.textContent = "—"; });
-        employeeBody.replaceChildren();
-        const row = document.createElement("tr");
-        const cell = document.createElement("td"); cell.colSpan = 5;
-        cell.textContent = `No se pudo cargar Personal: ${error.message}`;
-        row.appendChild(cell); employeeBody.appendChild(row);
+        if (request === employeesRequest) showRefreshStatus(`No se pudo actualizar Personal: ${error.message}. Se conservan los datos visibles.`, true);
     }
 }
+
 function slugifyLabel(label) { if (label === "Horarios") return "turnos"; return label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
 function activateNav(selected) {
     menuItems.forEach((link) => {
@@ -204,13 +188,18 @@ function activateNav(selected) {
         else link.removeAttribute("aria-current");
     });
 }
-async function loadDashboardMetrics() {
+let dashboardLoading = null;
+function loadDashboardMetrics() {
+    if (!dashboardLoading) dashboardLoading = fetchDashboardMetrics().finally(() => { dashboardLoading = null; });
+    return dashboardLoading;
+}
+async function fetchDashboardMetrics() {
     if (!currentProfile) return;
     const metricCards = [...document.querySelectorAll(".dashboard-cards .card")].filter(card => {
         const label = card.querySelector("h3")?.textContent.trim();
         return !["Limpieza profunda semanal", "Cierre de turno", "Recetas", "Configuración"].includes(label);
     });
-    metricCards.forEach(card => { const number = card.querySelector("strong"); if (number) number.textContent = "…"; card.setAttribute("aria-busy", "true"); });
+    metricCards.forEach(card => card.setAttribute("aria-busy", "true"));
     try {
         const metrics = await apiRequest("/api/dashboard");
         metricCards.forEach((card) => {
@@ -222,10 +211,11 @@ async function loadDashboardMetrics() {
         });
     } catch (error) {
         console.error("No se pudieron actualizar los indicadores:", error);
-        metricCards.forEach(card => { const number = card.querySelector("strong"); if (number) number.textContent = "—"; card.setAttribute("aria-busy", "false"); });
+        metricCards.forEach(card => card.setAttribute("aria-busy", "false"));
+        showRefreshStatus("No se pudieron actualizar los indicadores. Se conservan los datos visibles.", true);
     }
     await loadDashboardOverview();
-    void loadDashboardCharts();
+    await loadDashboardCharts();
 }
 
 function chileDateISO(date = new Date()) {
@@ -311,12 +301,12 @@ async function loadDashboardCharts() {
         renderAttendanceChart(report.marcas || [], today);
     } catch (error) {
         console.error("No se pudo cargar el gráfico de asistencia:", error);
-        if (attendanceRoot) attendanceRoot.innerHTML = '<p class="chart-error">No se pudo cargar la asistencia.</p>';
+        if (attendanceRoot && !attendanceRoot.children.length) attendanceRoot.textContent = "No se pudo cargar la asistencia.";
     }
     try { await renderTasksAreaChart(today); }
     catch (error) {
         console.error("No se pudo cargar el gráfico de tareas:", error);
-        if (taskRoot) taskRoot.innerHTML = '<p class="chart-error">No se pudieron cargar las tareas.</p>';
+        if (taskRoot && !taskRoot.children.length) taskRoot.textContent = "No se pudieron cargar las tareas.";
     }
 }
 
@@ -490,7 +480,7 @@ function showScreen(link) {
     else if (["Cocina", "Salón", "Barra", "Copería"].includes(label)) void renderArea(normalizeArea(label));
     else void renderModule(label);
     activateNav(link);
-    if (label === "Dashboard") void loadDashboardMetrics();
+    if (label === "Dashboard") return refreshCurrentScreen({ toTop: true });
 }
 
 function renderCloseShiftPlaceholder() {
@@ -573,7 +563,7 @@ function renderDailyReportsModule() {
         finally { submit.disabled = false; }
     });
     async function loadReports() {
-        history.replaceChildren(checkinNode("p", "empty-state", "Cargando reportes…"));
+
         try {
             const reports = await apiRequest("/api/comunicacion/reportes");
             if (revision !== screenRevision) return;
@@ -587,7 +577,7 @@ function renderDailyReportsModule() {
                 card.append(meta, checkinNode("h4", "", report.titulo), checkinNode("p", "", report.detalle));
                 history.appendChild(card);
             });
-        } catch (error) { history.replaceChildren(checkinNode("p", "error-message", `No se pudieron cargar los reportes: ${error.message}`)); }
+        } catch (error) { showRefreshStatus(`No se pudieron cargar los reportes: ${error.message}`, true); }
     }
     registerScreenRefresh(loadReports);
     void loadReports();
@@ -661,9 +651,9 @@ async function renderTeamCommunicationModule() {
 
     async function renderInbox(view) {
         const list = checkinNode("div", "communication-message-list"); body.appendChild(list);
-        registerScreenRefresh(() => load());
+        registerScreenRefresh(() => list.isConnected ? load() : undefined);
         const load = async () => {
-            list.replaceChildren(checkinNode("p", "empty-state", "Cargando mensajes…"));
+
             try {
                 const messages = await apiRequest(`/api/comunicacion/inquietudes?vista=${encodeURIComponent(view)}`);
                 if (revision !== screenRevision) return;
@@ -687,7 +677,7 @@ async function renderTeamCommunicationModule() {
                     }
                     list.appendChild(card);
                 });
-            } catch (error) { list.replaceChildren(checkinNode("p", "error-message", `No se pudieron cargar los mensajes: ${error.message}`)); }
+            } catch (error) { showRefreshStatus(`No se pudieron cargar los mensajes: ${error.message}`, true); }
         };
         void load();
     }
@@ -2073,8 +2063,8 @@ if (slug === "inventario") {
     };
     const loadRecords = async () => {
         try { records = await apiRequest(`${modulesApi}/${slug}${selectedArea ? `?area=${encodeURIComponent(selectedArea)}` : ""}`); loadError = ""; }
-        catch (error) { records = []; loadError = error.message; }
-        draw();
+        catch (error) { loadError = error.message; showRefreshStatus(`No se pudo actualizar ${name}: ${error.message}`, true); return; }
+        if (revision === screenRevision) draw();
     };
     registerScreenRefresh(loadRecords);
     add.addEventListener("click", () => {
@@ -2658,8 +2648,8 @@ document.getElementById("addEmployeeButton")?.addEventListener("click", async ()
     } catch (error) { alert(`No se pudo guardar: ${error.message}`); }
 });
 employeeBody?.addEventListener("click", async (event) => {
-    const button = event.target.closest("button"); if (!button) return;
-    const row = button.closest("tr"); const action = button.textContent.trim();
+    const button = event.target.closest("button"); if (!button || button.disabled) return;
+    const row = button.closest("tr"); if (!row || deletingEmployees.has(row.dataset.id)) return; const action = button.textContent.trim();
     const id = row.dataset.id;
     const employee = {
         name: row.cells[0].textContent,
@@ -2670,7 +2660,7 @@ employeeBody?.addEventListener("click", async (event) => {
     if (action === "Ver") alert(`Trabajador: ${employee.name}\nCargo: ${employee.role}\nÁrea: ${employee.area}\nEstado: ${employee.active ? "Activo" : "Inactivo"}`);
     if (action === "Crear acceso") {
         if (!isOwnerRole()) return;
-        openEmployeeAccount(Number(id), employee.name);
+        openEmployeeAccount(Number(id), employee.name, row.dataset.accessRole);
     }
     if (action === "Editar") {
         const name = prompt("Nombre:", employee.name); if (name === null || !name.trim()) return;
@@ -2690,13 +2680,28 @@ employeeBody?.addEventListener("click", async (event) => {
         } catch (error) { alert(`No se pudo cambiar el estado: ${error.message}`); }
     }
     if (action === "Eliminar" && confirm(`¿Deseas eliminar definitivamente a ${employee.name}?\n\nSe eliminarán su cuenta de acceso y todos sus registros personales vinculados: asistencias, turnos, tareas asignadas, evidencias, mensajes y notificaciones.\n\nLos datos compartidos del resto del equipo se conservarán. Sus confirmaciones de limpieza semanal se retirarán y esas tareas del área volverán a quedar pendientes.\n\nEsta acción no se puede deshacer. ¿Estás de acuerdo en continuar?`)) {
+        if (!isOwnerRole() || deletingEmployees.has(id)) return;
+        deletingEmployees.add(id);
+        row.querySelectorAll("button").forEach(actionButton => { actionButton.disabled = true; });
+        button.textContent = "Eliminando…";
         try {
             await apiRequest(`${employeesApi}/${id}`, { method: "DELETE" });
-            try { localStorage.removeItem(`marigex-profile-photo-${id}`); } catch { /* Storage can be disabled on this device. */ }
-            await loadEmployees();
-            await loadDashboardMetrics();
-        } catch (error) { alert(`No se pudo eliminar: ${error.message}`); }
+        } catch (error) {
+            deletingEmployees.delete(id);
+            row.querySelectorAll("button").forEach(actionButton => { actionButton.disabled = false; });
+            button.textContent = "Eliminar";
+            showRefreshStatus(`No se pudo eliminar a ${employee.name}: ${error.message}`, true);
+            return;
+        }
+        // Commit confirmed by the server. Do not report a later refresh failure as a failed DELETE.
+        ++employeesRequest;
+        drawEmployees(employeesSnapshot.filter(person => String(person.id) !== id));
+        deletingEmployees.delete(id);
+        try { localStorage.removeItem(`marigex-profile-photo-${id}`); } catch { /* Optional local avatar. */ }
+        showRefreshStatus(`${employee.name}: eliminación completada.`, false);
+        void loadDashboardMetrics();
     }
+
 });
 let currentProfile = null;
 const authScreen = document.getElementById("auth-screen");
@@ -2931,11 +2936,13 @@ async function closeSession() {
 const employeeAccountDialog = document.getElementById("employeeAccountDialog");
 const employeeAccountForm = document.getElementById("employeeAccountForm");
 let accountSubmitting = false;
-function openEmployeeAccount(employeeId, name) {
+function openEmployeeAccount(employeeId, name, role) {
     employeeAccountForm.reset();
     employeeAccountForm.dataset.employeeId = String(employeeId);
     document.getElementById("employeeAccountTitle").textContent = "Usuario para " + name;
     document.getElementById("employeeAccountError").textContent = "";
+    const roleControl = document.getElementById("employeeAccountRole");
+    if (role && [...roleControl.options].some(option => option.value === role)) roleControl.value = role;
     employeeAccountDialog.showModal();
     document.getElementById("employeeAccountUsername").focus();
 }

@@ -98,11 +98,8 @@ public class AuthController {
         if (request == null || request.employeeId() == null || !valid(request.username(), request.password())) {
             return ResponseEntity.badRequest().body(Map.of("error", "Completa usuario y contraseña (mínimo 5 caracteres)."));
         }
-        String requestedRole = request.role() == null ? "TRABAJADOR" : request.role().trim().toUpperCase(java.util.Locale.ROOT);
-        if (!java.util.Set.of("ADMIN", "EMPRESA", "JEFE_SALON", "JEFE_COCINA", "JEFE_BARRA", "JEFE_COPERIA", "JEFE_LOCAL", "TRABAJADOR", "EMPLEADO").contains(requestedRole)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Selecciona un rol válido."));
-        }
-        String role = RoleAccessService.normalize(requestedRole);
+        String role = request.role() == null ? "TRABAJADOR" : RoleAccessService.recognizedRole(request.role());
+        if (role == null) return ResponseEntity.badRequest().body(Map.of("error", "Selecciona un rol de acceso válido; el cargo y el área se guardan en la ficha del trabajador."));
         try {
             jdbc.update("INSERT INTO APP_USUARIO (ID_EMPLEADO, USUARIO, CLAVE_HASH, ROL, ACTIVO) VALUES (?, ?, ?, ?, 'S')",
                     request.employeeId(), normalize(request.username()), hash(request.password()), role);
@@ -148,7 +145,7 @@ public class AuthController {
         return jdbc.queryForObject(
                 "SELECT U.ID_USUARIO, U.USUARIO, U.ROL, E.ID_EMPLEADO, E.NOMBRE, E.CARGO, E.AREA " +
                 "FROM APP_USUARIO U JOIN APP_EMPLEADO E ON E.ID_EMPLEADO = U.ID_EMPLEADO WHERE U.ID_USUARIO = ?",
-                (rs, row) -> new Profile(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getLong(4),
+                (rs, row) -> new Profile(rs.getLong(1), rs.getString(2), RoleAccessService.normalize(rs.getString(3)), rs.getLong(4),
                         rs.getString(5), rs.getString(6), rs.getString(7)), id);
     }
 

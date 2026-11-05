@@ -349,6 +349,26 @@ jdbc.execute("CREATE TABLE APP_INSUMO("
             jdbc.update("DELETE FROM APP_USUARIO WHERE ID_EMPLEADO=50"); jdbc.update("DELETE FROM APP_EMPLEADO WHERE ID_EMPLEADO=50");
         }
     }
+    @Test void salonDisplayRoleCreatesCanonicalAccessIndependentlyOfJobTitle() throws Exception {
+        jdbc.update("INSERT INTO APP_EMPLEADO (ID_EMPLEADO,NOMBRE,CARGO,AREA,ESTADO) VALUES(50,'Jefatura prueba','Jefe de Salón','Salón','ACTIVO')");
+        mvc.perform(post("/api/auth/users").session(owner).contentType("application/json")
+            .content("{\"employeeId\":50,\"username\":\"jefesalon\",\"password\":\"12345\",\"role\":\"Jefe de Salón\"}"))
+            .andExpect(status().isCreated());
+        assertEquals("JEFE_SALON",jdbc.queryForObject("SELECT ROL FROM APP_USUARIO WHERE ID_EMPLEADO=50",String.class));
+        mvc.perform(post("/api/auth/login").contentType("application/json").content("{\"username\":\"jefesalon\",\"password\":\"12345\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("JEFE_SALON"))
+            .andExpect(jsonPath("$.position").value("Jefe de Salón"));
+        assertEquals("JEFE_SALON",RoleAccessService.normalize("Encargado de Salón"));
+        assertEquals("JEFE_COCINA",RoleAccessService.normalize("Jefe de Cocina"));
+        assertEquals("TRABAJADOR",RoleAccessService.normalize("Cargo inventado"));
+    }
+
+    @Test void workerCannotCreatePrivilegedAccessWithDisplayAlias() throws Exception {
+        mvc.perform(post("/api/auth/users").session(session(2)).contentType("application/json")
+            .content("{\"employeeId\":50,\"username\":\"jefesalon\",\"password\":\"12345\",\"role\":\"Jefe de Salón\"}"))
+            .andExpect(status().isForbidden());
+    }
+
     @Test void fiveCharacterPasswordsCanBeCreatedChangedAndUsedToLogin() throws Exception {
         jdbc.update("INSERT INTO APP_EMPLEADO (ID_EMPLEADO,NOMBRE,CARGO,AREA,ESTADO) VALUES(50,'Cuenta clave','Mesero','Salón','ACTIVO')");
         mvc.perform(post("/api/auth/users").session(owner).contentType("application/json")

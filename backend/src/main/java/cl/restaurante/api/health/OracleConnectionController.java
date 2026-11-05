@@ -39,7 +39,7 @@ public class OracleConnectionController {
 public List<Employee> list(HttpSession session) {
     RoleAccessService.User user = access.current(session);
     String sql =
-            "SELECT E.ID_EMPLEADO, E.NOMBRE, E.CARGO, E.AREA, E.RUT, E.ESTADO, " +
+            "SELECT E.ID_EMPLEADO, E.NOMBRE, E.CARGO, E.AREA, E.RUT, E.ESTADO, U.ROL AS ROL_ACCESO, " +
                     "CASE WHEN U.ID_USUARIO IS NULL THEN 0 ELSE 1 END AS TIENE_CUENTA " +
                     "FROM APP_EMPLEADO E LEFT JOIN APP_USUARIO U ON U.ID_EMPLEADO = E.ID_EMPLEADO " +
                     "ORDER BY E.ID_EMPLEADO";
@@ -51,7 +51,8 @@ public List<Employee> list(HttpSession session) {
                     rs.getString("AREA"),
                     rs.getString("RUT"),
                     "ACTIVO".equalsIgnoreCase(rs.getString("ESTADO")),
-                    rs.getInt("TIENE_CUENTA") == 1
+                    rs.getInt("TIENE_CUENTA") == 1,
+                    rs.getString("ROL_ACCESO") == null ? null : RoleAccessService.normalize(rs.getString("ROL_ACCESO"))
             )
     );
 }
@@ -101,7 +102,9 @@ public ResponseEntity<Map<String, String>> update(@PathVariable long id, @Reques
 }
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable long id, HttpSession session) {
-        return deletion.delete(id, session) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+        deletion.delete(id, session);
+        // DELETE is idempotent: a retry after a committed deletion is successful too.
+        return ResponseEntity.noContent().build();
     }
     private boolean valid(EmployeeRequest request) {
         return request != null
@@ -109,7 +112,7 @@ public ResponseEntity<Map<String, String>> update(@PathVariable long id, @Reques
                 && request.role() != null && !request.role().isBlank()
                 && request.area() != null && !request.area().isBlank();
     }
-public record Employee(long id, String name, String role, String area, String rut, boolean active, boolean hasAccount) {}
+public record Employee(long id, String name, String role, String area, String rut, boolean active, boolean hasAccount, String accessRole) {}
 public record EmployeeRequest(String name, String role, String area, String rut, Boolean active) {}
 }
 

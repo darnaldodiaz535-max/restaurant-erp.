@@ -134,7 +134,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
     box.append(attendanceInsights);
     recordsSection.before(box);
     async function load() {
-        showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…"; body.replaceChildren(); cycleHint.hidden = true; cycleCurrentWeek.hidden = true;
+        showRange.disabled = todayButton.disabled = true; feedback.textContent = "Cargando tu horario…";
         const from = fromInput.value, until = toInput.value;
         if (!from || !until || until < from) {
             feedback.textContent = "Elige un rango de fechas válido."; showRange.disabled = todayButton.disabled = false; return;
@@ -146,6 +146,7 @@ async function renderMyAttendanceSchedule(recordsSection) {
         range.textContent = "Período consultado: " + formatDate(from) + " – " + formatDate(until);
         try {
             const result = await apiRequest("/api/asistencia/horarios/mi-horario?desde=" + encodeURIComponent(from) + "&dias=" + daysCount);
+            body.replaceChildren(); cycleHint.hidden = true; cycleCurrentWeek.hidden = true;
             const days = result.dias || [];
             let today = days.find(day => day.fecha === todayIso());
             if (!today) {

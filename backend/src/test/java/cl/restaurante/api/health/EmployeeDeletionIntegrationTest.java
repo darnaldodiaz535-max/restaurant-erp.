@@ -83,6 +83,13 @@ class EmployeeDeletionIntegrationTest {
         jdbc.update("INSERT INTO APP_CHECKIN_RESUMEN VALUES('SALON',?,2,2,0)",Date.valueOf(monday));
     }
 
+    @Test void repeatedDeletionSucceedsWithoutDeletingOtherEmployees() throws Exception {
+        jdbc.update("INSERT INTO APP_EMPLEADO VALUES(4,'Temporal sin historial')");
+        mvc.perform(delete("/api/empleados/4").session(session(101))).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/empleados/4").session(session(101))).andExpect(status().isNoContent());
+        assertEquals(3,count("APP_EMPLEADO"));
+    }
+
     @Test void completeDeletionRemovesPersonalHistoryAndAccessButPreservesOtherEmployees() throws Exception {
         mvc.perform(delete("/api/empleados/2").session(session(101))).andExpect(status().isNoContent());
         assertEquals(2,count("APP_EMPLEADO")); assertEquals(2,count("APP_USUARIO"));
@@ -123,7 +130,7 @@ class EmployeeDeletionIntegrationTest {
         mvc.perform(delete("/api/empleados/2")).andExpect(status().isUnauthorized());
         mvc.perform(delete("/api/empleados/2").session(session(103))).andExpect(status().isForbidden());
         mvc.perform(delete("/api/empleados/1").session(session(101))).andExpect(status().isConflict());
-        mvc.perform(delete("/api/empleados/999").session(session(101))).andExpect(status().isNotFound());
+        mvc.perform(delete("/api/empleados/999").session(session(101))).andExpect(status().isNoContent());
         assertEquals(3,count("APP_EMPLEADO"));
     }
 

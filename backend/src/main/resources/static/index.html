@@ -15,7 +15,7 @@
 
 <link rel="preload" as="image" href="/images/santiago-costanera-loading.jpg" fetchpriority="high">
 <link rel="preload" as="image" href="/images/marigex-login-restaurant.jpg" fetchpriority="low">
-<link rel="stylesheet" href="style.css?v=actualizar-vista-20261104-2">
+<link rel="stylesheet" href="style.css?v=personal-movil-20261105-1">
     <meta name="theme-color" content="#111827"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -148,6 +148,12 @@
 </div>
 
     </header>
+    <div class="quick-navigation" aria-label="Acceso al inicio">
+        <button id="dashboardHomeButton" type="button" aria-label="Actualizar Dashboard y volver arriba"><span aria-hidden="true">⌂</span> Dashboard</button>
+        <span id="screenRefreshStatus" role="status" aria-live="polite" hidden></span>
+    </div>
+    <div id="pullRefreshIndicator" class="pull-refresh-indicator" role="status" aria-live="polite" hidden></div>
+
 
 
 
@@ -933,7 +939,7 @@
                 <input id="employeeAccountPassword" name="password" type="password" autocomplete="new-password" minlength="5" maxlength="200" required>
             </label>
             <small>Mínimo 5 caracteres. Cada persona tendrá su propia cuenta.</small>
-            <label for="employeeAccountRole">Rol
+            <label for="employeeAccountRole">Rol de acceso
                 <select id="employeeAccountRole" name="role" required>
                     <option value="TRABAJADOR">Trabajador</option>
                     <option value="ADMIN">Administrador</option>
@@ -944,7 +950,7 @@
                     <option value="JEFE_LOCAL">Jefe de local</option>
                 </select>
             </label>
-            <small>Las jefaturas de área pueden cargar el horario de su propia área. El QR y la administración completa siguen reservados a administración.</small>
+            <small>El cargo y el área de la ficha no cambian el rol de acceso. Elige aquí la jefatura que corresponde; no necesitas cambiar el cargo a «Encargado». Las jefaturas de área pueden cargar el horario de su propia área. El QR y la administración completa siguen reservados a administración.</small>
             <p id="employeeAccountError" class="auth-error" role="alert" aria-live="polite"></p>
             <button id="saveEmployeeAccount" class="primary-button" type="submit">Crear cuenta</button>
             <button id="cancelEmployeeAccount" class="secondary-button" type="button">Cancelar</button>
@@ -1049,10 +1055,11 @@
     </dialog>
 <script src="vendor/qrcode-generator.js?v=1.4.4"></script>
 <script src="vendor/jsQR.js?v=1.4.0"></script>
-<script src="scrip.js?v=actualizar-vista-20261104-2"></script>
+<script src="app-navigation.js?v=personal-movil-20261105-1"></script>
+<script src="scrip.js?v=personal-movil-20261105-1"></script>
 <script src="notificaciones-horarios.js?v=notificaciones-leer-quitar-20261009-2"></script>
 <script src="experiencia.js?v=horario-personal-20261018-1"></script>
-<script src="gestion.js?v=actualizar-vista-20261104-2"></script>
+<script src="gestion.js?v=personal-movil-20261105-1"></script>
 <script src="app-updates.js?v=installed-app-20261103-6"></script>
 
 
