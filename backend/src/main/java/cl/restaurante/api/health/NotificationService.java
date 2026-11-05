@@ -65,7 +65,7 @@ public class NotificationService {
         for (long user : users) {
             notifyWithDetail(
                     user,
-                    "Check-in Diario",
+                    "Limpieza profunda semanal",
                     pushPreview,
                     fullDetail);
         }
@@ -116,7 +116,7 @@ private void notifyWithDetail(
         var keys = new org.springframework.jdbc.support.GeneratedKeyHolder();
         jdbc.update(connection -> {
             var statement = connection.prepareStatement(
-                    "INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE,DETALLE,LEIDA,VISIBLE) VALUES(?,'Check-in Diario',?,?,'N','S')",
+                    "INSERT INTO APP_NOTIFICACION(ID_USUARIO,MODULO,MENSAJE,DETALLE,LEIDA,VISIBLE) VALUES(?,'Limpieza profunda semanal',?,?,'N','S')",
                     new String[]{"ID_NOTIFICACION"});
             statement.setLong(1, user);
             statement.setString(2, preview.substring(0, Math.min(preview.length(), 900)));
@@ -124,7 +124,7 @@ private void notifyWithDetail(
             return statement;
         }, keys);
         var preference = preferences.get(user);
-        if (preference.push() && preferences.isModuleEnabled(user, "Check-in Diario")) {
+        if (preference.push() && preferences.isModuleEnabled(user, "Limpieza profunda semanal")) {
             delivery.enqueue(keys.getKey().longValue(), user,
                     new NotificationPreferences.Preferences(true, true, false, ""));
         }

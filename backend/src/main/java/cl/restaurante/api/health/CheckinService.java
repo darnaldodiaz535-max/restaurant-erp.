@@ -467,7 +467,7 @@ public class CheckinService {
             if (pending == null || pending == 0) return;
         }
         notifications.userWithDetail(
-                userId, "Check-in Diario", preview, detail);
+                userId, "Limpieza profunda semanal", preview, detail);
         jdbc.update(
                 "UPDATE APP_CHECKIN_ENVIO_SEMANAL SET ESTADO_ENVIO='ENVIADO', "
                         + "ENVIADO_EN=SYSTIMESTAMP "
@@ -497,8 +497,8 @@ public class CheckinService {
                         Date.valueOf(day), employee.key());
                 notifications.employee(
                         employee.id(),
-                        "Check-in Diario",
-                        "Tu Check-in Diario está disponible.");
+                        "Limpieza profunda semanal",
+                        "Tu Limpieza profunda semanal está disponible.");
             } catch (DuplicateKeyException alreadyNotified) {
                 // El aviso de la fecha ya se registró.
             }
@@ -655,7 +655,7 @@ public class CheckinService {
     }
 
     private String personalReportText(LocalDate week, WeeklyPerson report) {
-        return "Tu Check-in Diario — semana del " + week + " al " + week.plusDays(6)
+        return "Tu Limpieza profunda semanal — semana del " + week + " al " + week.plusDays(6)
                 + "\nDías trabajados: " + report.daysWorked()
                 + "\nDías libres: " + report.daysFree()
                 + "\nTareas asignadas: " + report.assignedTasks()

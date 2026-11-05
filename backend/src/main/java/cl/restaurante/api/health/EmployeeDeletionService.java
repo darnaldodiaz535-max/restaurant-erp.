@@ -77,7 +77,7 @@ public class EmployeeDeletionService {
             remove(schema,"APP_REPORTE_DIARIO","AUTOR_USUARIO",user.id());
             if (schema.has("APP_NOTIF_ENVIO","ID_NOTIFICACION") && schema.has("APP_NOTIFICACION","ID_USUARIO"))
                 jdbc.update("DELETE FROM APP_NOTIF_ENVIO WHERE ID_NOTIFICACION IN (SELECT ID_NOTIFICACION FROM APP_NOTIFICACION WHERE ID_USUARIO=?)",user.id());
-            for (String table:List.of("APP_NOTIFICACION","APP_NOTIF_PREFERENCIA","APP_NOTIF_MODULO_PREF","APP_PUSH_SUSCRIPCION","APP_PROPUESTA_HORARIO"))
+            for (String table:List.of("APP_NOTIFICACION","APP_NOTIF_PREFERENCIA","APP_NOTIF_MODULO_PREF","APP_PUSH_SUSCRIPCION","APP_PROPUESTA_HORARIO","APP_CHECKIN_RECORDATORIO"))
                 remove(schema,table,"ID_USUARIO",user.id());
             remove(schema,"APP_ALERTA_DESCARTADA","DESCARTADA_POR",user.id());
             clear(schema,"APP_ASISTENCIA_PLANILLA","CREADO_POR",user.id());

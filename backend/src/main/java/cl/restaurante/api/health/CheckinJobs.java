@@ -24,7 +24,7 @@ public class CheckinJobs {
         try {
             checkin.reconcile();
         } catch (RuntimeException error) {
-            log.warn("No se pudo reconciliar Check-in Diario; se reintentará.", error);
+            log.warn("No se pudo reconciliar Limpieza profunda semanal; se reintentará.", error);
         }
     }
 }

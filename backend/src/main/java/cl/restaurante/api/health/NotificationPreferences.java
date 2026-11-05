@@ -9,7 +9,7 @@ import java.util.List;
 @Service
 public class NotificationPreferences {
     public static final List<String> MODULES = List.of(
-        "Personal", "Asistencia", "Horarios", "Tareas diarias", "Check-in Diario", "Cierre de turno",
+        "Personal", "Asistencia", "Horarios", "Tareas diarias", "Limpieza profunda semanal", "Cierre de turno",
         "Inventario", "Cocina", "Salón", "Barra", "Copería", "Producción",
         "Recetas", "Reservas", "Limpieza", "Comunicación del equipo", "Compras", "Mermas",
         "Control sanitario", "Reportes"
@@ -49,6 +49,7 @@ public class NotificationPreferences {
     }
     private String canonicalModule(String value) {
         if (value == null || value.isBlank()) return null;
+        if ("Check-in Diario".equalsIgnoreCase(value.trim())) value = "Limpieza profunda semanal";
         String key = Normalizer.normalize(value.trim(), Normalizer.Form.NFD).replaceAll("\\p{M}+", "").toLowerCase();
         return MODULES.stream().filter(module -> Normalizer.normalize(module, Normalizer.Form.NFD)
             .replaceAll("\\p{M}+", "").toLowerCase().equals(key)).findFirst().orElse(null);

@@ -46,7 +46,7 @@ const iconPaths = {
     Asistencia: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     Horarios: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
     "Tareas diarias": '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 10 2 2 5-5M8 16h8"/>',
-    "Check-in Diario": '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18m-13 5 2 2 4-4"/>',
+    "Limpieza profunda semanal": '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18m-13 5 2 2 4-4"/>',
     "Cierre de turno": '<path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h5"/><path d="m15 16 2 2 4-4"/>',
     Inventario: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="M3 8v9l9 5 9-5V8M12 13v9"/>',
     Cocina: '<path d="M6 13h12l-1 8H7l-1-8ZM5 13a3 3 0 0 1 0-6 4 4 0 0 1 8-1 4 4 0 0 1 7 2 3 3 0 0 1-1 5"/>',
@@ -183,7 +183,7 @@ async function loadDashboardMetrics() {
     if (!currentProfile) return;
     const metricCards = [...document.querySelectorAll(".dashboard-cards .card")].filter(card => {
         const label = card.querySelector("h3")?.textContent.trim();
-        return !["Check-in Diario", "Cierre de turno", "Recetas", "Configuración"].includes(label);
+        return !["Limpieza profunda semanal", "Cierre de turno", "Recetas", "Configuración"].includes(label);
     });
     metricCards.forEach(card => { const number = card.querySelector("strong"); if (number) number.textContent = "…"; card.setAttribute("aria-busy", "true"); });
     try {
@@ -456,7 +456,7 @@ function showScreen(link) {
     if (label === "Dashboard") dashboard.hidden = false;
     else if (label === "Personal") personal.hidden = false;
     else if (label === "Tareas diarias") renderTaskAreas();
-    else if (label === "Check-in Diario") void renderCheckinModule();
+    else if (label === "Limpieza profunda semanal") void renderCheckinModule();
     else if (label === "Cierre de turno") renderCloseShiftPlaceholder();
     else if (label === "Recetas") renderRecipesPlaceholder();
     else if (label === "Asistencia") void renderAttendanceModule();
@@ -730,14 +730,14 @@ async function renderCheckinModule(selectedArea = null, view = "dia") {
     dashboard.hidden = true; personal.hidden = true; otherModule.hidden = false;
     otherModule.replaceChildren(); otherModule.className = "module-screen module-screen--checkin-diario";
     const area = selectedArea || checkinBossArea() || "COCINA", admin = checkinAdmin(), boss = checkinBossArea();
-    const header = checkinHeader(view === "semanal" ? "Resumen semanal de Check-in" : "Check-in", "Limpieza semanal: del lunes al domingo a las 23:59 (hora de Chile). El lunes se publica el resumen de la semana anterior.");
+    const header = checkinHeader(view === "semanal" ? "Resumen de limpieza semanal" : "Limpieza profunda semanal", "Limpieza semanal: del lunes al domingo a las 23:59 (hora de Chile). El lunes se publica el resumen de la semana anterior.");
     const section = checkinNode("section", "generic-data checkin-data"), tabs = checkinNode("div", "checkin-tabs");
     checkinAreas.forEach(code => tabs.appendChild(checkinButton(checkinAreaNames[code], () => void renderCheckinModule(code), area === code ? "primary-button" : "secondary-button")));
     const nav = checkinNode("div", "checkin-tabs checkin-view-tabs");
     nav.appendChild(checkinButton("Tareas e historial", () => void renderCheckinModule(area)));
     if (admin || boss) {
         const reportArea = admin ? area : boss;
-        nav.appendChild(checkinButton("Resumen semanal de Check-in", () => void renderCheckinModule(reportArea, "semanal")));
+        nav.appendChild(checkinButton("Resumen de limpieza semanal", () => void renderCheckinModule(reportArea, "semanal")));
         nav.appendChild(checkinButton(admin ? "Mensajes a jefes de área" : "Buzón de administración", () => void renderCheckinModule(reportArea, "observaciones")));
     }
     [...nav.children].forEach((button, index) => {
@@ -2648,7 +2648,7 @@ employeeBody?.addEventListener("click", async (event) => {
             await loadDashboardMetrics();
         } catch (error) { alert(`No se pudo cambiar el estado: ${error.message}`); }
     }
-    if (action === "Eliminar" && confirm(`¿Deseas eliminar definitivamente a ${employee.name}?\n\nSe eliminarán su cuenta de acceso y todos sus registros personales vinculados: asistencias, turnos, tareas asignadas, evidencias, mensajes y notificaciones.\n\nLos datos compartidos del resto del equipo se conservarán. Sus confirmaciones de Check-in se retirarán y esas tareas del área volverán a quedar pendientes.\n\nEsta acción no se puede deshacer. ¿Estás de acuerdo en continuar?`)) {
+    if (action === "Eliminar" && confirm(`¿Deseas eliminar definitivamente a ${employee.name}?\n\nSe eliminarán su cuenta de acceso y todos sus registros personales vinculados: asistencias, turnos, tareas asignadas, evidencias, mensajes y notificaciones.\n\nLos datos compartidos del resto del equipo se conservarán. Sus confirmaciones de limpieza semanal se retirarán y esas tareas del área volverán a quedar pendientes.\n\nEsta acción no se puede deshacer. ¿Estás de acuerdo en continuar?`)) {
         try {
             await apiRequest(`${employeesApi}/${id}`, { method: "DELETE" });
             try { localStorage.removeItem(`marigex-profile-photo-${id}`); } catch { /* Storage can be disabled on this device. */ }

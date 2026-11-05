@@ -28,6 +28,7 @@ class AreaCheckinIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired AreaCheckinService service;
     @Autowired NotificationDelivery delivery;
+    @Autowired NotificationPreferences preferences;
     @org.springframework.test.context.bean.override.mockito.MockitoBean NotificationTransport transport;
     MockMvc mvc;
     LocalDate today = CheckinService.operationalDate();
@@ -49,6 +50,7 @@ class AreaCheckinIntegrationTest {
             for (String ddl:notificationsSchema.split(";")) if (!ddl.isBlank()) jdbc.execute(ddl);
         }
         jdbc.execute("CREATE TABLE APP_NOTIF_MODULO_PREF(ID_USUARIO NUMBER,MODULO VARCHAR2(60),HABILITADA CHAR(1),PRIMARY KEY(ID_USUARIO,MODULO))");
+        jdbc.execute("CREATE TABLE APP_CHECKIN_RECORDATORIO(ID_USUARIO NUMBER REFERENCES APP_USUARIO(ID_USUARIO),SEMANA DATE,PRIMARY KEY(ID_USUARIO,SEMANA))");
         jdbc.update("INSERT INTO APP_CHECKIN_CONFIG VALUES(1,?)",Date.valueOf(today));
         String[] roles={"ADMIN","TRABAJADOR","JEFE_COCINA","JEFE_SALON","JEFE_BARRA","JEFE_COPERIA","JEFE_LOCAL"};
         for (int i=0;i<roles.length;i++) {
@@ -233,7 +235,7 @@ class AreaCheckinIntegrationTest {
 
     @Test void disabledPushStillKeepsTheMessageAndInternalNotification() throws Exception {
         enablePush(6);
-        jdbc.update("INSERT INTO APP_NOTIF_MODULO_PREF VALUES(6,'Check-in Diario','N')");
+        jdbc.update("INSERT INTO APP_NOTIF_MODULO_PREF VALUES(6,'Limpieza profunda semanal','N')");
         mvc.perform(post("/api/checkin/gestion/observaciones").contentType("application/json")
                 .content("{\"area\":\"COPERIA\",\"message\":\"Mensaje al buzón\"}").session(session(1))).andExpect(status().isOk());
         assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_OBSERVACION",Integer.class));
@@ -250,5 +252,48 @@ class AreaCheckinIntegrationTest {
         assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE N.ID_USUARIO=1",Integer.class));
         assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE N.ID_USUARIO=3 AND N.MENSAJE LIKE '%COCINA'",Integer.class));
         assertEquals(5,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO",Integer.class));
+    }
+
+    @Test void kitchenChiefManagesCoperiaAndSalonChiefManagesBarraIncludingPhotographs() throws Exception {
+        template(1,"COPERIA","FOTO",today); template(2,"BARRA","FOTO",today);
+        template(3,"COPERIA","SIMPLE",today); template(4,"BARRA","SIMPLE",today);
+        service.reconcile();
+        mvc.perform(get("/api/checkin/gestion/areas/COPERIA").session(session(3))).andExpect(jsonPath("$.canManage").value(true));
+        mvc.perform(get("/api/checkin/gestion/areas/BARRA").session(session(4))).andExpect(jsonPath("$.canManage").value(true));
+        mvc.perform(post("/api/checkin/gestion/tareas/"+task(4,today)+"/hecha").session(session(3))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/checkin/gestion/tareas/"+task(3,today)+"/hecha").session(session(4))).andExpect(status().isForbidden());
+        mvc.perform(multipart("/api/checkin/gestion/tareas/"+task(1,today)+"/foto").file(new MockMultipartFile("foto","test.png","image/png",png)).session(session(3))).andExpect(status().isOk());
+        mvc.perform(multipart("/api/checkin/gestion/tareas/"+task(2,today)+"/foto").file(new MockMultipartFile("foto","test.png","image/png",png)).session(session(4))).andExpect(status().isOk());
+        mvc.perform(post("/api/checkin/gestion/tareas/"+task(3,today)+"/hecha").session(session(3))).andExpect(status().isOk());
+        mvc.perform(post("/api/checkin/gestion/tareas/"+task(4,today)+"/hecha").session(session(4))).andExpect(status().isOk());
+        assertEquals("Persona 3",jdbc.queryForObject("SELECT RESPONSABLE FROM APP_CHECKIN_REGISTRO WHERE ID_REGISTRO=?",String.class,task(1,today)));
+        assertEquals("Persona 4",jdbc.queryForObject("SELECT RESPONSABLE FROM APP_CHECKIN_REGISTRO WHERE ID_REGISTRO=?",String.class,task(2,today)));
+    }
+
+    @Test void mondayReminderIsSentOnceToAreaChiefsAndNeverToAdministrators() {
+        enablePush(1); for (long user:new long[]{3,4,5,6}) enablePush(user);
+        var monday=today.with(TemporalAdjusters.next(DayOfWeek.MONDAY));
+        try (var dates=org.mockito.Mockito.mockStatic(CheckinService.class)) {
+            dates.when(CheckinService::operationalDate).thenReturn(monday);
+            service.reconcile(); service.reconcile();
+        }
+        assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_RECORDATORIO",Integer.class));
+        assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION WHERE MENSAJE=? AND ID_USUARIO IN(3,4,5,6) AND VISIBLE='S'",Integer.class,AreaCheckinService.MONDAY_REMINDER));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION WHERE MENSAJE=? AND ID_USUARIO=1",Integer.class,AreaCheckinService.MONDAY_REMINDER));
+        assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE N.MENSAJE=? AND D.CANAL='PUSH'",Integer.class,AreaCheckinService.MONDAY_REMINDER));
+        assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIFICACION WHERE ID_USUARIO=1 AND MENSAJE LIKE 'Resumen de limpieza semanal disponible%'",Integer.class));
+    }
+
+    @Test void tuesdayDoesNotSendMondayReminderAndOldModuleNamesKeepTheSamePreference() {
+        jdbc.update("INSERT INTO APP_NOTIF_MODULO_PREF VALUES(6,'Limpieza profunda semanal','N')");
+        assertFalse(preferences.isModuleEnabled(6,"Check-in Diario"));
+        assertFalse(preferences.getModules(6).contains("Limpieza profunda semanal"));
+        var tuesday=today.with(TemporalAdjusters.next(DayOfWeek.MONDAY)).plusDays(1);
+        try (var dates=org.mockito.Mockito.mockStatic(CheckinService.class)) {
+            dates.when(CheckinService::operationalDate).thenReturn(tuesday);
+            service.reconcile();
+        }
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_RECORDATORIO",Integer.class));
+        assertFalse(NotificationPreferences.MODULES.contains("Check-in Diario"));
     }
 }

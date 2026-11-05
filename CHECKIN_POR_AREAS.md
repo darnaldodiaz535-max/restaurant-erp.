@@ -1,4 +1,4 @@
-# MariGex — Check-in por áreas
+# MariGex — Limpieza profunda semanal
 
 Implementación del 3 de noviembre de 2026 en `C:\Users\darna\OneDrive\Desktop\version 1.1.4`.
 
@@ -7,7 +7,7 @@ Implementación del 3 de noviembre de 2026 en `C:\Users\darna\OneDrive\Desktop\v
 - Cuatro áreas independientes: Cocina, Salón, Barra y Copería.
 - Una tarea por plantilla, área y período; no se multiplica por cada trabajador. Las tareas DIARIA se generan por fecha y las SEMANAL una vez por semana de lunes a domingo.
 - Todos los usuarios autenticados pueden consultar tareas, fechas anteriores y fotografías de las cuatro áreas.
-- Solo JEFE_COCINA, JEFE_SALON, JEFE_BARRA y JEFE_COPERIA confirman las tareas de su área. ADMIN/EMPRESA supervisan y envían observaciones.
+- JEFE_COCINA confirma tareas y fotos de Cocina y Copería. JEFE_SALON confirma tareas y fotos de Salón y Barra. JEFE_BARRA y JEFE_COPERIA mantienen su propia área. ADMIN/EMPRESA supervisan y envían observaciones. Los resúmenes y buzones conservan el acceso por área principal.
 - SIMPLE: confirmación de checklist. FOTO: seleccionar el archivo y pulsar «Enviar evidencia y completar». La foto y la confirmación se guardan en una misma transacción. No se completa sin evidencia válida.
 - JPG, PNG y WebP hasta 4 MB, con validación de firma y tipo. Se registra cuenta, nombre del responsable y fecha/hora. Los instantes se muestran con la hora registrada por el servidor/base.
 - Las tareas DIARIA se confirman solo en su fecha. Las SEMANAL pueden confirmarse durante su semana completa en America/Santiago. Los períodos anteriores no se reabren.
@@ -16,7 +16,7 @@ Implementación del 3 de noviembre de 2026 en `C:\Users\darna\OneDrive\Desktop\v
 - Se destacan las áreas con tareas asignadas y ninguna completada; las áreas sin plantillas muestran «Sin tareas», sin inventar incumplimientos.
 - Los pendientes y las tareas sin fotografía obligatoria aparecen en los reportes. Una tarea pendiente al cerrar la semana permanece pendiente/incumplida, nunca se completa por el paso del tiempo.
 - Sugerencias con remitente, destinatario, fecha y contenido; se conserva historial por área. Si hay varios jefes activos del mismo rol, cada uno recibe un registro y aviso. Sin jefe activo, el envío se rechaza para evitar perder el mensaje.
-- Avisos internos de reportes e incumplimientos (incluidos en el detalle del resumen) y observaciones. El aviso interno siempre queda guardado. También se encola Push a los dispositivos suscritos cuando el usuario tiene activados Push y el apartado Check-in Diario; no se encola correo.
+- Avisos internos de reportes e incumplimientos (incluidos en el detalle del resumen) y observaciones. El aviso interno siempre queda guardado. También se encola Push a los dispositivos suscritos cuando el usuario tiene activados Push y el apartado Limpieza profunda semanal; no se encola correo.
 
 ## Limpieza profunda semanal KALI
 
@@ -153,7 +153,7 @@ Aplicar el SQL antes de publicar esta versión. Después de tu push, revisar Ren
 
 ## Buzón de administración dentro del Check-in
 
-Los jefes acceden a «Buzón de administración»: mensajes recibidos de su propia área, remitente, destinatario, fecha e historial. Administración accede a «Mensajes a jefes de área», selecciona el área y envía mensajes, sugerencias o solicitudes. Se reutilizan el almacenamiento y los permisos de observaciones existentes. «Actualizar mensajes» permite volver a consultar el buzón. Cada envío genera un aviso interno de MariGex; también se encola una notificación Push al teléfono si la cuenta tiene Push activado, el apartado Check-in Diario habilitado y un dispositivo suscrito. No requiere otra migración SQL: reutiliza APP_PUSH_SUSCRIPCION y APP_NOTIF_ENVIO.
+Los jefes acceden a «Buzón de administración»: mensajes recibidos de su propia área, remitente, destinatario, fecha e historial. Administración accede a «Mensajes a jefes de área», selecciona el área y envía mensajes, sugerencias o solicitudes. Se reutilizan el almacenamiento y los permisos de observaciones existentes. «Actualizar mensajes» permite volver a consultar el buzón. Cada envío genera un aviso interno de MariGex; también se encola una notificación Push al teléfono si la cuenta tiene Push activado, el apartado Limpieza profunda semanal habilitado y un dispositivo suscrito. No requiere otra migración SQL: reutiliza APP_PUSH_SUSCRIPCION y APP_NOTIF_ENVIO.
 
 Para recibir en el teléfono: ingresar con la cuenta del jefe, activar las notificaciones Push en la configuración existente y aceptar el permiso del navegador. El aviso interno y el buzón funcionan aunque el dispositivo no tenga permisos. Los envíos Push se procesan después de confirmar la transacción, con la cola y los reintentos existentes. Si Push o el módulo están desactivados, no se fuerza la preferencia.
 
@@ -190,3 +190,21 @@ Se aplicó la propuesta aprobada mediante componentes HTML/CSS/SVG: círculo de 
 Validación: comprobación sintáctica de scrip.js y service-worker.js; git diff --check. Vista de muestra en escritorio y 390 px sin desbordamiento horizontal; administrador con 4 tarjetas, jefe de Salón con solo su tarjeta y trabajador sin acceso al resumen ni acciones de confirmación. Se comprobaron el filtro de área y Ver detalle con tareas/responsables/estados. Los datos de las capturas son de ejemplo y no se enviaron acciones a la aplicación publicada.
 
 Archivos de esta entrega: backend/src/main/resources/static/scrip.js, style.css, index.html, service-worker.js y esta guía. Actualización de versión de caché para recibir el diseño al publicar.
+
+## Nombre y recordatorio de los lunes — actualización del 4 de noviembre
+
+El nombre visible es «Limpieza profunda semanal», en el menú, dashboard, pantallas, resúmenes, configuración y notificaciones. Los identificadores técnicos /api/checkin y APP_CHECKIN_ se conservan para no romper las rutas ni los registros.
+
+Solo se amplió la gestión de tareas/fotografías: Cocina → Cocina y Copería; Salón → Salón y Barra. Los permisos de resumen, buzón y consulta siguen como estaban: cada jefe ve el resumen de su área principal; administración ve todas. Los jefes propios de Barra/Copería también conservan su gestión.
+
+Cada lunes, en America/Santiago, el proceso registra un único aviso por jefe de área activo y semana, con este texto:
+
+> Hola, le recuerdo registrar la limpieza profunda semanal de cada área. Por favor complementar el formulario al terminar la limpieza y subir la foto. Esto es importante hacerlo todas las semanas para llevar el registro de control de cada área. Gracias.
+
+Se guarda el aviso dentro de la aplicación y se encola Push si el dispositivo y la cuenta lo tienen activado. ADMIN y EMPRESA no reciben este recordatorio. Continúan recibiendo los avisos de resumen disponible de todas las áreas al cerrar la semana; cada jefe mantiene el aviso del resumen de su propia área. Si el servidor está suspendido, el procesamiento depende de cuándo vuelva a estar activo; el recordatorio se emite durante el lunes, sin repetirlo ni enviarlo otros días.
+
+Antes de publicar, aplicar migrations/25_limpieza_recordatorios.sql. Crea APP_CHECKIN_RECORDATORIO y traslada las preferencias de notificación al nombre nuevo, manteniendo la elección del usuario; también actualiza el nombre de módulo de los avisos anteriores. Si ya existe una preferencia con el nombre nuevo, esa se conserva. No borra tareas ni fotografías. No es necesario repetir migraciones anteriores.
+
+Verificación: 21 pruebas seleccionadas aprobadas y empaquetado correcto: permisos delegados para checklist/fotos, rechazo fuera de las áreas autorizadas, recordatorios de lunes con fecha simulada, ausencia de recordatorio para administración o en martes, idempotencia, Push, resúmenes y eliminación de personal. JavaScript y git diff --check aprobados. La migración PL/SQL no se ejecutó en Oracle real desde el agente ni se hicieron commit, push o despliegues.
+
+Mensaje de commit sugerido: feat: renombrar limpieza semanal y agregar permisos y avisos de lunes

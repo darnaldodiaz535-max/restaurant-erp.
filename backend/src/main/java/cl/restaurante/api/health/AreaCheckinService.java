@@ -44,6 +44,12 @@ public class AreaCheckinService {
         };
     }
 
+    public static boolean canManage(RoleAccessService.User user, String area) {
+        return area.equals(managedArea(user))
+                || ("JEFE_COCINA".equals(user.role()) && "COPERIA".equals(area))
+                || ("JEFE_SALON".equals(user.role()) && "BARRA".equals(area));
+    }
+
     private void requireReport(RoleAccessService.User user, String area) {
         if (!admin(user) && !area.equals(managedArea(user)))
             throw error(HttpStatus.FORBIDDEN, "Solo puedes consultar el resumen de tu propia área.");
@@ -57,7 +63,7 @@ public class AreaCheckinService {
         reconcile();
         List<Task> tasks = tasks(area, date, date.plusDays(1));
         LocalDate today = CheckinService.operationalDate();
-        boolean canManage = area.equals(managedArea(user)) && date.equals(today);
+        boolean canManage = canManage(user, area) && date.equals(today);
         return new Day(date.toString(), area, canManage, tasks, canManage ? deadline(tasks, today) : null);
     }
 
@@ -91,7 +97,7 @@ public class AreaCheckinService {
                 (rs, n) -> new String[]{rs.getString(1), rs.getDate(2).toLocalDate().toString(), rs.getString(3), rs.getString(4), rs.getString(5)}, id);
         if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "La tarea no existe.");
         String[] task = rows.getFirst();
-        if (!own.equals(task[0])) throw error(HttpStatus.FORBIDDEN, "No puedes modificar tareas de otra área.");
+        if (!canManage(user, task[0])) throw error(HttpStatus.FORBIDDEN, "No tienes permiso para completar tareas de esta área.");
         LocalDate today = CheckinService.operationalDate();
         LocalDate start = LocalDate.parse(task[1]);
         boolean inPeriod = "SEMANAL".equals(task[4])
@@ -211,6 +217,23 @@ public class AreaCheckinService {
         for (LocalDate week = activation.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)); week.isBefore(current); week = week.plusWeeks(1)) {
             for (String area : AREAS) saveReport(area, week);
         }
+        sendMondayReminder(today);
+    }
+
+    static final String MONDAY_REMINDER = "Hola, le recuerdo registrar la limpieza profunda semanal de cada área. "
+            + "Por favor complementar el formulario al terminar la limpieza y subir la foto. "
+            + "Esto es importante hacerlo todas las semanas para llevar el registro de control de cada área. Gracias.";
+
+    private void sendMondayReminder(LocalDate today) {
+        if (today.getDayOfWeek() != DayOfWeek.MONDAY) return;
+        for (String role : List.of("JEFE_COCINA", "JEFE_SALON", "JEFE_BARRA", "JEFE_COPERIA")) {
+            for (Recipient recipient : recipients(role)) {
+                try {
+                    jdbc.update("INSERT INTO APP_CHECKIN_RECORDATORIO(ID_USUARIO,SEMANA) VALUES(?,?)",recipient.id(),Date.valueOf(today));
+                } catch (DuplicateKeyException alreadySent) { continue; }
+                notifications.checkinNotice(recipient.id(), MONDAY_REMINDER, MONDAY_REMINDER);
+            }
+        }
     }
 
     private void saveReport(String area, LocalDate week) {
@@ -225,7 +248,7 @@ public class AreaCheckinService {
                 + (report.zeroCompletion() ? "\nATENCIÓN: ninguna tarea completada." : "");
         for (String role : List.of("ADMIN", "EMPRESA", "JEFE_" + area)) {
             for (Recipient recipient : recipients(role))
-                notifications.checkinNotice(recipient.id(), "Resumen semanal de Check-in disponible · " + area, detail);
+                notifications.checkinNotice(recipient.id(), "Resumen de limpieza semanal disponible · " + area, detail);
         }
     }
 
