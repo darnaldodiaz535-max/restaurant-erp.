@@ -64,11 +64,13 @@ public class AreaCheckinService {
         List<Task> tasks = tasks(area, date, date.plusDays(1));
         LocalDate today = CheckinService.operationalDate();
         boolean canManage = canManage(user, area);
-        List<Long> completable = canManage ? tasks.stream()
-                .filter(task -> canComplete(task.status(), task.frequency(), LocalDate.parse(task.date()), today))
-                .map(Task::id).toList() : List.of();
+        List<Task> current = canManage ? tasks.stream()
+                .filter(task -> inPeriod(task.frequency(), LocalDate.parse(task.date()), today))
+                .toList() : List.of();
+        List<Long> completable = current.stream().filter(task -> "PENDIENTE".equals(task.status())).map(Task::id).toList();
+        List<Long> reversible = current.stream().filter(task -> "REALIZADA".equals(task.status())).map(Task::id).toList();
         return new Day(date.toString(), area, canManage, tasks,
-                canManage && date.equals(today) ? deadline(tasks, today) : null, completable);
+                canManage && date.equals(today) ? deadline(tasks, today) : null, completable, reversible);
     }
 
     static Deadline deadline(List<Task> tasks, LocalDate today) {
@@ -93,18 +95,10 @@ public class AreaCheckinService {
 
     @Transactional
     public void complete(RoleAccessService.User user, long id, byte[] bytes, String claimedType, String filename) {
-        String own = managedArea(user);
-        if (own == null) throw error(HttpStatus.FORBIDDEN, "Solo el jefe del área puede confirmar tareas.");
-        // Serialize confirmations with the weekly closure, including across midnight.
-        jdbc.queryForObject("SELECT INICIO FROM APP_CHECKIN_CONFIG WHERE ID=1 FOR UPDATE", Date.class);
-        var rows = jdbc.query("SELECT AREA,FECHA,METODO,ESTADO,FRECUENCIA FROM APP_CHECKIN_REGISTRO WHERE ID_REGISTRO=? FOR UPDATE",
-                (rs, n) -> new String[]{rs.getString(1), rs.getDate(2).toLocalDate().toString(), rs.getString(3), rs.getString(4), rs.getString(5)}, id);
-        if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "La tarea no existe.");
-        String[] task = rows.getFirst();
-        if (!canManage(user, task[0])) throw error(HttpStatus.FORBIDDEN, "No tienes permiso para completar tareas de esta área.");
+        String[] task = lockManagedTask(user, id);
         LocalDate today = CheckinService.operationalDate();
         LocalDate start = LocalDate.parse(task[1]);
-        if (!canComplete(task[3], task[4], start, today))
+        if (!"PENDIENTE".equals(task[3]) || !inPeriod(task[4], start, today))
             throw error(HttpStatus.CONFLICT, "Solo se pueden completar tareas pendientes de su período actual.");
         if ("FOTO".equals(task[2])) {
             if (bytes == null || bytes.length == 0 || bytes.length > 4 * 1024 * 1024)
@@ -119,8 +113,28 @@ public class AreaCheckinService {
                 user.id(), user.name(), id);
     }
 
-    private static boolean canComplete(String status, String frequency, LocalDate start, LocalDate today) {
-        if (!"PENDIENTE".equals(status)) return false;
+    @Transactional
+    public void undo(RoleAccessService.User user, long id) {
+        String[] task = lockManagedTask(user, id);
+        if (!"REALIZADA".equals(task[3]) || !inPeriod(task[4], LocalDate.parse(task[1]), CheckinService.operationalDate()))
+            throw error(HttpStatus.CONFLICT, "Solo se pueden deshacer tareas completadas de su período actual.");
+        jdbc.update("DELETE FROM APP_CHECKIN_EVIDENCIA WHERE ID_REGISTRO=?", id);
+        jdbc.update("UPDATE APP_CHECKIN_REGISTRO SET ESTADO='PENDIENTE',ID_RESPONSABLE=NULL,RESPONSABLE=NULL,REALIZADA_EN=NULL WHERE ID_REGISTRO=?", id);
+    }
+
+    private String[] lockManagedTask(RoleAccessService.User user, long id) {
+        if (managedArea(user) == null) throw error(HttpStatus.FORBIDDEN, "Solo una jefatura autorizada puede cambiar tareas.");
+        // Serialize confirmations with the weekly closure, including across midnight.
+        jdbc.queryForObject("SELECT INICIO FROM APP_CHECKIN_CONFIG WHERE ID=1 FOR UPDATE", Date.class);
+        var rows = jdbc.query("SELECT AREA,FECHA,METODO,ESTADO,FRECUENCIA FROM APP_CHECKIN_REGISTRO WHERE ID_REGISTRO=? FOR UPDATE",
+                (rs, n) -> new String[]{rs.getString(1), rs.getDate(2).toLocalDate().toString(), rs.getString(3), rs.getString(4), rs.getString(5)}, id);
+        if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "La tarea no existe.");
+        String[] task = rows.getFirst();
+        if (!canManage(user, task[0])) throw error(HttpStatus.FORBIDDEN, "No tienes permiso para cambiar tareas de esta área.");
+        return task;
+    }
+
+    private static boolean inPeriod(String frequency, LocalDate start, LocalDate today) {
         return "SEMANAL".equals(frequency)
                 ? !today.isBefore(start) && today.isBefore(start.plusDays(7))
                 : today.equals(start);
@@ -278,7 +292,7 @@ public class AreaCheckinService {
     private static ResponseStatusException error(HttpStatus status, String message) { return new ResponseStatusException(status, message); }
     private record Recipient(long id, String name) {}
     public record Task(long id, String date, String area, String title, String method, String status, String frequency, String responsible, String completedAt, Long photoId) {}
-    public record Day(String date, String area, boolean canManage, List<Task> tasks, Deadline deadline, List<Long> completableTaskIds) {}
+    public record Day(String date, String area, boolean canManage, List<Task> tasks, Deadline deadline, List<Long> completableTaskIds, List<Long> reversibleTaskIds) {}
     public record Deadline(String dueDate, int daysRemaining, int pending, int total) {}
     public record Report(String area, String weekStart, String weekEnd, int total, int completed, int pending,
                          Integer percent, boolean zeroCompletion, boolean closed, List<Task> tasks) {}

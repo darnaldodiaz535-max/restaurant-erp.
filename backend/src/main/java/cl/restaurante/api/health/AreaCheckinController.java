@@ -26,6 +26,12 @@ public class AreaCheckinController {
     @PostMapping("/tareas/{id}/hecha")
     public java.util.Map<String,String> complete(@PathVariable long id, HttpSession session) { service.complete(access.current(session),id,null,null,null); return java.util.Map.of("status","guardado"); }
 
+    @PostMapping("/tareas/{id}/deshacer")
+    public ResponseEntity<Void> undo(@PathVariable long id, HttpSession session) {
+        service.undo(access.current(session), id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping(value="/tareas/{id}/foto", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public java.util.Map<String,String> photo(@PathVariable long id, @RequestParam MultipartFile foto, HttpSession session) throws IOException {
         var user=access.current(session);

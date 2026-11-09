@@ -205,6 +205,28 @@ class AreaCheckinIntegrationTest {
         mvc.perform(post("/api/checkin/gestion/tareas/"+cooperative+"/hecha").session(session(6))).andExpect(status().isOk());
     }
 
+    @Test void authorizedChiefCanUndoPhotoTaskAndSubmitNewEvidence() throws Exception {
+        template(1, "BARRA", "FOTO", today);
+        service.reconcile();
+        long id = task(1, today);
+        String endpoint = "/api/checkin/gestion/tareas/" + id;
+        var photo = new MockMultipartFile("foto", "test.png", "image/png", png);
+        mvc.perform(multipart(endpoint + "/foto").file(photo).session(session(5))).andExpect(status().isOk());
+        mvc.perform(post(endpoint + "/deshacer").session(session(2))).andExpect(status().isForbidden());
+        mvc.perform(get("/api/checkin/gestion/areas/BARRA").session(session(4)))
+                .andExpect(jsonPath("$.reversibleTaskIds[0]").value(id));
+        mvc.perform(post(endpoint + "/deshacer").session(session(4))).andExpect(status().isNoContent());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM APP_CHECKIN_EVIDENCIA", Integer.class));
+        mvc.perform(get("/api/checkin/gestion/areas/BARRA").session(session(5)))
+                .andExpect(jsonPath("$.tasks[0].status").value("PENDIENTE"))
+                .andExpect(jsonPath("$.completableTaskIds[0]").value(id));
+        mvc.perform(multipart(endpoint + "/foto").file(photo).session(session(5))).andExpect(status().isOk());
+        try (var dates = org.mockito.Mockito.mockStatic(CheckinService.class)) {
+            dates.when(CheckinService::operationalDate).thenReturn(today.plusDays(1));
+            mvc.perform(post(endpoint + "/deshacer").session(session(5))).andExpect(status().isConflict());
+        }
+    }
+
     @Test void photoIsRequiredValidatedAtomicAndReadableByWorkers() throws Exception {
         template(1,"BARRA","FOTO",today); service.reconcile(); long id=task(1,today);
         mvc.perform(post("/api/checkin/gestion/tareas/"+id+"/hecha").session(session(5))).andExpect(status().isBadRequest());
