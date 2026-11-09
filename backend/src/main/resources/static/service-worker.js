@@ -1,4 +1,4 @@
-const CACHE_NAME='marigex-shell-sin-dashboard-extra-20261105-2';
+const CACHE_NAME='marigex-shell-limpieza-jefaturas-20261109-1';
 const DEVICE_CACHE='marigex-device';
 const IMAGE_ASSETS=['/images/santiago-costanera-loading.jpg','/images/marigex-login-restaurant.jpg'];
 const SHELL=['/','/index.html','/style.css','/scrip.js','/gestion.js','/notificaciones-horarios.js','/experiencia.js','/app-updates.js','/app-navigation.js','/vendor/qrcode-generator.js','/vendor/jsQR.js','/manifest.json','/icons/icon-192.png','/icons/icon-512.png'];

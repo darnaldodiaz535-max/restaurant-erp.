@@ -103,6 +103,32 @@ class AreaCheckinIntegrationTest {
                 .andExpect(header().string("Cache-Control","no-cache"));
     }
 
+    @Test void salonChiefsSharePendingTasksEvenWhenViewingAnEarlierDayOfTheCurrentWeek() throws Exception {
+        LocalDate monday = LocalDate.of(2026, 11, 9);
+        LocalDate wednesday = monday.plusDays(2);
+        jdbc.update("UPDATE APP_CHECKIN_CONFIG SET INICIO=?", Date.valueOf(monday));
+        jdbc.update("INSERT INTO APP_EMPLEADO VALUES(8,'Segunda jefatura')");
+        jdbc.update("INSERT INTO APP_USUARIO VALUES(8,8,'segunda','JEFE_SALON','S')");
+        template(1, "SALON", "SIMPLE", monday);
+        template(2, "SALON", "SIMPLE", monday);
+        jdbc.update("UPDATE APP_CHECKIN_PLANTILLA SET FRECUENCIA='SEMANAL' WHERE ID_PLANTILLA=1");
+        try (var dates = org.mockito.Mockito.mockStatic(CheckinService.class)) {
+            dates.when(CheckinService::operationalDate).thenReturn(wednesday);
+            service.reconcile();
+            long weekly = task(1, monday);
+            for (long chief : new long[]{4, 8}) {
+                mvc.perform(get("/api/checkin/gestion/areas/SALON").param("fecha", monday.toString()).session(session(chief)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.completableTaskIds.length()").value(1))
+                        .andExpect(jsonPath("$.completableTaskIds[0]").value(weekly));
+            }
+            mvc.perform(post("/api/checkin/gestion/tareas/" + weekly + "/hecha").session(session(8)))
+                    .andExpect(status().isOk());
+            mvc.perform(get("/api/checkin/gestion/areas/SALON").param("fecha", monday.toString()).session(session(4)))
+                    .andExpect(jsonPath("$.completableTaskIds.length()").value(0));
+        }
+    }
+
     @Test void weeklyTasksStayVisibleAllWeekAndAreCountedOnce() throws Exception {
         LocalDate monday=today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate previous=monday.minusWeeks(1);
@@ -272,7 +298,11 @@ class AreaCheckinIntegrationTest {
         LocalDate week=today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
         jdbc.update("UPDATE APP_CHECKIN_CONFIG SET INICIO=?",Date.valueOf(week));
         template(1,"COCINA","SIMPLE",week);
-        service.reconcile(); service.reconcile();
+        try (var dates = org.mockito.Mockito.mockStatic(CheckinService.class)) {
+            dates.when(CheckinService::operationalDate).thenReturn(week.plusDays(8));
+            service.reconcile();
+            service.reconcile();
+        }
         assertEquals(4,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE N.ID_USUARIO=1",Integer.class));
         assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO D JOIN APP_NOTIFICACION N ON N.ID_NOTIFICACION=D.ID_NOTIFICACION WHERE N.ID_USUARIO=3 AND N.MENSAJE LIKE '%COCINA'",Integer.class));
         assertEquals(5,jdbc.queryForObject("SELECT COUNT(*) FROM APP_NOTIF_ENVIO",Integer.class));

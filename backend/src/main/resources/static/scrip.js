@@ -823,7 +823,8 @@ function checkinAction(label, icon, handler, variant = "quiet") {
     path.setAttribute("d", paths[icon] || paths.check); svg.appendChild(path);
     button.append(svg, checkinNode("span", "", label)); return button;
 }
-function checkinTaskList(tasks, canManage, refresh, feedback) {
+function checkinTaskList(tasks, completableIds = [], refresh, feedback) {
+    const actionable = new Set(completableIds);
     const list = checkinNode("div", "checkin-day");
     if (!tasks.length) list.appendChild(checkinNode("p", "empty-state", "Aún no hay tareas configuradas para este período."));
     tasks.forEach(task => {
@@ -839,7 +840,7 @@ function checkinTaskList(tasks, canManage, refresh, feedback) {
         if (task.completedAt) copy.appendChild(checkinNode("small", "", `${task.responsible || ""} · ${task.completedAt.replace("T", " ")} (hora del servidor)`));
         row.appendChild(copy);
         if (task.photoId) row.appendChild(checkinAction("Ver fotografía", "image", () => window.open("/api/checkin/gestion/fotos/" + task.photoId, "_blank", "noopener")));
-        if (!done && canManage) {
+        if (!done && actionable.has(task.id)) {
             if (task.method === "FOTO") {
                 const actions = checkinNode("div", "checkin-photo-actions"), input = checkinNode("input");
                 input.type = "file"; input.accept = "image/jpeg,image/png,image/webp"; input.hidden = true;
@@ -916,7 +917,7 @@ async function renderAreaCheckinDay(section, area, revision, feedback) {
         const completed = day.tasks.filter(t => t.status === "REALIZADA").length;
         container.replaceChildren();
         if (day.deadline) container.appendChild(checkinDeadlineNotice(day.deadline));
-        container.append(checkinProgressSummary(day.tasks.length, completed, "Cumplimiento de " + checkinAreaNames[area]), checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.canManage ? "Puedes confirmar las tareas de tu área." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.canManage, load, feedback));
+        container.append(checkinProgressSummary(day.tasks.length, completed, "Cumplimiento de " + checkinAreaNames[area]), checkinNode("p", "checkin-note", `${completed}/${day.tasks.length} completadas. ${day.completableTaskIds?.length ? "Puedes confirmar las tareas pendientes de esta lista." : "Consulta de tareas y evidencias."}`), checkinTaskList(day.tasks, day.completableTaskIds, load, feedback));
     };
     registerScreenRefresh(async () => {
         // Keep the selected photograph and its preview while other tasks refresh.
@@ -969,7 +970,7 @@ async function renderAreaCheckinReports(section, area, revision) {
             const card = checkinAreaProgressCard(report);
             if (report.zeroCompletion) card.appendChild(checkinNode("p", "checkin-feedback", "Atención: no se registraron tareas completadas en esta área."));
             const details = checkinNode("details", "checkin-report-details"), summary = checkinNode("summary", "", "Ver detalle");
-            details.append(summary, checkinTaskList(report.tasks, false)); card.appendChild(details);
+            details.append(summary, checkinTaskList(report.tasks)); card.appendChild(details);
             const pending = report.tasks.filter(t => t.status !== "REALIZADA");
             if (pending.length) {
                 const alerts = checkinNode("details"); alerts.appendChild(checkinNode("summary", "", "Pendientes e incumplimientos"));

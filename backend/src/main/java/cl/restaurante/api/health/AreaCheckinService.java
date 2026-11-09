@@ -63,8 +63,12 @@ public class AreaCheckinService {
         reconcile();
         List<Task> tasks = tasks(area, date, date.plusDays(1));
         LocalDate today = CheckinService.operationalDate();
-        boolean canManage = canManage(user, area) && date.equals(today);
-        return new Day(date.toString(), area, canManage, tasks, canManage ? deadline(tasks, today) : null);
+        boolean canManage = canManage(user, area);
+        List<Long> completable = canManage ? tasks.stream()
+                .filter(task -> canComplete(task.status(), task.frequency(), LocalDate.parse(task.date()), today))
+                .map(Task::id).toList() : List.of();
+        return new Day(date.toString(), area, canManage, tasks,
+                canManage && date.equals(today) ? deadline(tasks, today) : null, completable);
     }
 
     static Deadline deadline(List<Task> tasks, LocalDate today) {
@@ -100,9 +104,7 @@ public class AreaCheckinService {
         if (!canManage(user, task[0])) throw error(HttpStatus.FORBIDDEN, "No tienes permiso para completar tareas de esta área.");
         LocalDate today = CheckinService.operationalDate();
         LocalDate start = LocalDate.parse(task[1]);
-        boolean inPeriod = "SEMANAL".equals(task[4])
-                ? !today.isBefore(start) && today.isBefore(start.plusDays(7)) : today.equals(start);
-        if (!inPeriod || !"PENDIENTE".equals(task[3]))
+        if (!canComplete(task[3], task[4], start, today))
             throw error(HttpStatus.CONFLICT, "Solo se pueden completar tareas pendientes de su período actual.");
         if ("FOTO".equals(task[2])) {
             if (bytes == null || bytes.length == 0 || bytes.length > 4 * 1024 * 1024)
@@ -115,6 +117,13 @@ public class AreaCheckinService {
         }
         jdbc.update("UPDATE APP_CHECKIN_REGISTRO SET ESTADO='REALIZADA',ID_RESPONSABLE=?,RESPONSABLE=?,REALIZADA_EN=SYSTIMESTAMP WHERE ID_REGISTRO=?",
                 user.id(), user.name(), id);
+    }
+
+    private static boolean canComplete(String status, String frequency, LocalDate start, LocalDate today) {
+        if (!"PENDIENTE".equals(status)) return false;
+        return "SEMANAL".equals(frequency)
+                ? !today.isBefore(start) && today.isBefore(start.plusDays(7))
+                : today.equals(start);
     }
 
     public Evidence photo(RoleAccessService.User user, long id) {
@@ -269,7 +278,7 @@ public class AreaCheckinService {
     private static ResponseStatusException error(HttpStatus status, String message) { return new ResponseStatusException(status, message); }
     private record Recipient(long id, String name) {}
     public record Task(long id, String date, String area, String title, String method, String status, String frequency, String responsible, String completedAt, Long photoId) {}
-    public record Day(String date, String area, boolean canManage, List<Task> tasks, Deadline deadline) {}
+    public record Day(String date, String area, boolean canManage, List<Task> tasks, Deadline deadline, List<Long> completableTaskIds) {}
     public record Deadline(String dueDate, int daysRemaining, int pending, int total) {}
     public record Report(String area, String weekStart, String weekEnd, int total, int completed, int pending,
                          Integer percent, boolean zeroCompletion, boolean closed, List<Task> tasks) {}
