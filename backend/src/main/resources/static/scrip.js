@@ -823,6 +823,30 @@ function checkinAction(label, icon, handler, variant = "quiet") {
     path.setAttribute("d", paths[icon] || paths.check); svg.appendChild(path);
     button.append(svg, checkinNode("span", "", label)); return button;
 }
+async function prepareCheckinPhoto(file) {
+    if (file.size <= 512 * 1024 || typeof createImageBitmap !== "function") return file;
+    let image;
+    try {
+        image = await createImageBitmap(file);
+        const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) return file;
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const compressed = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
+        if (compressed?.type !== "image/jpeg" || compressed.size >= file.size) return file;
+        return new File([compressed], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+    } catch {
+        return file;
+    } finally {
+        image?.close();
+    }
+}
+
 function checkinTaskList(tasks, completableIds = [], refresh, feedback, reversibleIds = []) {
     const actionable = new Set(completableIds);
     const reversible = new Set(reversibleIds);
@@ -874,10 +898,27 @@ function checkinTaskList(tasks, completableIds = [], refresh, feedback, reversib
                 const confirm = checkinAction("Enviar y completar", "send", async () => {
                     if (!selectedFile) return;
                     confirm.disabled = picker.disabled = true;
-                    confirm.querySelector("span").textContent = "Enviando…";
-                    const form = new FormData(); form.append("foto", selectedFile);
-                    try { await uploadRequest("/api/checkin/gestion/tareas/" + task.id + "/foto", form); feedback.textContent = "Evidencia y responsable guardados."; await refresh(); }
-                    catch (e) { feedback.textContent = e.message; confirm.disabled = picker.disabled = false; confirm.querySelector("span").textContent = "Reintentar envío"; }
+                    const label = confirm.querySelector("span");
+                    label.textContent = "Preparando foto…";
+                    try {
+                        const photo = await prepareCheckinPhoto(selectedFile);
+                        const form = new FormData();
+                        form.append("foto", photo);
+                        label.textContent = "Enviando…";
+                        await uploadRequest("/api/checkin/gestion/tareas/" + task.id + "/foto", form);
+                    } catch (error) {
+                        feedback.textContent = error.message;
+                        confirm.disabled = picker.disabled = false;
+                        label.textContent = "Reintentar envío";
+                        return;
+                    }
+                    label.textContent = "Guardada";
+                    feedback.textContent = "Evidencia y responsable guardados.";
+                    try {
+                        await refresh();
+                    } catch (error) {
+                        feedback.textContent = "La foto quedó guardada. Actualiza la lista para ver el cambio.";
+                    }
                 }, "complete");
                 confirm.disabled = true;
                 input.addEventListener("change", () => {
